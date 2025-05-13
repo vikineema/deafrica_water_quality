@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: kartoza/postgis:17-3.5
+    environment:
+      - POSTGRES_DB=opendatacube,geoserver
+      - POSTGRES_PASSWORD=opendatacubepassword
+      - POSTGRES_USER=opendatacube
+    ports:
+      - 5434:5432
+    volumes:
+      # Persistent storage of the database cluster 
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      - DB_HOSTNAME=postgres
+      - DB_DATABASE=opendatacube
+      - DB_PASSWORD=opendatacubepassword
+      - DB_USERNAME=opendatacube
+      - DB_PORT=5432
+      - GS_NO_SIGN_REQUEST=yes
+      - AWS_NO_SIGN_REQUEST=true
+      - AWS_S3_ENDPOINT=s3.af-south-1.amazonaws.com
+      #- AWS_S3_ENDPOINT="https://s3.af-south-1.amazonaws.com"
+      - AWS_DEFAULT_REGION=af-south-1
+    links:
+      - postgres:postgres
+    ports:
+      - "9989:9988"
+    volumes:
+      - /tmp/:/tmp/
+      - .:/home/jovyan/
+    restart: always
+
+  checkdb:
+    image: schaffdev/port_check:latest
+    environment:
+      - CHECK_HOST=postgres
+      - CHECK_PORT=5432
+    links:
+      - postgres:postgres
+
+  explorer:
+    image: opendatacube/explorer:2.12.4
+    environment:
+    # - DB_HOSTNAME=host.docker.internal
+    - DB_HOSTNAME=postgres
+    - DB_USERNAME=opendatacube
+    - DB_PASSWORD=opendatacubepassword
+    - DB_DATABASE=opendatacube
+    - DB_PORT=5432
+    - FLASK_ENV=development
+    - FLASK_APP=cubedash
+    - FLASK_DEBUG=1
+    # - CUBEDASH_DEFAULT_TIMEZONE=Australia/Darwin
+    # - VIRTUAL_HOST=datacube.explorer
+    - AWS_NO_SIGN_REQUEST=true
+    - AWS_S3_ENDPOINT=s3.af-south-1.amazonaws.com
+    - AWS_DEFAULT_REGION=af-south-1
+    links:
+      - postgres:postgres
+    ports:
+      - 8081:8080
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
