@@ -22,7 +22,13 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "click",
-    "datacube[performance,distributed,s3,netcdf]",
+    "datacube[performance,distributed,s3]",
+    "fsspec",
+    "gcsfs",
+    "odc-cloud[ASYNC]",
+    "requests",
+    "s3fs",
+    "tqdm"
 ]
 
 [project.optional-dependencies]
