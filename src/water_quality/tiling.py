@@ -1,9 +1,11 @@
 import os
 import posixpath
 import re
+from typing import Iterator
 
 import geopandas as gpd
 from odc.geo import XY, Resolution
+from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 from odc.geo.gridspec import GridSpec
 
@@ -106,35 +108,52 @@ def get_tile_index_tuple_from_filename(file_path: str) -> tuple[int, int]:
     return tile_id
 
 
-def get_africa_tiles(resolution: int) -> list:
+def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]]:
     """
-    Get tiles over Africa extent.
+    Get the tiles covering an area of interest defined by the input polygon.
 
     Parameters
     ----------
-    resolution : int | float
-        Grid resolution in projected crs (EPSG:6933).
+    aoi_geom : Geometry
+        Polygon defining the area of interest.
 
     Returns
     -------
-    list
-        List of tiles, each item contains the tile index and the tile geobox.
+    Iterator[tuple[tuple[int, int], GeoBox]]
+        Output is a sequence of tile_index, odc.geo.geobox.GeoBox tuples.
     """
-    accepted_resolutions = [10, 20, 30, 60]
-    if resolution not in accepted_resolutions:
-        raise ValueError(f"The resolution provided is not in {accepted_resolutions}")
 
+    # TODO: Check if this is the correct tiling system.
+    # Tiles to match the DE Africa Landsat GeoMAD products tiles.
+    resolution = 30
     gridspec = GridSpec(
         crs="EPSG:6933",
-        tile_shape=XY(y=96000, x=96000),
+        tile_shape=XY(y=3200, x=3200),
         resolution=Resolution(y=-resolution, x=resolution),
         origin=XY(y=-7392000, x=-17376000),
     )
+    aoi_geom = aoi_geom.to_crs(gridspec.crs)
+
+    tiles = gridspec.tiles_from_geopolygon(aoi_geom)
+
+    return tiles
+
+
+def get_africa_tiles() -> Iterator[tuple[tuple[int, int], GeoBox]]:
+    """
+    Get tiles over Africa's extent.
+
+    Returns
+    -------
+    Iterator[tuple[tuple[int, int], GeoBox]]
+        Output is a sequence of tile_index, odc.geo.geobox.GeoBox tuples.
+    """
+
     # Get the tiles over Africa
-    africa_extent = gpd.read_file(AFRICA_EXTENT_URL).to_crs(gridspec.crs)
+    africa_extent = gpd.read_file(AFRICA_EXTENT_URL)
     africa_extent_geom = Geometry(
         geom=africa_extent.iloc[0].geometry, crs=africa_extent.crs
     )
-    tiles = list(gridspec.tiles_from_geopolygon(africa_extent_geom))
+    tiles = get_aoi_tiles(africa_extent_geom)
 
     return tiles
