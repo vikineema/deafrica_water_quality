@@ -1,0 +1,47 @@
+
+[build-system]
+requires = ["setuptools"] 
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deafrica-water-quality"
+version = "0.0.1"
+authors = [{name = "Digital Earth Africa", email = "systems@digitalearthafrica.org"}]
+maintainers = [{name = "Digital Earth Africa", email = "systems@digitalearthafrica.org"}]
+description = "Helpful scripts to make water quality data available in a ODC deploymnent"
+readme =  {file = "README.md", content-type = "text/markdown"}
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 1 - Planning",
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering :: GIS',
+    'License :: OSI Approved :: Apache Software License',
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "click",
+    "datacube[performance,distributed,s3,netcdf]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "yamlint", 
+ ]
+test = [
+    "pytest",
+    "coverage"
+]
+
+[project.urls]
+Repository = "https://github.com/digitalearthafrica/deafrica_water_quality.git"
+"Bug Tracker" = "https://github.com/digitalearthafrica/deafrica_water_quality/issues"
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 100
+
