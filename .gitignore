@@ -1,0 +1,24 @@
+# Visual Studio Cache files
+*.cache/**
+# Jupyter metadata files
+*.config/**
+*.ipython/**
+*.jupyter/**
+*.local/**
+*.npm/**
+**/.ipynb_checkpoints/**
+# Bash files
+.bash_history
+# Dev containers files
+*.ssh/**
+*.vscode-server/**
+*.dotnet/**
+# Memory profiler files
+core
+mprofile_*
+# Ignore items in tmp folder
+tmp/**
+# Environments
+**/.env/**
+# Ruff stuff:
+**/.ruff_cache/**
