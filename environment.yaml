@@ -17,6 +17,7 @@ dependencies:
   ## Analysis packages
   - geopandas
   - rioxarray
+  - tqdm
   # fsspec + extras
   - fsspec
   - s3fs

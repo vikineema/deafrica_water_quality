@@ -13,6 +13,12 @@
 *.ssh/**
 *.vscode-server/**
 *.dotnet/**
+# Python install files
+**/__pycache__/**
+**/*.egg-info/**
+**/build/**
+**/dist/**
+**/*.egg/**
 # Memory profiler files
 core
 mprofile_*
