@@ -10,6 +10,7 @@ dependencies:
   # ODC ecosystem libraries
   - datacube
   - eodatasets3
+  - odc-dscache
   - odc-geo
   - odc-loader
   - odc-stac

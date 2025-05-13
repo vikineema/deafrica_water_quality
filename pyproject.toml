@@ -26,6 +26,7 @@ dependencies = [
     "fsspec",
     "gcsfs",
     "odc-cloud[ASYNC]",
+    "odc-dscache",
     "requests",
     "s3fs",
     "tqdm"

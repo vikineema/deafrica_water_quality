@@ -3,9 +3,8 @@ import posixpath
 import re
 
 import geopandas as gpd
-from odc.geo import XY, Resolution
+from odc.dscache.tools.tiling import GRIDS
 from odc.geo.geom import Geometry
-from odc.geo.gridspec import GridSpec
 
 from water_quality.io import is_local_path
 from water_quality.utils import AFRICA_EXTENT_URL
@@ -106,13 +105,13 @@ def get_tile_index_tuple_from_filename(file_path: str) -> tuple[int, int]:
     return tile_id
 
 
-def get_africa_tiles(grid_res: int | float) -> list:
+def get_africa_tiles(resolution: int) -> list:
     """
     Get tiles over Africa extent.
 
     Parameters
     ----------
-    grid_res : int | float
+    resolution : int | float
         Grid resolution in projected crs (EPSG:6933).
 
     Returns
@@ -120,19 +119,11 @@ def get_africa_tiles(grid_res: int | float) -> list:
     list
         List of tiles, each item contains the tile index and the tile geobox.
     """
-    if grid_res == 300:
-        multiplier = 10
-    elif grid_res == 100:
-        multiplier = 10 * 3
-    else:
-        NotImplementedError(f"gridspec for resolution {grid_res} not implemented")
+    accepted_resolutions = [10, 20, 30, 60]
+    if resolution not in accepted_resolutions:
+        raise ValueError(f"The resolution provided is not in {accepted_resolutions}")
 
-    gridspec = GridSpec(
-        crs="EPSG:6933",
-        tile_shape=XY(y=320 * multiplier, x=320 * multiplier),
-        resolution=Resolution(y=-grid_res, x=grid_res),
-        origin=XY(y=-7392000, x=-17376000),
-    )
+    gridspec = GRIDS[f"africa_{resolution}"]
 
     # Get the tiles over Africa
     africa_extent = gpd.read_file(AFRICA_EXTENT_URL).to_crs(gridspec.crs)
