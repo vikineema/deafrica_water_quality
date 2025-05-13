@@ -3,8 +3,9 @@ import posixpath
 import re
 
 import geopandas as gpd
-from odc.dscache.tools.tiling import GRIDS
+from odc.geo import XY, Resolution
 from odc.geo.geom import Geometry
+from odc.geo.gridspec import GridSpec
 
 from water_quality.io import is_local_path
 from water_quality.utils import AFRICA_EXTENT_URL
@@ -123,8 +124,12 @@ def get_africa_tiles(resolution: int) -> list:
     if resolution not in accepted_resolutions:
         raise ValueError(f"The resolution provided is not in {accepted_resolutions}")
 
-    gridspec = GRIDS[f"africa_{resolution}"]
-
+    gridspec = GridSpec(
+        crs="EPSG:6933",
+        tile_shape=XY(y=96000, x=96000),
+        resolution=Resolution(y=-resolution, x=resolution),
+        origin=XY(y=-7392000, x=-17376000),
+    )
     # Get the tiles over Africa
     africa_extent = gpd.read_file(AFRICA_EXTENT_URL).to_crs(gridspec.crs)
     africa_extent_geom = Geometry(
