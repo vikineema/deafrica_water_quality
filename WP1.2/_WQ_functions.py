@@ -118,7 +118,8 @@ def NDSSI_BNIR(dataset, blue_band, NIR_band,verbose=False):
 
 def TI_yu(dataset,NIR,Red,Green,scalefactor=0.01,verbose=False):
     if verbose: print('TI_yu')
-    return  scalefactor * ((dataset[Red] - dataset[Green]) - ((dataset[NIR] - dataset[Green]) * 0.5))
+    return  scalefactor * ( ( (dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]) ) ** 0.5 )
+#    return  scalefactor * ((dataset[Red] - dataset[Green]) - ((dataset[NIR] - dataset[Green]) * 0.5)) correction!
 
 # ---- Lymburner Total Suspended Matter (TSM)
 # Paper: [Lymburner et al. 2016](https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
@@ -168,7 +169,7 @@ def TSS_QUANG8(dataset,red_band,verbose=False):
 #  ridiculous (exp(10000) etc. is not a good number). This therefore avoids overflow. 
 # This model can only be used together with other models and indices; it may handle some situations well...
 
-def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=True):
+def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=False):
     if verbose: print("TSS_Zhang")
     abovezero = .00001  #avoids div by zero if blue is zero
     GplusR = dataset[green_band] + dataset[red_band]             
@@ -469,9 +470,6 @@ def R_correction(ds,dp_adjust,instruments,water_frequency_threshold=0.9,verbose=
     if verbose : print('R_correction completed normally')
     return(ds)
 
-
-
-
 def water_analysis(ds,
                    water_frequency_threshold= 0.5,
                    wofs_varname             = 'wofs_ann_freq',
@@ -487,7 +485,7 @@ def water_analysis(ds,
 
     # --- standard deviation of the annual frequency at each pixel - should really be dividing by n-1 but then I would need to change SC ---
     ds['wofs_ann_freq_sigma'] = ((ds.wofs_ann_freq * (1 - ds.wofs_ann_freq)) / ds.wofs_ann_clearcount)**0.5
-    ds['wofs_ann_confidence'] = ((1.0 - (ds.wofs_ann_freq_sigma/ds.wofs_ann_freq)) * 100).astype('int16')
+    ds['wofs_ann_confidence'] = ((1.0 - (ds.wofs_ann_freq_sigma/ds.wofs_ann_freq)) * 100).astype('int16')   
     ds['wofs_pw_threshold']   = (-1 * ds.wofs_ann_freq_sigma * sigma_coefficient) + permanent_water_threshold  #--- threshold varies with p and n 
     ds['wofs_ann_pwater']     = xr.where(ds[wofs_varname]> ds.wofs_pw_threshold,ds[wofs_varname],0)
     ds['wofs_ann_water']      = xr.where(ds[wofs_varname]> water_frequency_threshold,ds[wofs_varname],0)
