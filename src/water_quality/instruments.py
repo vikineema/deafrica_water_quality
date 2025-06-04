@@ -1,20 +1,19 @@
 import calendar
+import logging
 from datetime import date, datetime
 
-from water_quality.logs import setup_logging
-
-log = setup_logging()
+log = logging.getLogger(__name__)
 
 INSTRUMENTS_DATES = {
-    "oli_agm": [2013, 2024],
-    "oli": [2013, 2024],
-    "msi_agm": [2017, 2024],
     "msi": [2017, 2024],
+    "msi_agm": [2017, 2024],
+    "oli": [2013, 2024],
+    "oli_agm": [2013, 2024],
+    # "tirs": [0, 0],
+    "tm": [1990, 2012],
+    "tm_agm": [1990, 2012],
     "wofs_ann": [1990, 2024],
     "wofs_all": [1990, 2024],
-    "tm_agm": [1990, 2012],
-    "tm": [1990, 2012],
-    # "tirs": [0, 0],
 }
 
 
