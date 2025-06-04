@@ -1,3 +1,4 @@
+
 # Visual Studio Cache files
 *.cache/**
 # Jupyter metadata files
@@ -13,6 +14,8 @@
 *.ssh/**
 *.vscode-server/**
 *.dotnet/**
+# Ignore items in data folder
+data/**
 # Python install files
 **/__pycache__/**
 **/*.egg-info/**
@@ -24,7 +27,12 @@ core
 mprofile_*
 # Ignore items in tmp folder
 tmp/**
+# Ignore items in notebooks folder
+notebooks/**
+# Ignore items in data folder
+data/**
 # Environments
 **/.env/**
 # Ruff stuff:
 **/.ruff_cache/**
+
