@@ -1,5 +1,4 @@
 import logging
-import sys
 
 
 def setup_logging(verbose: int = 3):
@@ -17,8 +16,9 @@ def setup_logging(verbose: int = 3):
     else:
         raise ValueError("Maximum verbosity is -vvvv (verbose=4)")
 
-    logging.basicConfig(
-        level=level,
-        format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
-        stream=sys.stdout,
-    )
+    log = logging.getLogger(__name__)
+    console = logging.StreamHandler()
+    log.addHandler(console)
+    log.setLevel(level)
+
+    return log
