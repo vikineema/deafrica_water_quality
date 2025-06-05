@@ -248,11 +248,15 @@ def build_dc_queries(
 
 def build_wq_agm_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
     dc = Datacube()
-    loaded_data = []
+    loaded_data = {}
     for instrument_name, dc_query in dc_queries.items():
         ds = dc.load(**dc_query)
-        name_dict = get_measurements_name_dict(instrument_name)
-        ds = ds.rename(name_dict)
-        loaded_data.append(ds)
-    combined_ds = xr.merge(loaded_data)
+        ds = ds.rename(get_measurements_name_dict(instrument_name))
+        loaded_data[instrument_name] = ds
+    combined_ds = xr.merge(
+        list(loaded_data.values()),
+        compat="no_conflicts",
+        join="outer",
+        combine_attrs="override",
+    )
     return combined_ds
