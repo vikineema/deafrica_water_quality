@@ -1,72 +1,69 @@
 services:
-  postgres:
-    image: kartoza/postgis:17-3.5
-    environment:
-      - POSTGRES_DB=opendatacube,geoserver
-      - POSTGRES_PASSWORD=opendatacubepassword
-      - POSTGRES_USER=opendatacube
-    ports:
-      - 5434:5432
+  db:
+    image: kartoza/postgis:latest
     volumes:
-      # Persistent storage of the database cluster 
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
+      - postgis-data:/var/lib/postgresql
+    ports:
+        - ${POSTGRES_PORT}:5432
+    environment:
+        - POSTGRES_DB=${POSTGRES_DB}
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASS=${POSTGRES_PASS}
+        - ALLOW_IP_RANGE=${ALLOW_IP_RANGE}
+        - POSTGRES_MULTIPLE_EXTENSIONS=${POSTGRES_MULTIPLE_EXTENSIONS}
+        - FORCE_SSL=TRUE
+    restart: on-failure
+    healthcheck:
+      test: "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER}"
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 1m
 
   jupyter:
     build:
       context: .
       dockerfile: docker/Dockerfile
     environment:
-      - DB_HOSTNAME=postgres
+      - DB_HOSTNAME=db
       - DB_DATABASE=opendatacube
-      - DB_PASSWORD=opendatacubepassword
-      - DB_USERNAME=opendatacube
+      - DB_PASSWORD=${POSTGRES_PASS}
+      - DB_USERNAME=${POSTGRES_USER}
       - DB_PORT=5432
-      - GS_NO_SIGN_REQUEST=yes
-      - AWS_NO_SIGN_REQUEST=true
-      - AWS_S3_ENDPOINT=s3.af-south-1.amazonaws.com
-      #- AWS_S3_ENDPOINT="https://s3.af-south-1.amazonaws.com"
+      - GS_NO_SIGN_REQUEST=YES
+      - AWS_NO_SIGN_REQUEST=YES
       - AWS_DEFAULT_REGION=af-south-1
-    links:
-      - postgres:postgres
+    depends_on:
+        db:
+          condition: service_healthy
     ports:
-      - "9989:9988"
+      - ${JUPYTER_PORT}:9988
     volumes:
-      - /tmp/:/tmp/
       - .:/home/jovyan/
     restart: always
 
-  checkdb:
-    image: schaffdev/port_check:latest
-    environment:
-      - CHECK_HOST=postgres
-      - CHECK_PORT=5432
-    links:
-      - postgres:postgres
-
   explorer:
-    image: opendatacube/explorer:2.12.4
+    image: opendatacube/explorer:latest
     environment:
     # - DB_HOSTNAME=host.docker.internal
-    - DB_HOSTNAME=postgres
-    - DB_USERNAME=opendatacube
-    - DB_PASSWORD=opendatacubepassword
-    - DB_DATABASE=opendatacube
-    - DB_PORT=5432
+    - POSTGRES_HOSTNAME=db
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASS}
+    - POSTGRES_DB=opendatacube
+    - POSTGRES_PORT=5432
+    - ODC_DEFAULT_INDEX_DRIVER=postgres
+    - ODC_POSTGIS_INDEX_DRIVER=postgis
+    - ODC_DEFAULT_DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASS}@db:5432/opendatacube
+    - ODC_POSTGIS_DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASS}@db:5432/opendatacube
     - FLASK_ENV=development
     - FLASK_APP=cubedash
     - FLASK_DEBUG=1
-    # - CUBEDASH_DEFAULT_TIMEZONE=Australia/Darwin
+    - CUBEDASH_DEFAULT_TIMEZONE=${CUBEDASH_DEFAULT_TIMEZONE}
     # - VIRTUAL_HOST=datacube.explorer
-    - AWS_NO_SIGN_REQUEST=true
-    - AWS_S3_ENDPOINT=s3.af-south-1.amazonaws.com
-    - AWS_DEFAULT_REGION=af-south-1
-    links:
-      - postgres:postgres
-    ports:
-      - 8081:8080
     depends_on:
-      - postgres
+      - db
+    ports:
+      - ${EXPLORER_PORT}:8080
 
 volumes:
-  postgres_data:
+  postgis-data:
