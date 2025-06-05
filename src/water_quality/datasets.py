@@ -8,12 +8,12 @@ from odc.geo.geobox import GeoBox
 log = logging.getLogger(__name__)
 
 INSTRUMENTS_PRODUCTS = {
-    "msi": ["s2_l2a_c1"],
+    # "msi": ["s2_l2a_c1"],
     "msi_agm": ["gm_s2_annual"],
-    "oli": ["ls8_sr", "ls9_sr"],
+    # "oli": ["ls8_sr", "ls9_sr"],
     "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
     "tirs": ["l5_st", "l7_st", "l8_st", "l9_st"],
-    "tm": ["l5_sr", "l7_sr"],
+    # "tm": ["l5_sr", "l7_sr"],
     "tm_agm": ["gm_ls5_ls7_annual"],
     "wofs_ann": ["wofs_ls_summary_annual"],
     "wofs_all": ["wofs_ls_summary_alltime"],

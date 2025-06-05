@@ -1,7 +1,6 @@
 import pytest
 
 from water_quality.datasets import (
-    build_datacube_queries,
     get_dc_measurements,
     get_dc_products,
     get_measurements_name_dict,

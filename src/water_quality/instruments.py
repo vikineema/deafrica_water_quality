@@ -71,7 +71,6 @@ def check_instrument_dates(
     instruments_to_use: dict[str, dict[str, bool]],
     start_date: str,
     end_date: str,
-    verbose: bool = False,
 ):
     start_date = validate_start_date(start_date)
     end_date = validate_end_date(end_date)
@@ -82,10 +81,9 @@ def check_instrument_dates(
             valid_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
             if valid_date_range is None:
                 valid_instruments_to_use[instrument_name] = {"use": False}
-                if verbose:
-                    log.error(
-                        f"Valid date range for instrument {instrument_name} has not been set"
-                    )
+                log.error(
+                    f"Valid date range for instrument {instrument_name} has not been set"
+                )
             else:
                 valid_date_range = [
                     validate_start_date(str(min(valid_date_range))),
@@ -100,12 +98,11 @@ def check_instrument_dates(
                     valid_instruments_to_use[instrument_name] = {"use": True}
                 else:
                     valid_instruments_to_use[instrument_name] = {"use": False}
-                    if verbose:
-                        log.error(
-                            f"Instrument {instrument_name} has the date ranges "
-                            f"{valid_date_range[0]} to {valid_date_range[-1]} which is outside"
-                            f" the supplied date range of {start_date} to {end_date}."
-                        )
+                    log.error(
+                        f"Instrument {instrument_name} has the date ranges "
+                        f"{valid_date_range[0]} to {valid_date_range[-1]} which is outside"
+                        f" the supplied date range of {start_date} to {end_date}."
+                    )
         else:
             valid_instruments_to_use[instrument_name] = usage
     return valid_instruments_to_use
