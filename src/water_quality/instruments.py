@@ -18,6 +18,21 @@ INSTRUMENTS_DATES = {
 
 
 def validate_date_str(date_str: str) -> tuple[date, str]:
+    """
+    Parse a date string into a datetime.date object and find the
+    format the date matches.
+
+    Parameters
+    ----------
+    date_str : str
+        Date to parse in string format.
+
+    Returns
+    -------
+    tuple[date, str]
+        Date object and date format.
+
+    """
     expected_date_patterns = ["%Y-%m-%d", "%Y-%m", "%Y"]
 
     if not isinstance(date_str, str):
@@ -36,6 +51,19 @@ def validate_date_str(date_str: str) -> tuple[date, str]:
 
 
 def validate_start_date(date_str: str) -> date:
+    """
+    Parse a start date into the correct format.
+
+    Parameters
+    ----------
+    date_str : str
+        Start date as string
+
+    Returns
+    -------
+    date
+        Start date as datetime.date object.
+    """
     valid_start_date, date_pattern = validate_date_str(date_str)
     if date_pattern == "%Y-%m":
         year = valid_start_date.year
@@ -52,6 +80,19 @@ def validate_start_date(date_str: str) -> date:
 
 
 def validate_end_date(date_str: str) -> date:
+    """
+    Parse a end date into the correct format.
+
+    Parameters
+    ----------
+    date_str : str
+        End date as string.
+
+    Returns
+    -------
+    date
+        End date as datetime.date object.
+    """
     valid_end_date, date_pattern = validate_date_str(date_str)
     if date_pattern == "%Y-%m":
         year = valid_end_date.year
@@ -72,6 +113,26 @@ def check_instrument_dates(
     start_date: str,
     end_date: str,
 ):
+    """
+    Cross check the years data is available for each instrument against
+    the years for which the analysis is going to be run.
+
+    Parameters
+    ----------
+    instruments_to_use : dict[str, dict[str, bool]]
+        A dictionary of the selected instruments to use for the analysis and
+        a usage parameter showing whether it will be used in the analysis.
+    start_date : str
+        Start date of the analysis period.
+    end_date : str
+        End date of the analysis period.
+
+    Returns
+    -------
+    dict[str, dict[str, bool]]
+        Updated `instruments_to_use` where instruments where data is not available in
+        the analysis period have their usage parameter set to False.
+    """
     start_date = validate_start_date(start_date)
     end_date = validate_end_date(end_date)
 
