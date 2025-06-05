@@ -1,6 +1,6 @@
 import pytest
 
-from water_quality.datasets import (
+from water_quality.load_data import (
     get_dc_measurements,
     get_dc_products,
     get_measurements_name_dict,
