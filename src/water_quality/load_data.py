@@ -313,7 +313,7 @@ def build_dc_queries(
     return dc_queries
 
 
-def build_wq_agm_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
+def build_wq_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
     """Build a combined dataset from loading data
     for each instrument using the datacube queries provided.
 
