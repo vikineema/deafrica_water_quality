@@ -1,19 +1,20 @@
 import logging
 from typing import Any
 
+import xarray as xr
+from datacube import Datacube
 from odc.geo.geobox import GeoBox
 
 log = logging.getLogger(__name__)
 
 INSTRUMENTS_PRODUCTS = {
-    # "msi": [""],
+    "msi": ["s2_l2a_c1"],
     "msi_agm": ["gm_s2_annual"],
-    "tm_agm": ["gm_ls5_ls7_annual"],
-    # "oli": [""],
+    "oli": ["ls8_sr", "ls9_sr"],
     "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
     "tirs": ["l5_st", "l7_st", "l8_st", "l9_st"],
-    # "tm":[""],
-    # "tm_agm" : [""],
+    "tm": ["l5_sr", "l7_sr"],
+    "tm_agm": ["gm_ls5_ls7_annual"],
     "wofs_ann": ["wofs_ls_summary_annual"],
     "wofs_all": ["wofs_ls_summary_alltime"],
 }
@@ -221,7 +222,7 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
         return measurements_name_dict
 
 
-def build_datacube_queries(
+def build_dc_queries(
     instruments_to_use: dict[str, dict[str, bool]],
     tile_geobox: GeoBox,
     start_date: str,
@@ -243,3 +244,15 @@ def build_datacube_queries(
             )
             dc_queries[instrument_name] = dc_query
     return dc_queries
+
+
+def build_wq_agm_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
+    dc = Datacube()
+    loaded_data = []
+    for instrument_name, dc_query in dc_queries.items():
+        ds = dc.load(**dc_query)
+        name_dict = get_measurements_name_dict(instrument_name)
+        ds = ds.rename(name_dict)
+        loaded_data.append(ds)
+    combined_ds = xr.merge(loaded_data)
+    return combined_ds
