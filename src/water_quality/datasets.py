@@ -176,6 +176,20 @@ INSTRUMENTS_MEASUREMENTS = {
 
 
 def get_dc_products(instrument_name: str) -> list[str]:
+    """
+    Get the datacube products to load for a given instrument.
+
+    Parameters
+    ----------
+    instrument_name : str
+        Name of the instruments
+
+    Returns
+    -------
+    list[str]
+        Datacube products to load for an instrument
+
+    """
     dc_products = INSTRUMENTS_PRODUCTS.get(instrument_name, None)
     if dc_products is None:
         raise NotImplementedError(
@@ -186,6 +200,20 @@ def get_dc_products(instrument_name: str) -> list[str]:
 
 
 def get_dc_measurements(instrument_name: str) -> list[str]:
+    """
+    Get the datacube measurements to load for a given instrument.
+
+    Parameters
+    ----------
+    instrument_name : str
+        Name of the instrument
+
+    Returns
+    -------
+    list[str]
+        Datacube measurements to load for the instrument
+
+    """
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
@@ -204,6 +232,22 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
 
 
 def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
+    """
+    Get the dictionary for re-naming measurements to have unique dataset variable name
+    for the loaded data for an instrument.
+
+    Parameters
+    ----------
+    instrument_name : str
+        Name of the instrument
+
+    Returns
+    -------
+    dict[str, tuple[str]]
+        Dictionary whose keys are the datacube measurements loaded for the instrument
+        and whose values are the desired names for the measurements
+
+    """
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
@@ -229,6 +273,29 @@ def build_dc_queries(
     end_date: str,
     resampling: str = "bilinear",
 ) -> dict[str, dict[str, Any]]:
+    """
+    Build a reusable datacube query for each instrument to load
+    data for.
+
+    Parameters
+    ----------
+    instruments_to_use : dict[str, dict[str, bool]]
+        A dictionary of the selected instruments to use for the analysis.
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of data,
+        including it’s crs.
+    start_date : str
+        The start of the time range to load data for.
+    end_date : str
+        The end of the time range to load data for.
+    resampling : str, optional
+        Resampling method to use, by default "bilinear".
+
+    Returns
+    -------
+    dict[str, dict[str, Any]]
+        Datacube query for each instrument.
+    """
     dc_queries = {}
     for instrument_name, usage in instruments_to_use.items():
         if usage["use"] is True:
@@ -247,6 +314,20 @@ def build_dc_queries(
 
 
 def build_wq_agm_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
+    """Build a combined dataset from loading data
+    for each instrument using the datacube queries provided.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+
+    Returns
+    -------
+    xr.Dataset
+        A single dataset containing all the data found for each instrument
+        in the datacube.
+    """
     dc = Datacube()
     loaded_data = {}
     for instrument_name, dc_query in dc_queries.items():
