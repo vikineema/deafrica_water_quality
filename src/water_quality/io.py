@@ -304,5 +304,5 @@ def load_parquet_to_xr(pq_file_path: str):
     meta_json = table.schema.metadata[custom_meta_key.encode()]
     meta = json.loads(meta_json)
 
-    ds.atts = meta
+    ds.attrs = meta
     return ds
