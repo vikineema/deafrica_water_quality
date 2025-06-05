@@ -2,6 +2,7 @@
 Utilities for interacting with local, cloud (S3, GCS), and HTTP filesystems
 """
 
+import json
 import logging
 import os
 import posixpath
@@ -10,7 +11,10 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import fsspec
+import pyarrow as pa
+import pyarrow.parquet as pq
 import requests
+import xarray as xr
 from fsspec.implementations.http import HTTPFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from gcsfs import GCSFileSystem
@@ -270,3 +274,35 @@ def get_last_modified(uri: str, aws_region="af-south-1"):
         return parsedate_to_datetime(last_modified)
     else:
         return None
+
+
+def write_xr_to_parquet(ds: xr.Dataset | xr.DataArray, output_file_path: str):
+    df = ds.to_dataframe().drop(columns="spatial_ref")
+    table = pa.Table.from_pandas(df)
+    existing_meta = table.schema.metadata
+
+    custom_meta_content = ds.attrs
+
+    if custom_meta_content:
+        custom_meta_key = "xr_attrs"
+        custom_meta_json = json.dumps(custom_meta_content)
+        combined_meta = {
+            custom_meta_key.encode(): custom_meta_json.encode(),
+            **existing_meta,
+        }
+        table = table.replace_schema_metadata(combined_meta)
+
+    pq.write_table(table, output_file_path, compression="GZIP")
+
+
+def load_parquet_to_xr(pq_file_path: str):
+    table = pq.read_table(pq_file_path)
+    df = table.to_pandas()
+    ds = df.to_xarray()
+
+    custom_meta_key = "xr_attrs"
+    meta_json = table.schema.metadata[custom_meta_key.encode()]
+    meta = json.loads(meta_json)
+
+    ds.atts = meta
+    return ds
