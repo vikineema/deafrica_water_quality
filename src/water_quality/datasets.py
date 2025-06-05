@@ -239,7 +239,7 @@ def build_datacube_queries(
                 like=tile_geobox,
                 time=(start_date, end_date),
                 resampling=resampling,
-                align=(0, 0),
+                # align=(0, 0), not supported when using like
             )
             dc_queries[instrument_name] = dc_query
     return dc_queries
