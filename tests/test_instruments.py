@@ -71,7 +71,6 @@ def test_invalid_date_range_oli_agm():
     instruments_to_use = {"oli_agm": {"use": True}}
     start_date = "2012"
     end_date = "2024"
-    verbose = True
 
     expected_result = {"oli_agm": {"use": False}}
 
@@ -79,7 +78,6 @@ def test_invalid_date_range_oli_agm():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -87,7 +85,6 @@ def test_invalid_date_range_oli():
     instruments_to_use = {"oli": {"use": True}}
     start_date = "2012"
     end_date = "2024"
-    verbose = True
 
     expected_result = {"oli": {"use": False}}
 
@@ -95,7 +92,6 @@ def test_invalid_date_range_oli():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -103,7 +99,6 @@ def test_invalid_date_range_msi_agm():
     instruments_to_use = {"msi_agm": {"use": True}}
     start_date = "2016"
     end_date = "2025"
-    verbose = True
 
     expected_result = {"msi_agm": {"use": False}}
 
@@ -111,7 +106,6 @@ def test_invalid_date_range_msi_agm():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -119,7 +113,6 @@ def test_invalid_date_range_msi():
     instruments_to_use = {"msi": {"use": True}}
     start_date = "2016"
     end_date = "2025"
-    verbose = True
 
     expected_result = {"msi": {"use": False}}
 
@@ -127,7 +120,6 @@ def test_invalid_date_range_msi():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -135,7 +127,6 @@ def test_invalid_date_range_wofs_ann():
     instruments_to_use = {"wofs_ann": {"use": True}}
     start_date = "1989"
     end_date = "2024"
-    verbose = True
 
     expected_result = {"wofs_ann": {"use": False}}
 
@@ -143,7 +134,6 @@ def test_invalid_date_range_wofs_ann():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -151,7 +141,6 @@ def test_invalid_date_range_wofs_all():
     instruments_to_use = {"wofs_all": {"use": True}}
     start_date = "1989"
     end_date = "2024"
-    verbose = True
 
     expected_result = {"wofs_all": {"use": False}}
 
@@ -159,7 +148,6 @@ def test_invalid_date_range_wofs_all():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -167,7 +155,6 @@ def test_invalid_date_range_tm_agm():
     instruments_to_use = {"tm_agm": {"use": True}}
     start_date = "1989"
     end_date = "2013"
-    verbose = True
 
     expected_result = {"tm_agm": {"use": False}}
 
@@ -175,7 +162,6 @@ def test_invalid_date_range_tm_agm():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -183,7 +169,6 @@ def test_invalid_date_range_tm():
     instruments_to_use = {"tm": {"use": True}}
     start_date = "1989"
     end_date = "2013"
-    verbose = True
 
     expected_result = {"tm": {"use": False}}
 
@@ -191,7 +176,6 @@ def test_invalid_date_range_tm():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
 
 
@@ -199,7 +183,6 @@ def test_invalid_date_range_tirs():
     instruments_to_use = {"tirs": {"use": True}}
     start_date = "1989"
     end_date = "2013"
-    verbose = True
 
     expected_result = {"tirs": {"use": False}}
 
@@ -207,5 +190,4 @@ def test_invalid_date_range_tirs():
         instruments_to_use=instruments_to_use,
         start_date=start_date,
         end_date=end_date,
-        verbose=verbose,
     )
