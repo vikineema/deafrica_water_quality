@@ -19,6 +19,7 @@ from fsspec.implementations.http import HTTPFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from gcsfs import GCSFileSystem
 from odc.aws import s3_url_parse
+from odc.geo.xr import assign_crs
 from s3fs.core import S3FileSystem
 from tqdm import tqdm
 
@@ -281,17 +282,17 @@ def write_xr_to_parquet(ds: xr.Dataset | xr.DataArray, output_file_path: str):
     table = pa.Table.from_pandas(df)
     existing_meta = table.schema.metadata
 
-    custom_meta_content = ds.attrs
-
-    if custom_meta_content:
-        custom_meta_key = "xr_attrs"
-        custom_meta_json = json.dumps(custom_meta_content)
+    if ds.attrs:
+        attrs = ds.attrs
+        attrs_json = json.dumps(attrs)
+        key = "xr_attrs"
         combined_meta = {
-            custom_meta_key.encode(): custom_meta_json.encode(),
+            key.encode(): attrs_json.encode(),
             **existing_meta,
         }
         table = table.replace_schema_metadata(combined_meta)
-
+    else:
+        raise ValueError("Dataset is missing CRS and grid mapping info in attributes")
     pq.write_table(table, output_file_path, compression="GZIP")
 
 
@@ -305,4 +306,8 @@ def load_parquet_to_xr(pq_file_path: str):
     meta = json.loads(meta_json)
 
     ds.attrs = meta
+
+    crs = meta["crs"]
+    crs_coord_name = meta["grid_mapping"]
+    ds = assign_crs(ds, crs, crs_coord_name)
     return ds
