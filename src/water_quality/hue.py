@@ -162,8 +162,6 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
     log.info(
         "Average Hue values post-ajustment :", Cdata_summary["hue"].values.round(1)
     )
-
-    return (
-        Cdata["hue"],
-        # Cdata_summary["hue"],
-    )  # the second output is not required for pixel-level processing, but is used by some of my code.
+    # The summary output is not required for pixel-level processing,
+    # but could be used later.
+    return Cdata["hue"]
