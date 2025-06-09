@@ -125,7 +125,7 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
 
     # TODO: Check if this is the correct tiling system.
     # Tiles to match the DE Africa Landsat GeoMAD products tiles.
-    resolution = 30
+    resolution = 10
     gridspec = GridSpec(
         crs="EPSG:6933",
         tile_shape=XY(y=3200, x=3200),
