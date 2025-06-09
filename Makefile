@@ -30,7 +30,7 @@ install-pkg: ## Editable install of package for development
 	docker compose exec jupyter bash -c "cd /home/jovyan && pip install -e ."
 
 run-tests:
-	pytest tests/
+	docker compose exec -T jupyter  pytest tests/
 
 test-env: build up init products index install-waterbodies
 
@@ -46,3 +46,6 @@ start-local-jupyter:
 
 sync-local-env:
 	micromamba env update -n deafrica-water-quality-env -f environment.yaml 
+
+jupyter-shell: ## Open shell in jupyter service
+	docker compose exec jupyter /bin/bash
