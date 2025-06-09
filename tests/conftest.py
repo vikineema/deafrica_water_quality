@@ -15,22 +15,40 @@ TEST_DATA_DIR = "tests/data"
 
 @pytest.fixture
 def sample_tile_geobox():
-    shape = (8, 14)
+    shape = (22, 39)
     crs = CRS("EPSG:6933")
-    affine = Affine(30.0, 0.0, 1880880.0, 0.0, -30.0, -4071810.0)
+    affine = Affine(10.0, 0.0, 1880900.0, 0.0, 10.0, -4072040.0)
     tile_geobox = GeoBox(shape, affine, crs)
     return tile_geobox
 
 
 @pytest.fixture
-def sample_multi_instrument_wq_dataset():
-    ds = xr.open_dataset(os.path.join(TEST_DATA_DIR, "wq_dataset_multi_instrument.nc"))
+def build_dataset_validation_ds():
+    ds = xr.open_dataset(os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset.nc"))
     return ds
 
 
 @pytest.fixture
-def sample_single_instrument_wq_dataset():
-    ds = xr.open_dataset(os.path.join(TEST_DATA_DIR, "wq_dataset_single_instrument.nc"))
+def water_analysis_validation_ds():
+    ds = xr.open_dataset(
+        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_water_analysis.nc")
+    )
+    return ds
+
+
+@pytest.fixture
+def pixel_corrections_validation_ds():
+    ds = xr.open_dataset(
+        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_pixel_correction.nc")
+    )
+    return ds
+
+
+@pytest.fixture
+def hue_calc_validation_ds():
+    ds = xr.open_dataset(
+        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_hue_calc.nc")
+    )
     return ds
 
 

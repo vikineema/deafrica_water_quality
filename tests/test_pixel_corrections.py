@@ -38,51 +38,57 @@ TEST_INSTRUMENTS_TO_USE = {
 }
 
 
-def test_r_correction_missing_instrument(sample_multi_instrument_wq_dataset):
+def test_r_correction_missing_instrument(water_analysis_validation_ds):
     dp_adjust = TEST_DP_ADJUST
     instruments_to_use = {
         k: v for k, v in TEST_INSTRUMENTS_TO_USE.items() if k != "oli_agm"
     }
-    ds = sample_multi_instrument_wq_dataset
+    ds = water_analysis_validation_ds
 
     with pytest.raises(ValueError):
         results = R_correction(ds, dp_adjust, instruments_to_use)
 
 
-def test_r_correction_instrument_not_used(sample_multi_instrument_wq_dataset):
+def test_r_correction_instrument_not_used(water_analysis_validation_ds):
     dp_adjust = TEST_DP_ADJUST
     instruments_to_use = {
         k: ({"use": False} if k == "oli_agm" else v)
         for k, v in TEST_INSTRUMENTS_TO_USE.items()
     }
-    ds = sample_multi_instrument_wq_dataset
+    ds = water_analysis_validation_ds
 
     with pytest.raises(ValueError):
         results = R_correction(ds, dp_adjust, instruments_to_use)
 
 
-def test_r_correction_missing_ref_var(sample_multi_instrument_wq_dataset):
+def test_r_correction_missing_ref_var(water_analysis_validation_ds):
     dp_adjust = TEST_DP_ADJUST
     instruments_to_use = TEST_INSTRUMENTS_TO_USE
-    ds = sample_multi_instrument_wq_dataset.drop_vars("oli07_agm")
+    ds = water_analysis_validation_ds.drop_vars("oli07_agm")
     with pytest.raises(ValueError):
         results = R_correction(ds, dp_adjust, instruments_to_use)
 
 
-def test_r_correction_missing_target_var(sample_multi_instrument_wq_dataset):
+def test_r_correction_missing_target_var(water_analysis_validation_ds):
     dp_adjust = TEST_DP_ADJUST
     instruments_to_use = TEST_INSTRUMENTS_TO_USE
-    ds = sample_multi_instrument_wq_dataset.drop_vars("msi05_agm")
+    ds = water_analysis_validation_ds.drop_vars("msi05_agm")
     with pytest.raises(ValueError):
         results = R_correction(ds, dp_adjust, instruments_to_use)
 
 
-def test_r_correction_valid(sample_multi_instrument_wq_dataset):
+def test_r_correction_valid(
+    water_analysis_validation_ds, pixel_corrections_validation_ds
+):
     dp_adjust = {k: v for k, v in TEST_DP_ADJUST.items() if k != "tm_agm"}
     instruments_to_use = TEST_INSTRUMENTS_TO_USE
-    ds = sample_multi_instrument_wq_dataset
+    ds = water_analysis_validation_ds
 
-    results = R_correction(ds, dp_adjust, instruments_to_use)
+    results = R_correction(
+        ds, dp_adjust, instruments_to_use, water_frequency_threshold=0.1
+    )
 
     expected_added_vars = [f"{i}r" for k, v in dp_adjust.items() for i in v["var_list"]]
     assert all(item in list(results.data_vars) for item in expected_added_vars)
+
+    xr.testing.assert_allclose(results, pixel_corrections_validation_ds)

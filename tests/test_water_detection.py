@@ -1,4 +1,5 @@
 import pytest
+import xarray as xr
 
 from water_quality.water_detection import water_analysis
 
@@ -15,11 +16,11 @@ def test_water_detection_wofs_all_freq_not_implemented(random_xr_dataset):
         water_analysis(ds, wofs_varname="wofs_all_freq")
 
 
-def test_water_detection_on_valid_ds(random_xr_dataset):
-    var_names = ["wofs_ann_freq", "wofs_ann_clearcount", "wofs_ann_wetcount"]
-    ds = random_xr_dataset(var_names=var_names, shape=(1, 2, 3))
-    results = water_analysis(ds, wofs_varname="wofs_ann_freq")
-
+def test_water_detection_on_valid_ds(
+    build_dataset_validation_ds, water_analysis_validation_ds
+):
+    expected_results = water_analysis_validation_ds
+    results = water_analysis(build_dataset_validation_ds, wofs_varname="wofs_ann_freq")
     expected_added_vars = [
         "wofs_ann_freq_sigma",
         "wofs_ann_confidence",
@@ -29,3 +30,4 @@ def test_water_detection_on_valid_ds(random_xr_dataset):
         "watermask",
     ]
     assert all(item in list(results.data_vars) for item in expected_added_vars)
+    xr.testing.assert_equal(results, expected_results)
