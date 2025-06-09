@@ -21,7 +21,7 @@ def water_analysis(
     data_vars = list(ds.data_vars)
     if wofs_varname not in data_vars:
         raise ValueError(
-            f"The provided dataset `ds` does not contain the required wofs_varname  {' or '.join(VALID_VARIABLES)}"
+            f"The provided dataset `ds` does not contain the required wofs_varname:  {' or '.join(VALID_VARIABLES)}"
         )
 
     if wofs_varname == "wofs_ann_freq":
