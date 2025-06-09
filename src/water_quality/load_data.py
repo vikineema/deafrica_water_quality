@@ -332,6 +332,8 @@ def build_wq_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
     loaded_data = {}
     for instrument_name, dc_query in dc_queries.items():
         ds = dc.load(**dc_query)
+        if instrument_name == "wofs_all":
+            ds = ds.squeeze(dim="time", drop=True)
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
     combined_ds = xr.merge(
