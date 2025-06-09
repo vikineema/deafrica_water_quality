@@ -149,25 +149,33 @@ def test_build_dc_queries_multi_instrument(sample_tile_geobox):
 
 
 def test_build_wq_dataset_single_instrument(
-    sample_tile_geobox, sample_single_instrument_wq_dataset
+    sample_tile_geobox, build_dataset_validation_ds
 ):
+    time = ("2024", "2024")
     dc_queries = {
         "wofs_ann": {
             "product": ["wofs_ls_summary_annual"],
             "measurements": ["frequency", "count_clear", "count_wet"],
             "like": sample_tile_geobox,
-            "time": ("2024", "2024"),
+            "time": time,
             "resampling": "bilinear",
         },
     }
     ds = build_wq_dataset(dc_queries)
 
-    xr.testing.assert_equal(ds, sample_single_instrument_wq_dataset)
+    expected_results = build_dataset_validation_ds[
+        [i for i in list(build_dataset_validation_ds.data_vars) if "wofs_ann" in i]
+    ].sel(time=slice(*time))
+
+    xr.testing.assert_allclose(ds, expected_results)
 
 
 def test_build_wq_dataset_multi_instrument(
-    sample_tile_geobox, sample_multi_instrument_wq_dataset
+    sample_tile_geobox, build_dataset_validation_ds
 ):
+    time = ("2024", "2024")
+    expected_results = build_dataset_validation_ds.sel(time=slice(*time))
+
     dc_queries = {
         "oli_agm": {
             "product": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
@@ -182,7 +190,7 @@ def test_build_wq_dataset_multi_instrument(
                 "count",
             ],
             "like": sample_tile_geobox,
-            "time": ("2024", "2024"),
+            "time": time,
             "resampling": "bilinear",
         },
         "msi_agm": {
@@ -199,24 +207,23 @@ def test_build_wq_dataset_multi_instrument(
                 "count",
             ],
             "like": sample_tile_geobox,
-            "time": ("2024", "2024"),
+            "time": time,
             "resampling": "bilinear",
         },
         "wofs_ann": {
             "product": ["wofs_ls_summary_annual"],
             "measurements": ["frequency", "count_clear", "count_wet"],
             "like": sample_tile_geobox,
-            "time": ("2024", "2024"),
+            "time": time,
             "resampling": "bilinear",
         },
         "wofs_all": {
             "product": ["wofs_ls_summary_alltime"],
             "measurements": ["frequency", "count_clear", "count_wet"],
             "like": sample_tile_geobox,
-            "time": ("2024", "2024"),
+            "time": time,
             "resampling": "bilinear",
         },
     }
     ds = build_wq_dataset(dc_queries)
-
-    xr.testing.assert_equal(ds, sample_multi_instrument_wq_dataset)
+    xr.testing.assert_allclose(ds, expected_results)

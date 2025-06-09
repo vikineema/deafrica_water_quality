@@ -102,7 +102,7 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
     else:
         missing_bands = [i for i in band_list if i not in list(dataset.data_vars)]
         if missing_bands:
-            raise ValueError(
+            raise KeyError(
                 f"Bands {', '.join(missing_bands)} missing in dataset for hue calculation"
             )
 
@@ -155,13 +155,15 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
     )
     # apply the hue adjustment - only do it once!
     log.info(
-        "Average Hue values pre-adjustment :", Cdata_summary["hue"].values.round(1)
+        f"Average Hue values pre-adjustment : {Cdata_summary['hue'].values.round(1)}"
     )
     Cdata = hue_adjust(Cdata)
     Cdata_summary = hue_adjust(Cdata_summary)
     log.info(
-        "Average Hue values post-ajustment :", Cdata_summary["hue"].values.round(1)
+        f"Average Hue values post-ajustment : {Cdata_summary['hue'].values.round(1)}"
     )
     # The summary output is not required for pixel-level processing,
     # but could be used later.
+    # Cdata_summary["hue"]
+
     return Cdata["hue"]
