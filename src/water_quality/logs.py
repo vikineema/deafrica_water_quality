@@ -18,7 +18,15 @@ def setup_logging(verbose: int = 4):
     else:
         raise ValueError("Maximum verbosity is -vvvvv (verbose=5)")
 
-    logger = logging.getLogger(__name__)
-    logger.setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
 
-    return logger
+    if not root_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            "%(asctime)s %(name)s [%(levelname)s]: %(message)s"
+        )
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+
+    return logging.getLogger(__name__)
