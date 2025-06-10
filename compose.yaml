@@ -1,8 +1,8 @@
 services:
   db:
     image: kartoza/postgis:latest
-    volumes:
-      - postgis-data:/var/lib/postgresql
+    # volumes:
+      # - postgis-data:/var/lib/postgresql
     ports:
         - ${POSTGRES_PORT}:5432
     environment:
