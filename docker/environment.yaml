@@ -1,0 +1,55 @@
+name: deafrica-water-quality-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.3
+  - gdal
+  - libgdal
+  - libgdal-arrow-parquet
+  - postgresql
+  # ODC ecosystem libraries
+  - datacube
+  - eodatasets3
+  - odc-dscache
+  - odc-geo
+  - odc-loader
+  - odc-stac
+  - odc-apps-dc-tools
+  ## Analysis packages
+  - geopandas
+  - rioxarray
+  - tqdm
+  # fsspec + extras
+  - fsspec
+  - s3fs
+  - gcsfs
+  # xarray + extras
+  - bottleneck
+  - cftime
+  - dask
+  - h5netcdf
+  - iris
+  - netCDF4
+  - numbagg
+  - pydap
+  - scipy
+  - xarray
+  - zarr
+  # Code formatting
+  - ruff
+  - yamllint
+  # Tests
+  - coverage
+  - pytest
+  # Jupyter
+  - jupyterlab
+  - jupyterlab_iframe
+  - jupyter-resource-usage
+  - nodejs
+  # developer tools
+  - make
+  - wget
+  - curl
+  # packages requiring pip
+  - pip:
+    - -r requirements.txt
