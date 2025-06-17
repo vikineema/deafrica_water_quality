@@ -23,6 +23,7 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "datacube[performance,distributed,s3]",
+    "deafrica-tools",
     "fsspec",
     "gcsfs",
     "odc-cloud[ASYNC]",

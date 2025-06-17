@@ -50,6 +50,8 @@ dependencies:
   - make
   - wget
   - curl
+  # required for building hdstats
+  - compilers 
   # packages requiring pip
   - pip:
     - -r requirements.txt
