@@ -13,7 +13,7 @@ LWQ_PRODUCTS = [
     "cgls_lwq300_2024_nrt",
 ]
 LWQ_MEASUREMENTS = ["TSI", "turbidity"]
-DEVIATION_CATEGORIES = {1: "low", 2: "medium", 3: "high", 4: "extreme"}
+DEVIATION_CATEGORIES = {"low": 1, "medium": 2, "high": 3, "extreme": 4}
 
 
 def get_monthly_timeseries(
@@ -126,7 +126,7 @@ def get_deviation_categories(var: str, deviations_ds: xr.Dataset) -> np.ndarray:
         ((deviations_ds[var] > 50) & (deviations_ds[var] <= 100)),
         (deviations_ds[var] > 100),
     ]
-    classes = list(DEVIATION_CATEGORIES.keys())
+    classes = list(DEVIATION_CATEGORIES.values())
     data = np.select(conditions, classes, default=np.nan)
     return data
 
