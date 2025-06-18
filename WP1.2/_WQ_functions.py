@@ -495,7 +495,7 @@ def water_analysis(ds,
     
     return(ds)
 
-
+#this is not needed if the "errors='ignore'" option is used
 def rename_vars_robust(dataset,var_names,verbose=False):
         # --- helpful function when renaming variables. var_names nees to be pairs of old and new names  --- 
         for var in var_names :
@@ -523,6 +523,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     
     places = {
         'Lake_Baringo'     :   {'run':True, "xyt" :{"x": (36.00,  36.17),     "y": (00.45,00.74),        "time": (year1,year2)},"desc":'Lake Baringo'    },
+        'Lake_Tikpan'      :   {'run':True, "xyt" :{"x": ( 1.8215,   1.8265), "y": (6.459,6.4626),       "time": (year1,year2)},"desc":'Lake Tikpan'    },
         'Lake_Chad'        :   {'run':True, "xyt" :{"x": (12.97,  15.50),     "y": (12.40,14.50),        "time": (year1,year2)},"desc":'Lake Chad'       },
         'Weija_Reservoir'  :   {'run':True, "xyt" :{"x": (-0.325, -0.41),     "y": ( 5.54, 5.62),        "time": (year1,year2)  },"desc":''                },
         'Senegal_StLouis'  :   {'run':True, "xyt" :{"x": (-15.74,-15.84),     "y": (16.3, 16.3900),      "time": (year1,year2)  },"desc":'Lac de Guiers'   },
@@ -555,7 +556,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'SA_smalldam':         {'run':True, "xyt" :{"x": ( 19.494,  19.498),   "y" : ( -33.802, -33.800),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa"          },
         'Ethiopia_both':       {'run':False, "xyt" :{"x": ( 38.35,   38.83),    "y" : (   7.37 ,   7.71), "time": (year1,year2)  },"desc": "Ethiopia, Lake Abiata +"          },
         'Madagascar':          {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
-        'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.68 ,  35.92 ),   "y" : ( -03.86 , -03.38), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
+        'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.724 ,  35.929 ), "y" : ( -03.814, -03.409), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
         'Farihy_':             {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
         'Farihy_itasy':        {'run':True, "xyt" :{"x": ( 46.73 ,  46.83 ),   "y" : ( -19.10 , -19.04 ),"time": (year1,year2)},"desc": "Farihy Itasy, Madagascar"          },
         'Kolokonda':           {'run':True, "xyt" :{"x": ( 35.4888, 35.5488),   "y" : ( -5.976, -5.916 ),"time": (year1,year2)},"desc": "Kolokonda, Tanzania"          },
