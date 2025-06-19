@@ -378,9 +378,9 @@ def check_instrument_dates(
                 else:
                     valid_instruments_to_use[instrument_name] = {"use": False}
                     log.error(
-                        f"Instrument {instrument_name} has data the date range "
+                        f"Instrument {instrument_name} has data for the date range "
                         f"{instrument_data_start_date} to {instrument_data_end_date} which is outside"
-                        f" the supplied date range of {start_date} to {end_date}."
+                        f" the requested date range of {start_date} to {end_date}."
                     )
         else:
             valid_instruments_to_use[instrument_name] = usage
