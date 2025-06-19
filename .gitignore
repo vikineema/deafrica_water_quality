@@ -35,4 +35,6 @@ data/**
 **/.env/**
 # Ruff stuff:
 **/.ruff_cache/**
+# Test notebooks ignore for now
+WP1.3/**
 
