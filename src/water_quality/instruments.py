@@ -5,15 +5,15 @@ from datetime import date, datetime
 log = logging.getLogger(__name__)
 
 INSTRUMENTS_DATES = {
-    "msi": [2017, 2024],
-    "msi_agm": [2017, 2024],
-    "oli": [2013, 2024],
     "oli_agm": [2013, 2024],
-    "tirs": [2000, 2024],
-    "tm": [1990, 2012],
-    "tm_agm": [1990, 2012],
+    "oli": [2013, 2024],
+    "msi_agm": [2017, 2024],
+    "msi": [2017, 2024],
     "wofs_ann": [1990, 2024],
     "wofs_all": [1990, 2024],
+    "tm_agm": [1990, 2012],
+    "tm": [1990, 2012],
+    "tirs": [2000, 2024],
 }
 
 # Here is where to turn a particular band on or off, using the 'parameters' entry
@@ -36,9 +36,19 @@ INSTRUMENTS_MEASUREMENTS = {
         "SR_B6": {"varname": ("oli06_agm"), "parameters": (True, "1570-1650")},
         "SR_B7": {"varname": ("oli07_agm"), "parameters": (True, "2110-2290")},
         "smad": {"varname": ("oli_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("oli_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("oli_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("oli_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("oli_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("oli_agm_count"), "parameters": (True,)},
+    },
+    "oli": {
+        "SR_B1": {"varname": ("oli01"), "parameters": (True, "450-510")},
+        "SR_B2": {"varname": ("oli02"), "parameters": (True, "450-510")},
+        "SR_B3": {"varname": ("oli03"), "parameters": (True, "530-590")},
+        "SR_B4": {"varname": ("oli04"), "parameters": (True, "640-670")},
+        "SR_B5": {"varname": ("oli05"), "parameters": (True, "850-880")},
+        "SR_B6": {"varname": ("oli06"), "parameters": (True, "1570-1650")},
+        "SR_B7": {"varname": ("oli07"), "parameters": (True, "2110-2290")},
+        "pq": {"varname": ("oli_pq"), "parameters": (True,)},
     },
     "msi_agm": {
         "B02": {"varname": ("msi02_agm"), "parameters": (True, "460-525")},
@@ -76,9 +86,47 @@ INSTRUMENTS_MEASUREMENTS = {
             ),
         },
         "smad": {"varname": ("msi05_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("msi_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("msi_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("msi_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("msi_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("msi_agm_count"), "parameters": (True,)},
+    },
+    "msi": {
+        "B01": {"varname": ("msi01"), "parameters": (False, "Coastal aerosol")},
+        "B02": {"varname": ("msi02"), "parameters": (True, "460-525")},
+        "B03": {"varname": ("msi03"), "parameters": (True,)},
+        "B04": {"varname": ("msi04"), "parameters": (True,)},
+        "B05": {"varname": ("msi05"), "parameters": (True,)},
+        "B06": {"varname": ("msi06"), "parameters": (True,)},
+        "B07": {"varname": ("msi07"), "parameters": (True,)},
+        "B08": {
+            "varname": ("msi08"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_08, nir, nir_1] 	NaN",
+            ),
+        },
+        "B8A": {
+            "varname": ("msi8a"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_8a, nir_narrow, nir_2] 	NaN",
+            ),
+        },
+        "B11": {
+            "varname": ("msi11"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_11, swir_1, swir_16] 	NaN",
+            ),
+        },
+        "B12": {
+            "varname": ("msi12"),
+            "parameters": (
+                True,
+                "uint16 	1 	0.0 	[band_12, swir_2, swir_22] 	NaN",
+            ),
+        },
+        "qa": {"varname": ("msi_qa"), "parameters": (True,)},
     },
     "tm_agm": {
         "SR_B1": {"varname": ("tm01_agm"), "parameters": (True, "blue 450-520")},
@@ -88,9 +136,18 @@ INSTRUMENTS_MEASUREMENTS = {
         "SR_B5": {"varname": ("tm05_agm"), "parameters": (True, "swir1 1550-1750")},
         "SR_B7": {"varname": ("tm07_agm"), "parameters": (True, "swir2 2080-2350")},
         "smad": {"varname": ("tm_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("tm_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("tm_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("tm_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("tm_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("tm_agm_count"), "parameters": (True,)},
+    },
+    "tm": {
+        "SR_B1": {"varname": ("tm01"), "parameters": (True, "blue 450-520")},
+        "SR_B2": {"varname": ("tm02"), "parameters": (True, "green 520-600")},
+        "SR_B3": {"varname": ("tm03"), "parameters": (True, "red   630-690")},
+        "SR_B4": {"varname": ("tm04"), "parameters": (True, "nir   760-900")},
+        "SR_B5": {"varname": ("tm05"), "parameters": (True, "swir1 1550-1750")},
+        "SR_B7": {"varname": ("tm07"), "parameters": (True, "swir2 2080-2350")},
+        "pq": {"varname": ("tm_pq"), "parameters": (True,)},
     },
     "tirs": {
         "st": {
@@ -135,10 +192,10 @@ INSTRUMENTS_MEASUREMENTS = {
                 "ST_EMIS 	int16 	1 	-9999.0 	[emis, emissivity]",
             ),
         },
-        "ST_EMSD": {
+        "emisd": {
             "varname": ("tirs_emsd"),
             "parameters": (
-                True,
+                False,
                 "ST_EMSD 	int16 	1 	-9999.0 	[emsd, emissivity_stddev]",
             ),
         },
@@ -164,7 +221,7 @@ INSTRUMENTS_MEASUREMENTS = {
             ),
         },
         "st_qa": {
-            "varname": ("tirs_qa_st"),
+            "varname": ("tirs_st_qa"),
             "parameters": (
                 True,
                 "ST_QA 	int16 	Kelvin 	-9999.0 	[st_qa, surface_temperature_quality]",
