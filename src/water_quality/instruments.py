@@ -361,8 +361,8 @@ def check_instrument_dates(
                     f"Valid data date range for instrument {instrument_name} has not been set"
                 )
             else:
-                instrument_data_start_date = (
-                    validate_start_date(str(min(instruments_data_date_range))),
+                instrument_data_start_date = validate_start_date(
+                    str(min(instruments_data_date_range))
                 )
                 instrument_data_end_date = validate_end_date(
                     str(max(instruments_data_date_range))
