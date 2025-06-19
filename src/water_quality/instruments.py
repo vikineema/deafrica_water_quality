@@ -405,8 +405,6 @@ def get_instruments_list(
         A dictionary containing :
         - 'instruments', the 'master list' of instruments being used in the analysis.
             This is a subsetof the full list available.
-        - 'measurements', a list of measurements to be accessed from the data cube collections - for each instrument
-        -'rename_dict', a dictionary for re-naming measurements to have unique dataset variable names, when the time comes
     """
     instruments_list = {}
     for instrument_name, instrument_usage in instruments_to_use.items():
