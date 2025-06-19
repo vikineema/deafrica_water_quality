@@ -345,7 +345,7 @@ def check_instrument_dates(
     Returns
     -------
     dict[str, dict[str, bool]]
-        Updated `instruments_to_use` where instruments where data is not available in
+        Updated `instruments_to_use` where instruments where data is not available for
         the analysis period have their usage parameter set to False.
     """
     start_date = validate_start_date(start_date)
@@ -354,31 +354,34 @@ def check_instrument_dates(
     valid_instruments_to_use: dict[str, dict[str, bool]] = {}
     for instrument_name, usage in instruments_to_use.items():
         if usage["use"] is True:
-            valid_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
-            if valid_date_range is None:
+            instruments_data_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
+            if instruments_data_date_range is None:
                 valid_instruments_to_use[instrument_name] = {"use": False}
                 log.error(
-                    f"Valid date range for instrument {instrument_name} has not been set"
+                    f"Valid data date range for instrument {instrument_name} has not been set"
                 )
             else:
-                valid_date_range = [
-                    validate_start_date(str(min(valid_date_range))),
-                    validate_end_date(str(max(valid_date_range))),
-                ]
-                valid_date_range.sort()
-
-                if not (
-                    start_date >= valid_date_range[0]
-                    and end_date <= valid_date_range[-1]
+                instrument_data_start_date = (
+                    validate_start_date(str(min(instruments_data_date_range))),
+                )
+                instrument_data_end_date = validate_end_date(
+                    str(max(instruments_data_date_range))
+                )
+                # Check for overlap in requested date range and the
+                # date range that data is available for the instrument, if
+                # there is no overlap disable instrument.
+                if (
+                    instrument_data_end_date >= start_date
+                    and instrument_data_start_date <= end_date
                 ):
+                    valid_instruments_to_use[instrument_name] = {"use": True}
+                else:
                     valid_instruments_to_use[instrument_name] = {"use": False}
                     log.error(
-                        f"Instrument {instrument_name} has the date ranges "
-                        f"{valid_date_range[0]} to {valid_date_range[-1]} which is outside"
+                        f"Instrument {instrument_name} has data the date range "
+                        f"{instrument_data_start_date} to {instrument_data_end_date} which is outside"
                         f" the supplied date range of {start_date} to {end_date}."
                     )
-                else:
-                    valid_instruments_to_use[instrument_name] = {"use": True}
         else:
             valid_instruments_to_use[instrument_name] = usage
     return valid_instruments_to_use
