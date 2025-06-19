@@ -1,6 +1,7 @@
 import calendar
 import logging
 from datetime import date, datetime
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -385,7 +386,7 @@ def check_instrument_dates(
 
 def get_instruments_list(
     instruments_to_use: dict[str, dict[str, bool]],
-) -> dict[str, dict[str, dict[str, str | tuple]]]:
+) -> dict[str, dict[str, dict[str, Any]]]:
     """
     Primary list of instruments, measurements, and interoperable variable names
 
@@ -408,14 +409,5 @@ def get_instruments_list(
     for instrument_name, instrument_usage in instruments_to_use.items():
         if instrument_usage["use"] is True:
             instrument_info = INSTRUMENTS_MEASUREMENTS[instrument_name]
-            meaurements_to_keep = {}
-            for measurement_name, measurement_info in instrument_info.items():
-                measurement_usage = measurement_info["parameters"][0]
-                if measurement_usage is True:
-                    meaurements_to_keep[measurement_name] = measurement_info
-                else:
-                    pass
-            instruments_list[instrument_name] = meaurements_to_keep
-        else:
-            pass
+            instruments_list[instrument_name] = instrument_info
     return instruments_list
