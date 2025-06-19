@@ -367,18 +367,18 @@ def check_instrument_dates(
                 ]
                 valid_date_range.sort()
 
-                if (
+                if not (
                     start_date >= valid_date_range[0]
                     and end_date <= valid_date_range[-1]
                 ):
-                    valid_instruments_to_use[instrument_name] = {"use": True}
-                else:
                     valid_instruments_to_use[instrument_name] = {"use": False}
                     log.error(
                         f"Instrument {instrument_name} has the date ranges "
                         f"{valid_date_range[0]} to {valid_date_range[-1]} which is outside"
                         f" the supplied date range of {start_date} to {end_date}."
                     )
+                else:
+                    valid_instruments_to_use[instrument_name] = {"use": True}
         else:
             valid_instruments_to_use[instrument_name] = usage
     return valid_instruments_to_use
