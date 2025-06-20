@@ -10,13 +10,10 @@ from water_quality.instruments import INSTRUMENTS_MEASUREMENTS
 log = logging.getLogger(__name__)
 
 INSTRUMENTS_PRODUCTS = {
-    # "msi": ["s2_l2a_c1"],
-    "msi_agm": ["gm_s2_annual"],
-    # "oli": ["ls8_sr", "ls9_sr"],
-    "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
-    "tirs": ["l5_st", "l7_st", "l8_st", "l9_st"],
-    # "tm": ["l5_sr", "l7_sr"],
     "tm_agm": ["gm_ls5_ls7_annual"],
+    "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
+    "msi_agm": ["gm_s2_annual"],
+    "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
     "wofs_ann": ["wofs_ls_summary_annual"],
     "wofs_all": ["wofs_ls_summary_alltime"],
 }
@@ -160,7 +157,13 @@ def build_dc_queries(
     return dc_queries
 
 
-def build_wq_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
+def process_st_data_to_annnual():
+    pass
+
+
+def build_wq_dataset(
+    dc_queries: dict[str, dict[str, Any]], dc: Datacube = None
+) -> xr.Dataset:
     """Build a combined dataset from loading data
     for each instrument using the datacube queries provided.
 
@@ -175,18 +178,24 @@ def build_wq_dataset(dc_queries: dict[str, dict[str, Any]]) -> xr.Dataset:
         A single dataset containing all the data found for each instrument
         in the datacube.
     """
-    dc = Datacube()
+    if dc is None:
+        dc = Datacube()
+
     loaded_data = {}
     for instrument_name, dc_query in dc_queries.items():
         ds = dc.load(**dc_query)
+        """
         if instrument_name == "wofs_all":
             ds = ds.squeeze(dim="time", drop=True)
+        """
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
+    """
     combined_ds = xr.merge(
         list(loaded_data.values()),
         compat="no_conflicts",
         join="outer",
         combine_attrs="override",
     )
-    return combined_ds
+    """
+    return loaded_data
