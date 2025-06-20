@@ -1,3 +1,4 @@
+import inspect
 import logging
 import sys
 
@@ -30,4 +31,5 @@ def setup_logging(verbose: int = 4):
         handler.setFormatter(formatter)
         root_logger.addHandler(handler)
 
-    return logging.getLogger(__name__)
+    caller_module = inspect.stack()[1].frame.f_globals["__name__"]
+    return logging.getLogger(caller_module)
