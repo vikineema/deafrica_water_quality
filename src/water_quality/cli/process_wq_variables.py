@@ -197,7 +197,7 @@ def cli(
             # Dark pixel correction
             ds = R_correction(ds, dp_adjust, instruments_to_use, WFTL)
 
-            log.info("alculating the hue.")
+            log.info("Calculating the hue.")
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
 
             log.info("Determining the open water type for each pixel.")
