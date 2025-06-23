@@ -297,3 +297,7 @@ def cli(
         log.error(f"Failed tasks: {failed_tasks_json_array}")
         log.info(f"Failed tasks written to {failed_tasks_output_file}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    cli()
