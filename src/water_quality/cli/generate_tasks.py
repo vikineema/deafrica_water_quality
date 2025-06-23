@@ -1,5 +1,4 @@
 import json
-import os
 from importlib.resources import files
 
 import click
@@ -9,9 +8,9 @@ from odc.geo.geom import Geometry
 
 from water_quality.io import check_directory_exists, get_filesystem
 from water_quality.logs import setup_logging
-from water_quality.tiling import get_aoi_tiles
+from water_quality.tiling import get_aoi_tiles, get_tile_index_str
 from water_quality.utils import AFRICA_EXTENT_URL
-from water_quality.tiling import get_tile_index_str
+
 
 @click.command(
     name="generate-tasks",
@@ -24,17 +23,13 @@ from water_quality.tiling import get_tile_index_str
     "To view the names of these predefined test areas, run the command `list-test-areas`.",
 )
 @click.argument(
-    "max-parallel-steps",
-    type=int,
+    "output-file",
+    type=str,
 )
-def cli(place_name: str, max_parallel_steps: int):
+def cli(place_name: str, output_file: str):
     """
-    Get the list of tiles to run the DE Africa Water Quality workflow on,
-    split the list of tiles into at most MAX_PARALLEL_STEPS lists and write the lists
-    to the json file `/tmp/tasks_chunks`.
-
-    Arguments:
-        max-parallel-steps
+    Get the list of tiles to run the DE Africa Water Quality workflow on
+    and write the tile IDs to the file OUTPUT_FILE.
 
     """
     _log = setup_logging()
@@ -61,34 +56,19 @@ def cli(place_name: str, max_parallel_steps: int):
     tiles = get_aoi_tiles(aoi_geom)
     tiles = list(tiles)
     tile_ids = [tile[0] for tile in tiles]
-    tile_ids =  [get_tile_index_str(tile_id) for tile_id in tile_ids]
+    tile_ids = [get_tile_index_str(tile_id) for tile_id in tile_ids]
     _log.info(f"Tiles found: {', '.join(tile_ids)}")
     _log.info(f"Total number of tiles: {len(tile_ids)}")
 
     tile_ids.sort()
 
-    # Split the list of tiles
-    task_chunks = np.array_split(np.array(tile_ids), max_parallel_steps)
-    task_chunks = [chunk.tolist() for chunk in task_chunks]
-    task_chunks = list(filter(None, task_chunks))
-    task_chunks_count = str(len(task_chunks))
-    _log.info(f"{len(tiles)} tile(s) chunked into {task_chunks_count} chunks")
-    task_chunks_json_array = json.dumps(task_chunks)
+    fs = get_filesystem(path=output_file, anon=False)
+    tasks_directory = fs._parent(output_file)
+    if not check_directory_exists(tasks_directory):
+        fs.makedirs(tasks_directory, exist_ok=True)
 
-    tasks_directory = "/tmp/"
-    tasks_output_file = os.path.join(tasks_directory, "tasks_chunks")
-    tasks_count_file = os.path.join(tasks_directory, "tasks_chunks_count")
+    with fs.open(output_file, "w") as file:
+        for item in tile_ids:
+            file.write(str(item) + "\n")
 
-    fs = get_filesystem(path=tasks_directory)
-
-    if not check_directory_exists(path=tasks_directory):
-        fs.mkdirs(path=tasks_directory, exist_ok=True)
-        _log.info(f"Created directory {tasks_directory}")
-
-    with fs.open(tasks_output_file, "w") as file:
-        file.write(task_chunks_json_array)
-    _log.info(f"Tasks chunks written to {tasks_output_file}")
-
-    with fs.open(tasks_count_file, "w") as file:
-        file.write(task_chunks_count)
-    _log.info(f"Number of tasks chunks written to {tasks_count_file}")
+    _log.info(f"Tasks written to {output_file}")
