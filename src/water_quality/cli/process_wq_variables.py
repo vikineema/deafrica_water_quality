@@ -177,12 +177,14 @@ def cli(
             )
             instruments_list = get_instruments_list(instruments_to_use)
 
+            log.info("Building the multivariate/multi-sensor dataset")
             # build the multivariate/multi-sensor dataset.
             dc_queries = build_dc_queries(
                 instruments_to_use, tile_geobox, start_date, end_date
             )
             ds = build_wq_dataset(dc_queries)
 
+            log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
             ds = water_analysis(
                 ds,
@@ -195,10 +197,13 @@ def cli(
             # Dark pixel correction
             ds = R_correction(ds, dp_adjust, instruments_to_use, WFTL)
 
+            log.info("alculating the hue.")
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
 
+            log.info("Determining the open water type for each pixel.")
             ds["owt_msi"] = OWT_pixel(ds, instrument="msi_agm")
 
+            log.info("Applying the WQ algorithms to water areas.")
             # Apply the WQ algorithms to water areas, adding variables to the dataset and building
             # a list of water quality variable names
             # this can be run either keeping the wq variables as separate variables on the dataset,
@@ -270,7 +275,9 @@ def cli(
             ).astype("int16")
 
             parent_dir = join_url(output_directory, "WP1.4")
-            output_file = join_url(parent_dir, f"wp12_ds_{tile_idx}.nc")
+            output_file = join_url(
+                parent_dir, f"wp12_ds_{tile_idx}_{start_date}_{end_date}.nc"
+            )
 
             fs = get_filesystem(output_directory, anon=False)
             if not check_directory_exists(parent_dir):
@@ -278,6 +285,8 @@ def cli(
 
             with fs.open(output_file, "wb") as f:
                 ds.to_netcdf(f, engine="h5netcdf")
+
+            log.info(f"Water Quality variables written to {output_file}")
         except Exception as error:
             log.exception(error)
             failed_tasks.append(tile_idx)
@@ -297,6 +306,8 @@ def cli(
         log.error(f"Failed tasks: {failed_tasks_json_array}")
         log.info(f"Failed tasks written to {failed_tasks_output_file}")
         sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 if __name__ == "__main__":
