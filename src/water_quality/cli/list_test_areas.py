@@ -17,3 +17,7 @@ def cli():
     columns = ["name", "desc"]
     with pd.option_context("display.max_rows", None):
         print(places_gdf[columns])
+
+
+if __name__ == "__main__":
+    cli()

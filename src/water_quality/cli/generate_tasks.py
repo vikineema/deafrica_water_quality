@@ -70,3 +70,7 @@ def cli(place_name: str, output_file: str):
             file.write(str(item) + "\n")
 
     _log.info(f"Tasks written to {output_file}")
+
+
+if __name__ == "__main__":
+    cli()
