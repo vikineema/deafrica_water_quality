@@ -1,3 +1,5 @@
+# ODC ecosystem libraries
+odc-stats==1.0.60
 # Analysis libraries
 memory-profiler
 deafrica-tools

@@ -2,6 +2,7 @@ FROM mambaorg/micromamba:2.0.8 AS micromamba
 
 USER root
 COPY docker/environment.yaml docker/requirements.txt /tmp/
+COPY docker/assets/tflite_runtime-2.20.0-cp312-cp312-linux_x86_64.whl /tmp/assets/
 
 # Install packages into the empty conda environmemnt base
 RUN  micromamba install --yes --name base  --file /tmp/environment.yaml --verbose \
