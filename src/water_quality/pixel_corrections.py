@@ -25,8 +25,8 @@ def R_correction(
                 else:
                     for target_var in dp_adjust[sensor]["var_list"]:
                         if target_var not in ds.data_vars:
-                            raise ValueError(
-                                f"Variable {target_var} expected  but not found in the dataset; terminating the R_correction",
+                            log.info(
+                                f"Variable {target_var} expected  but not found in the dataset",
                             )
                         else:
                             new_var = str(target_var + "r")

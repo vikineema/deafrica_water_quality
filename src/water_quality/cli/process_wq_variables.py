@@ -131,8 +131,8 @@ def cli(
             f"The following analysis parameters not found {', '.join(missing_parameters)} "
         )
 
-    start_date = analysis_config["start_date"]
-    end_date = analysis_config["end_date"]
+    start_date = str(analysis_config["start_date"])
+    end_date = str(analysis_config["end_date"])
     instruments_to_use = analysis_config["instruments_to_use"]
     WFTH = analysis_config["water_frequency_threshold_high"]
     WFTL = analysis_config["water_frequency_threshold_low"]
@@ -157,7 +157,10 @@ def cli(
             "ref_var": "oli07_agm",
             "var_list": ["oli04_agm", "oli03_agm", "oli02_agm"],
         },
-        # 'tm_agm' : {'ref_var':'tm07_agm', 'var_list': ['tm04_agm','tm03_agm','tm02_agm','tm01_agm']}
+        "tm_agm": {
+            "ref_var": "tm07_agm",
+            "var_list": ["tm04_agm", "tm03_agm", "tm02_agm", "tm01_agm"],
+        },
     }
 
     failed_tasks = []
@@ -288,10 +291,9 @@ def cli(
         fs = get_filesystem(path=tasks_directory, anon=False)
         if not check_directory_exists(path=tasks_directory):
             fs.mkdirs(path=tasks_directory, exist_ok=True)
-            log.info(f"Created directory {tasks_directory}")
 
         with fs.open(failed_tasks_output_file, "a") as file:
             file.write(failed_tasks_json_array + "\n")
         log.error(f"Failed tasks: {failed_tasks_json_array}")
         log.info(f"Failed tasks written to {failed_tasks_output_file}")
-        raise RuntimeError(f"{len(failed_tasks)} tasks failed")
+        sys.exit(1)
