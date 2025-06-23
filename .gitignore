@@ -37,4 +37,6 @@ data/**
 **/.ruff_cache/**
 # Test notebooks ignore for now
 WP1.3/**
+# Config file
+**/cfg.yaml
 

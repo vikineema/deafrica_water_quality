@@ -4,11 +4,10 @@ import re
 from typing import Iterator
 
 import geopandas as gpd
-from odc.geo import XY, Resolution
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
-from odc.geo.gridspec import GridSpec
 
+from water_quality.grid import WaterbodiesGrid
 from water_quality.io import is_local_path
 from water_quality.utils import AFRICA_EXTENT_URL
 
@@ -122,16 +121,8 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
     Iterator[tuple[tuple[int, int], GeoBox]]
         Output is a sequence of tile_index, odc.geo.geobox.GeoBox tuples.
     """
-
-    # TODO: Check if this is the correct tiling system.
     # Tiles to match the DE Africa Landsat GeoMAD products tiles.
-    resolution = 10
-    gridspec = GridSpec(
-        crs="EPSG:6933",
-        tile_shape=XY(y=3200, x=3200),
-        resolution=Resolution(y=-resolution, x=resolution),
-        origin=XY(y=-7392000, x=-17376000),
-    )
+    gridspec = WaterbodiesGrid().gridspec
     aoi_geom = aoi_geom.to_crs(gridspec.crs)
 
     tiles = gridspec.tiles_from_geopolygon(aoi_geom)
