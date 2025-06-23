@@ -55,6 +55,7 @@ CONFIG_ITEMS = [
 )
 @click_yaml_cfg(
     "--analysis-config",
+    required=True,
     help="Config for the analysis parameters in yaml format, file or text",
 )
 @click.option(
