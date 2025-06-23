@@ -1,9 +1,7 @@
-import json
 from importlib.resources import files
 
 import click
 import geopandas as gpd
-import numpy as np
 from odc.geo.geom import Geometry
 
 from water_quality.io import check_directory_exists, get_filesystem
@@ -20,7 +18,7 @@ from water_quality.utils import AFRICA_EXTENT_URL
     "--place-name",
     type=str,
     help="Optional name of a test area to generate tiles for. "
-    "To view the names of these predefined test areas, run the command `list-test-areas`.",
+    "To view the names of these predefined test areas, run the command `wq-list-test-areas`.",
 )
 @click.argument(
     "output-file",
