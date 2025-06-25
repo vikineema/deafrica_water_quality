@@ -60,24 +60,25 @@ def get_africa_processed_lakes() -> gpd.GeoDataFrame:
     return africa_lakes
 
 
-def get_waterbodies_bbox(
+def get_waterbodies_geoms(
     country_gdf: gpd.GeoDataFrame, buffer_m: int | float = None
 ) -> gpd.GeoDataFrame:
-    """Get the bounding box for each waterbody from the Waterbodies Historical Extent
-        product that intersects with the country geometry and is listed in the
+    """
+    Get the geometry for each waterbody from the Waterbodies Historical Extent
+    product that intersects with the country geometry and is listed in the
     lakes processed in the CGLS Lake Water Quality products.
 
-        Parameters
-        ----------
-        country_gdf : gpd.GeoDataFrame
-            Country geometry.
-        buffer_m : int | float, optional
-            Buffer in meters to apply to the bounding box geometries for the waterbodies, by default None
+    Parameters
+    ----------
+    country_gdf : gpd.GeoDataFrame
+        Country geometry.
+    buffer_m : int | float, optional
+        Buffer in meters to apply to the geometries for the waterbodies, by default None
 
-        Returns
-        -------
-        gpd.GeoDataFrame
-            GeoDataFrame containing the waterbodies for a country.
+    Returns
+    -------
+    gpd.GeoDataFrame
+        GeoDataFrame containing the waterbodies for a country.
     """
     assert len(country_gdf) == 1
 
@@ -107,15 +108,8 @@ def get_waterbodies_bbox(
     )
     waterbodies = waterbodies[waterbodies["uid"].isin(intersecting_waterbodies_ids)]
 
-    # Get the bounding box for each geometry
-    waterbodies["bbox_geometry"] = waterbodies.geometry.apply(
-        lambda geom: box(*geom.bounds)
-    )
-    waterbodies.set_geometry("bbox_geometry", inplace=True)
-
     # Filter columns
-    waterbodies = waterbodies[["wb_id", "uid", "bbox_geometry"]]
-    waterbodies.rename(columns={"bbox_geometry": "geometry"}, inplace=True)
+    waterbodies = waterbodies[["wb_id", "uid", "geometry"]]
     waterbodies.set_geometry("geometry", inplace=True)
     waterbodies.reset_index(drop=True, inplace=True)
 

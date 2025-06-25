@@ -153,47 +153,23 @@ def get_monthly_deviations(
     -------
     xr.Dataset
         A dataset representing the monthly deviation synthesis computed using the equation:
-        ((month_average-month_baseline)/Month_bvaseline) x 100
+        ((month_average-month_baseline)/month_baseline) x 100
     """
 
-    def _get_deviations(x):
-        # This does not change the pixel values as
-        # the data is a monthly timeseries already.
-        # This is to get the coordinates of the dataset to
-        # match coordinates in monthly_multiannual_baseline
-        # i.e. replace the time coordinate with the month coordinate.
-        monthly_averages = x.groupby("time.month").mean()
-        # Calculate deviation
-        monthly_deviations = (
-            (monthly_averages - monthly_multiannual_baseline)
-            / monthly_multiannual_baseline
-        ) * 100
-        return monthly_deviations
+    def _get_deviations(year_data, baseline):
+        deviations = year_data.groupby("time.month").apply(
+            lambda x: (
+                (x - baseline.sel(month=x["time.month"]))
+                / baseline.sel(month=x["time.month"])
+            )
+            * 100
+        )
+
+        return deviations.drop_vars("month")
 
     monthly_deviations = target_years_monthly_avgs.groupby("time.year").map(
-        _get_deviations
+        lambda year_data: _get_deviations(year_data, monthly_multiannual_baseline)
     )
-
-    # Rework back to time coordinate instead of year and month
-    # as seperate coordinates
-    years = monthly_deviations.year.values
-    months = monthly_deviations.month.values
-
-    stack = []
-    for year in years:
-        for month in months:
-            time_coord = np.datetime64(
-                datetime(year, month, calendar.monthrange(year, month)[1]), "ns"
-            )
-            ds_sel = monthly_deviations.sel(year=year, month=month).drop_vars(
-                ["year", "month"]
-            )
-            ds_sel = ds_sel.assign_coords(coords={"time": time_coord}).expand_dims(
-                dim={"time": 1}
-            )
-            stack.append(ds_sel)
-
-    monthly_deviations = xr.concat(stack, dim="time")
 
     return monthly_deviations
 
