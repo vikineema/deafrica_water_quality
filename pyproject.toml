@@ -28,6 +28,7 @@ dependencies = [
     "gcsfs",
     "odc-cloud[ASYNC]",
     "odc-dscache",
+    "odc-stats",
     "requests",
     "s3fs",
     "tqdm"
@@ -46,6 +47,21 @@ test = [
 [project.urls]
 Repository = "https://github.com/digitalearthafrica/deafrica_water_quality.git"
 "Bug Tracker" = "https://github.com/digitalearthafrica/deafrica_water_quality/issues"
+
+[project.scripts]
+wq-generate-tasks = "water_quality.cli.generate_tasks:cli"
+wq-list-test-areas = "water_quality.cli.list_test_areas:cli"
+wq-process-tasks = "water_quality.cli.process_wq_variables:cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+water_quality = ["data/*.parquet"]
 
 [tool.isort]
 profile = "black"
