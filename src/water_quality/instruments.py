@@ -1,19 +1,20 @@
 import calendar
 import logging
 from datetime import date, datetime
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 INSTRUMENTS_DATES = {
-    "msi": [2017, 2024],
-    "msi_agm": [2017, 2024],
-    "oli": [2013, 2024],
     "oli_agm": [2013, 2024],
-    "tirs": [2000, 2024],
-    "tm": [1990, 2012],
-    "tm_agm": [1990, 2012],
+    "oli": [2013, 2024],
+    "msi_agm": [2017, 2024],
+    "msi": [2017, 2024],
     "wofs_ann": [1990, 2024],
     "wofs_all": [1990, 2024],
+    "tm_agm": [1990, 2012],
+    "tm": [1990, 2012],
+    "tirs": [2000, 2024],
 }
 
 # Here is where to turn a particular band on or off, using the 'parameters' entry
@@ -36,9 +37,19 @@ INSTRUMENTS_MEASUREMENTS = {
         "SR_B6": {"varname": ("oli06_agm"), "parameters": (True, "1570-1650")},
         "SR_B7": {"varname": ("oli07_agm"), "parameters": (True, "2110-2290")},
         "smad": {"varname": ("oli_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("oli_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("oli_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("oli_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("oli_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("oli_agm_count"), "parameters": (True,)},
+    },
+    "oli": {
+        "SR_B1": {"varname": ("oli01"), "parameters": (True, "450-510")},
+        "SR_B2": {"varname": ("oli02"), "parameters": (True, "450-510")},
+        "SR_B3": {"varname": ("oli03"), "parameters": (True, "530-590")},
+        "SR_B4": {"varname": ("oli04"), "parameters": (True, "640-670")},
+        "SR_B5": {"varname": ("oli05"), "parameters": (True, "850-880")},
+        "SR_B6": {"varname": ("oli06"), "parameters": (True, "1570-1650")},
+        "SR_B7": {"varname": ("oli07"), "parameters": (True, "2110-2290")},
+        "pq": {"varname": ("oli_pq"), "parameters": (True,)},
     },
     "msi_agm": {
         "B02": {"varname": ("msi02_agm"), "parameters": (True, "460-525")},
@@ -76,9 +87,47 @@ INSTRUMENTS_MEASUREMENTS = {
             ),
         },
         "smad": {"varname": ("msi05_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("msi_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("msi_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("msi_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("msi_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("msi_agm_count"), "parameters": (True,)},
+    },
+    "msi": {
+        "B01": {"varname": ("msi01"), "parameters": (False, "Coastal aerosol")},
+        "B02": {"varname": ("msi02"), "parameters": (True, "460-525")},
+        "B03": {"varname": ("msi03"), "parameters": (True,)},
+        "B04": {"varname": ("msi04"), "parameters": (True,)},
+        "B05": {"varname": ("msi05"), "parameters": (True,)},
+        "B06": {"varname": ("msi06"), "parameters": (True,)},
+        "B07": {"varname": ("msi07"), "parameters": (True,)},
+        "B08": {
+            "varname": ("msi08"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_08, nir, nir_1] 	NaN",
+            ),
+        },
+        "B8A": {
+            "varname": ("msi8a"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_8a, nir_narrow, nir_2] 	NaN",
+            ),
+        },
+        "B11": {
+            "varname": ("msi11"),
+            "parameters": (
+                False,
+                "uint16 	1 	0.0 	[band_11, swir_1, swir_16] 	NaN",
+            ),
+        },
+        "B12": {
+            "varname": ("msi12"),
+            "parameters": (
+                True,
+                "uint16 	1 	0.0 	[band_12, swir_2, swir_22] 	NaN",
+            ),
+        },
+        "qa": {"varname": ("msi_qa"), "parameters": (True,)},
     },
     "tm_agm": {
         "SR_B1": {"varname": ("tm01_agm"), "parameters": (True, "blue 450-520")},
@@ -88,9 +137,18 @@ INSTRUMENTS_MEASUREMENTS = {
         "SR_B5": {"varname": ("tm05_agm"), "parameters": (True, "swir1 1550-1750")},
         "SR_B7": {"varname": ("tm07_agm"), "parameters": (True, "swir2 2080-2350")},
         "smad": {"varname": ("tm_agm_smad"), "parameters": (True,)},
-        "emad": {"varname": ("tm_agm_emad"), "parameters": (False,)},
-        "bcmad": {"varname": ("tm_agm_bcmad"), "parameters": (False,)},
+        "emad": {"varname": ("tm_agm_emad"), "parameters": (True,)},
+        "bcmad": {"varname": ("tm_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("tm_agm_count"), "parameters": (True,)},
+    },
+    "tm": {
+        "SR_B1": {"varname": ("tm01"), "parameters": (True, "blue 450-520")},
+        "SR_B2": {"varname": ("tm02"), "parameters": (True, "green 520-600")},
+        "SR_B3": {"varname": ("tm03"), "parameters": (True, "red   630-690")},
+        "SR_B4": {"varname": ("tm04"), "parameters": (True, "nir   760-900")},
+        "SR_B5": {"varname": ("tm05"), "parameters": (True, "swir1 1550-1750")},
+        "SR_B7": {"varname": ("tm07"), "parameters": (True, "swir2 2080-2350")},
+        "pq": {"varname": ("tm_pq"), "parameters": (True,)},
     },
     "tirs": {
         "st": {
@@ -135,10 +193,10 @@ INSTRUMENTS_MEASUREMENTS = {
                 "ST_EMIS 	int16 	1 	-9999.0 	[emis, emissivity]",
             ),
         },
-        "ST_EMSD": {
+        "emisd": {
             "varname": ("tirs_emsd"),
             "parameters": (
-                True,
+                False,
                 "ST_EMSD 	int16 	1 	-9999.0 	[emsd, emissivity_stddev]",
             ),
         },
@@ -164,7 +222,7 @@ INSTRUMENTS_MEASUREMENTS = {
             ),
         },
         "st_qa": {
-            "varname": ("tirs_qa_st"),
+            "varname": ("tirs_st_qa"),
             "parameters": (
                 True,
                 "ST_QA 	int16 	Kelvin 	-9999.0 	[st_qa, surface_temperature_quality]",
@@ -287,7 +345,7 @@ def check_instrument_dates(
     Returns
     -------
     dict[str, dict[str, bool]]
-        Updated `instruments_to_use` where instruments where data is not available in
+        Updated `instruments_to_use` where instruments where data is not available for
         the analysis period have their usage parameter set to False.
     """
     start_date = validate_start_date(start_date)
@@ -296,30 +354,33 @@ def check_instrument_dates(
     valid_instruments_to_use: dict[str, dict[str, bool]] = {}
     for instrument_name, usage in instruments_to_use.items():
         if usage["use"] is True:
-            valid_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
-            if valid_date_range is None:
+            instruments_data_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
+            if instruments_data_date_range is None:
                 valid_instruments_to_use[instrument_name] = {"use": False}
                 log.error(
-                    f"Valid date range for instrument {instrument_name} has not been set"
+                    f"Valid data date range for instrument {instrument_name} has not been set"
                 )
             else:
-                valid_date_range = [
-                    validate_start_date(str(min(valid_date_range))),
-                    validate_end_date(str(max(valid_date_range))),
-                ]
-                valid_date_range.sort()
-
+                instrument_data_start_date = validate_start_date(
+                    str(min(instruments_data_date_range))
+                )
+                instrument_data_end_date = validate_end_date(
+                    str(max(instruments_data_date_range))
+                )
+                # Check for overlap in requested date range and the
+                # date range that data is available for the instrument, if
+                # there is no overlap disable instrument.
                 if (
-                    start_date >= valid_date_range[0]
-                    and end_date <= valid_date_range[-1]
+                    instrument_data_end_date >= start_date
+                    and instrument_data_start_date <= end_date
                 ):
                     valid_instruments_to_use[instrument_name] = {"use": True}
                 else:
                     valid_instruments_to_use[instrument_name] = {"use": False}
                     log.error(
-                        f"Instrument {instrument_name} has the date ranges "
-                        f"{valid_date_range[0]} to {valid_date_range[-1]} which is outside"
-                        f" the supplied date range of {start_date} to {end_date}."
+                        f"Instrument {instrument_name} has data for the date range "
+                        f"{instrument_data_start_date} to {instrument_data_end_date} which is outside"
+                        f" the requested date range of {start_date} to {end_date}."
                     )
         else:
             valid_instruments_to_use[instrument_name] = usage
@@ -328,7 +389,7 @@ def check_instrument_dates(
 
 def get_instruments_list(
     instruments_to_use: dict[str, dict[str, bool]],
-) -> dict[str, dict[str, dict[str, str | tuple]]]:
+) -> dict[str, dict[str, dict[str, Any]]]:
     """
     Primary list of instruments, measurements, and interoperable variable names
 
@@ -344,21 +405,10 @@ def get_instruments_list(
         A dictionary containing :
         - 'instruments', the 'master list' of instruments being used in the analysis.
             This is a subsetof the full list available.
-        - 'measurements', a list of measurements to be accessed from the data cube collections - for each instrument
-        -'rename_dict', a dictionary for re-naming measurements to have unique dataset variable names, when the time comes
     """
     instruments_list = {}
     for instrument_name, instrument_usage in instruments_to_use.items():
         if instrument_usage["use"] is True:
             instrument_info = INSTRUMENTS_MEASUREMENTS[instrument_name]
-            meaurements_to_keep = {}
-            for measurement_name, measurement_info in instrument_info.items():
-                measurement_usage = measurement_info["parameters"][0]
-                if measurement_usage is True:
-                    meaurements_to_keep[measurement_name] = measurement_info
-                else:
-                    pass
-            instruments_list[instrument_name] = meaurements_to_keep
-        else:
-            pass
+            instruments_list[instrument_name] = instrument_info
     return instruments_list
