@@ -541,6 +541,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Lake_vic_east':       {'run':True, "xyt" :{"x": ( 32.78, 33.3),       "y" : ( -2.65,-2.3),      "time": (year1,year2)  },"desc": ""          },
         'Lake_vic_test':       {'run':True, "xyt" :{"x": ( 32.78, 33.13),       "y" : ( -1.95,-1.6),      "time": (year1,year2)  },"desc": "Lake Victoria cloud affected"},
         'Lake_vic_turbid':     {'run':True, "xyt" :{"x": ( 34.60, 34.70),       "y" : ( -.25,-.20),      "time": (year1,year2)  },"desc": "Lake Victoria turbid area in NE"},
+        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.45, 34.58),       "y" : ( -.275,-.210),    "time": ('2015-04-15','2015-05-30')  },"desc": "Lake Victoria turbid area in NE"}, #lake vic turbid is case study for algal bloom I think vis in l7 etm 2015-05-03.
         'Lake_vic_clear':      {'run':True, "xyt" :{"x": ( 34.00, 34.10),       "y" : ( -.32,-.27),      "time": (year1,year2)  },"desc": "Lake Victoria clear water area"},
         'Lake_Victoria_NE' :   {'run':True, "xyt" :{'x': (33.5,34.8),         'y': (-.6,0.4),            'time': (year1,year2)  },"desc": 'Lake Victoria NE'},
         'Morocco':             {'run':True, "xyt" :{"x": (-7.45, -7.65),       "y" : (  32.4,32.5),      "time": (year1,year2)  },"desc": "Barrage Al Massira"          },
@@ -554,6 +555,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Ethiopia_Lake_Tana':  {'run':True, "xyt" :{"x": ( 37.05,   37.22),    "y" : (  11.9  ,  12.0),  "time": (year1,year2)  },"desc": "Ethiopia_Lake_Tana"          },
         'Mare_aux_Vacoas':     {'run':True, "xyt" :{"x": ( 57.485,  57.524),   "y" : ( -20.389, -20.359),"time": (year1,year2)  },"desc": "Mare_aux_Vacoas"          },
         'SA_smalldam':         {'run':True, "xyt" :{"x": ( 19.494,  19.498),   "y" : ( -33.802, -33.800),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa"          },
+        'SA_smalldam1':        {'run':True, "xyt" :{"x": ( 19.500,  19.510),   "y" : ( -33.8065, -33.835),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa, clear water"     },
         'Ethiopia_both':       {'run':False, "xyt" :{"x": ( 38.35,   38.83),    "y" : (   7.37 ,   7.71), "time": (year1,year2)  },"desc": "Ethiopia, Lake Abiata +"          },
         'Madagascar':          {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
         'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.724 ,  35.929 ), "y" : ( -03.814, -03.409), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
