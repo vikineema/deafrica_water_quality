@@ -6,6 +6,7 @@ import pandas as pd
 import xarray as xr
 from datacube import Datacube
 from odc.geo.geom import Geometry
+from odc.geo.xr import rasterize
 
 LWQ_PRODUCTS = [
     "cgls_lwq300_2002_2012",
@@ -42,6 +43,7 @@ def get_monthly_timeseries(
     if dc is None:
         dc = Datacube()
 
+    # Load data
     ds = dc.load(
         product=LWQ_PRODUCTS,
         measurements=LWQ_MEASUREMENTS,
@@ -50,6 +52,10 @@ def get_monthly_timeseries(
         resolution=(-300, 300),
         time=time_range,
     )
+
+    # Mask the data to the waterbody.
+    waterbody_xr = rasterize(waterbody_geom, how=ds.odc.geobox)
+    ds = ds.where(waterbody_xr)
 
     # Mask the no data value
     for var in LWQ_MEASUREMENTS:
