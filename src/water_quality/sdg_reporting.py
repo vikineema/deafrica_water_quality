@@ -1,5 +1,7 @@
 import calendar
+from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -336,3 +338,63 @@ def waterbody_is_affected(annual_deviation_classes: xr.Dataset) -> pd.DataFrame:
     affected = (count["high"] + count["extreme"]) > (count["low"] + count["medium"])
     affected_df = affected.to_dataframe().drop(columns=["spatial_ref"])
     return affected_df
+
+
+def get_turbidity_and_tsi_summary_tables(
+    waterbodies_info: list[dict[str, Any]],
+) -> tuple[pd.DataFrame]:
+    # Check expected info in each item
+    for waterbody_info in waterbodies_info:
+        # Identifier for the waterbody
+        assert "wb_id" or "uid" in list(waterbody_info.keys())
+        # Info of interest.
+        assert "affected" in list(waterbody_info.keys())
+        # Check contents of affected dictionary
+        affected = waterbody_info["affected"]
+        for year in list(affected.keys()):
+            assert "TSI" and "turbidity" in list(affected[year].keys())
+
+    # Get info into a table
+    turbidity_affected_lakes_count = defaultdict(
+        lambda: {"no_of_not_affected_lakes": 0, "no_of_affected_lakes": 0}
+    )
+    tsi_affected_lakes_count = defaultdict(
+        lambda: {"no_of_not_affected_lakes": 0, "no_of_affected_lakes": 0}
+    )
+
+    for waterbody in waterbodies_info:
+        affected = waterbody["affected"]
+        for year, indicators in affected.items():
+            if indicators["turbidity"] is True:
+                turbidity_affected_lakes_count[year]["no_of_affected_lakes"] += 1
+            else:
+                turbidity_affected_lakes_count[year]["no_of_not_affected_lakes"] += 1
+            if indicators["TSI"] is True:
+                tsi_affected_lakes_count[year]["no_of_affected_lakes"] += 1
+            else:
+                tsi_affected_lakes_count[year]["no_of_not_affected_lakes"] += 1
+
+    turbidity_affected_lakes_count = pd.DataFrame.from_dict(
+        dict(turbidity_affected_lakes_count), orient="index"
+    )
+    turbidity_affected_lakes_count["total_no_of_lakes"] = len(waterbodies_info)
+    turbidity_affected_lakes_count.index.name = "year"
+    turbidity_affected_lakes_count["type"] = "turbidity"
+
+    tsi_affected_lakes_count = pd.DataFrame.from_dict(
+        dict(tsi_affected_lakes_count), orient="index"
+    )
+    tsi_affected_lakes_count["total_no_of_lakes"] = len(waterbodies_info)
+    tsi_affected_lakes_count.index.name = "year"
+    tsi_affected_lakes_count["type"] = "trophic state"
+
+    # Get the proportion of waterbodies affected
+    turbidity_affected_lakes_count["EN_LKW_QLTRB %"] = (
+        turbidity_affected_lakes_count.apply(
+            lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
+        )
+    )
+    tsi_affected_lakes_count["EN_LKW_QLTRB %"] = tsi_affected_lakes_count.apply(
+        lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
+    )
+    return turbidity_affected_lakes_count, tsi_affected_lakes_count
