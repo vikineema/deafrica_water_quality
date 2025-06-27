@@ -29,7 +29,7 @@ def get_monthly_timeseries(
         Tuple representing the start and end of the time range
         (e.g., ("2015", "2020")) to load data for.
     waterbody_geom : Geometry
-        Bounding box defining the spatial extent of the waterbody.
+        Geometry defining the spatial extent of the waterbody.
     dc : Datacube, optional
         Datacube connection, by default None
 
