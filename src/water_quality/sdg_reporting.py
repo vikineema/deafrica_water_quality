@@ -394,7 +394,7 @@ def get_turbidity_and_tsi_summary_tables(
             lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
         )
     )
-    tsi_affected_lakes_count["EN_LKW_QLTRB %"] = tsi_affected_lakes_count.apply(
+    tsi_affected_lakes_count["EN_LKW_QLTRST %"] = tsi_affected_lakes_count.apply(
         lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
     )
     return turbidity_affected_lakes_count, tsi_affected_lakes_count
