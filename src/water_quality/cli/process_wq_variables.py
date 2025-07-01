@@ -31,6 +31,28 @@ CONFIG_ITEMS = [
     "permanent_water_threshold",
     "sigma_coefficient",
 ]
+# Parameters for dark pixel correction
+DP_ADJUST = {
+    "msi_agm": {
+        "ref_var": "msi12_agm",
+        "var_list": [
+            "msi04_agm",
+            "msi03_agm",
+            "msi02_agm",
+            "msi05_agm",
+            "msi06_agm",
+            "msi07_agm",
+        ],
+    },
+    "oli_agm": {
+        "ref_var": "oli07_agm",
+        "var_list": ["oli04_agm", "oli03_agm", "oli02_agm"],
+    },
+    "tm_agm": {
+        "ref_var": "tm07_agm",
+        "var_list": ["tm04_agm", "tm03_agm", "tm02_agm", "tm01_agm"],
+    },
+}
 
 
 @click.command(
@@ -140,28 +162,6 @@ def cli(
     SC = analysis_config["sigma_coefficient"]
 
     gridspec = WaterbodiesGrid().gridspec
-    # Parameters for dark pixel correction
-    dp_adjust = {
-        "msi_agm": {
-            "ref_var": "msi12_agm",
-            "var_list": [
-                "msi04_agm",
-                "msi03_agm",
-                "msi02_agm",
-                "msi05_agm",
-                "msi06_agm",
-                "msi07_agm",
-            ],
-        },
-        "oli_agm": {
-            "ref_var": "oli07_agm",
-            "var_list": ["oli04_agm", "oli03_agm", "oli02_agm"],
-        },
-        "tm_agm": {
-            "ref_var": "tm07_agm",
-            "var_list": ["tm04_agm", "tm03_agm", "tm02_agm", "tm01_agm"],
-        },
-    }
 
     failed_tasks = []
     for idx, tile_idx in enumerate(tile_ids):
@@ -195,7 +195,7 @@ def cli(
             )
 
             # Dark pixel correction
-            ds = R_correction(ds, dp_adjust, instruments_to_use, WFTL)
+            ds = R_correction(ds, DP_ADJUST, instruments_to_use, WFTL)
 
             log.info("Calculating the hue.")
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
