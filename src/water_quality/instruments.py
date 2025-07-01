@@ -1,7 +1,7 @@
-import calendar
 import logging
-from datetime import date, datetime
 from typing import Any
+
+from water_quality.date import validate_end_date, validate_start_date
 
 log = logging.getLogger(__name__)
 
@@ -230,97 +230,6 @@ INSTRUMENTS_MEASUREMENTS = {
         },
     },
 }
-
-
-def validate_date_str(date_str: str) -> tuple[date, str]:
-    """
-    Parse a date string into a datetime.date object and find the
-    format the date matches.
-
-    Parameters
-    ----------
-    date_str : str
-        Date to parse in string format.
-
-    Returns
-    -------
-    tuple[date, str]
-        Date object and date format.
-
-    """
-    expected_date_patterns = ["%Y-%m-%d", "%Y-%m", "%Y"]
-
-    if not isinstance(date_str, str):
-        raise TypeError(f"{date_str} is type ({type(date_str)}) not a string")
-    else:
-        for date_pattern in expected_date_patterns:
-            try:
-                valid_date = datetime.strptime(date_str, date_pattern).date()
-            except Exception:
-                continue
-            else:
-                return valid_date, date_pattern
-        raise ValueError(
-            f"{date_str} does not match any expected format {' or '.join(expected_date_patterns)}"
-        )
-
-
-def validate_start_date(date_str: str) -> date:
-    """
-    Parse a start date into the correct format.
-
-    Parameters
-    ----------
-    date_str : str
-        Start date as string
-
-    Returns
-    -------
-    date
-        Start date as datetime.date object.
-    """
-    valid_start_date, date_pattern = validate_date_str(date_str)
-    if date_pattern == "%Y-%m":
-        year = valid_start_date.year
-        month = valid_start_date.month
-        day = 1
-        return datetime(year, month, day).date()
-    elif date_pattern == "%Y":
-        year = valid_start_date.year
-        month = 1
-        day = 1
-        return datetime(year, month, day).date()
-    else:
-        return valid_start_date
-
-
-def validate_end_date(date_str: str) -> date:
-    """
-    Parse a end date into the correct format.
-
-    Parameters
-    ----------
-    date_str : str
-        End date as string.
-
-    Returns
-    -------
-    date
-        End date as datetime.date object.
-    """
-    valid_end_date, date_pattern = validate_date_str(date_str)
-    if date_pattern == "%Y-%m":
-        year = valid_end_date.year
-        month = valid_end_date.month
-        day = calendar.monthrange(year, month)[1]
-        return datetime(year, month, day).date()
-    elif date_pattern == "%Y":
-        year = valid_end_date.year
-        month = 12
-        day = calendar.monthrange(year, month)[1]
-        return datetime(year, month, day).date()
-    else:
-        return valid_end_date
 
 
 def check_instrument_dates(
