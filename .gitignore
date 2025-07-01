@@ -29,8 +29,6 @@ mprofile_*
 tmp/**
 # Ignore items in notebooks folder
 notebooks/**
-# Ignore items in data folder
-data/**
 # Environments
 **/.env/**
 # Ruff stuff:
@@ -39,4 +37,6 @@ data/**
 WP1.3/**
 # Config file
 **/cfg.yaml
+# Tiles
+**/water_quality_regions.parquet
 

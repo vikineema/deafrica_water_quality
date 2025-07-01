@@ -1,15 +1,19 @@
+import logging
 import os
 import posixpath
 import re
 from typing import Iterator
 
 import geopandas as gpd
+import pandas as pd
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
 from water_quality.grid import WaterbodiesGrid
 from water_quality.io import is_local_path
 from water_quality.utils import AFRICA_EXTENT_URL
+
+log = logging.getLogger(__name__)
 
 
 def get_tile_index_str_tuple(string_: str) -> tuple[str]:
@@ -130,7 +134,9 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
     return tiles
 
 
-def get_africa_tiles() -> Iterator[tuple[tuple[int, int], GeoBox]]:
+def get_africa_tiles(
+    save_to_disk: bool = False,
+) -> Iterator[tuple[tuple[int, int], GeoBox]]:
     """
     Get tiles over Africa's extent.
 
@@ -146,5 +152,37 @@ def get_africa_tiles() -> Iterator[tuple[tuple[int, int], GeoBox]]:
         geom=africa_extent.iloc[0].geometry, crs=africa_extent.crs
     )
     tiles = get_aoi_tiles(africa_extent_geom)
-
+    if save_to_disk is True:
+        gdf = tiles_to_gdf(tiles)
+        output_fp = "water_quality_regions.parquet"
+        gdf.to_parquet(output_fp)
+        log.info(f"Regions saved to {output_fp}")
     return tiles
+
+
+def tiles_to_gdf(
+    tiles: Iterator[tuple[tuple[int, int], GeoBox]]
+    | list[tuple[tuple[int, int], GeoBox]],
+) -> gpd.GeoDataFrame:
+    if not isinstance(tiles, list):
+        tiles = list(tiles)
+
+    tiles_list = []
+    for tile in tiles:
+        tile_id = tile[0]
+        tile_id_str = get_tile_index_str(tile_id)
+
+        tile_geobox = tile[-1]
+        tile_extent = tile_geobox.extent
+
+        tile_gdf = gpd.GeoDataFrame(
+            data={"region_code": [tile_id_str]},
+            geometry=[tile_extent],
+            crs=tile_extent.crs,
+        )
+        tiles_list.append(tile_gdf)
+
+    gdf_all = gpd.GeoDataFrame(
+        pd.concat(tiles_list, ignore_index=True), geometry="geometry"
+    )
+    return gdf_all
