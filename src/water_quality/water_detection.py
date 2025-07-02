@@ -1,3 +1,8 @@
+"""
+This module provides functions to implement water detection
+using DE Africa Water Observations from Space (WOfS) products.
+"""
+
 import logging
 
 import xarray as xr
