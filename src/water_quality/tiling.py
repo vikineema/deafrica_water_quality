@@ -1,114 +1,19 @@
+"""
+This module provides functions to create and process tiles used
+as building blocks in the DE Africa Water Quality workflow.
+"""
+
 import logging
-import os
-import posixpath
-import re
 from typing import Iterator
 
 import geopandas as gpd
-import pandas as pd
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
 from water_quality.grid import WaterbodiesGrid
-from water_quality.io import is_local_path
 from water_quality.utils import AFRICA_EXTENT_URL
 
 log = logging.getLogger(__name__)
-
-
-def get_tile_index_str_tuple(string_: str) -> tuple[str]:
-    """Get the tile index in the string
-    format "{x:03d}","{y:03d}" from a string.
-
-    Parameters
-    ----------
-    string_ : str
-        String to search the tile index from.
-
-    Returns
-    -------
-    tuple[str]
-        Tile index in the string format "{x:03d}","{y:03d}" .
-    """
-    x_pattern = re.compile(r"x\d{3}")
-    y_pattern = re.compile(r"y\d{3}")
-
-    tile_index_x_str = re.search(x_pattern, string_).group(0)
-    tile_index_y_str = re.search(y_pattern, string_).group(0)
-
-    return tile_index_x_str, tile_index_y_str
-
-
-def get_tile_index_int_tuple(string_: str) -> tuple[int, int]:
-    """
-    Get the tile index in the format (x,y) from a string
-    where x and y are integers.
-
-    Parameters
-    ----------
-    string_ : str
-        String to search the tile index from.
-
-    Returns
-    -------
-    tuple[int, int]
-        Tile index in the format (x,y) where x and y are integers.
-    """
-
-    tile_index_x_str, tile_index_y_str = get_tile_index_str_tuple(string_)
-
-    tile_index_x = int(tile_index_x_str.lstrip("x"))
-    tile_index_y = int(tile_index_y_str.lstrip("y"))
-
-    tile_index = (tile_index_x, tile_index_y)
-
-    return tile_index
-
-
-def get_tile_index_str(tile_index_tuple: tuple[int, int]) -> str:
-    """
-    Convert a tile index tuple (x,y) into the string format "{x:03d}","{y:03d}" .
-
-    Parameters
-    ----------
-    tile_index_tuple : tuple[int, int]
-        Tile index tuple to convert to string.
-
-    Returns
-    -------
-    str
-        Tile index in string format "{x:03d}","{y:03d}" .
-    """
-
-    tile_index_x, tile_index_y = tile_index_tuple
-
-    tile_index_str = f"x{tile_index_x:03d}y{tile_index_y:03d}"
-
-    return tile_index_str
-
-
-def get_tile_index_tuple_from_filename(file_path: str) -> tuple[int, int]:
-    """
-    Search for a tile index in the base name of a file.
-
-    Parameters
-    ----------
-    file_path : str
-        File path to search tile index in.
-
-    Returns
-    -------
-    tuple[int, int]
-        Found tile index (x,y).
-    """
-    if is_local_path(file_path):
-        file_name = os.path.splitext(os.path.basename(file_path))[0]
-    else:
-        file_name = os.path.splitext(posixpath.basename(file_path))[0]
-
-    tile_id = get_tile_index_int_tuple(file_name)
-
-    return tile_id
 
 
 def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]]:
@@ -134,6 +39,113 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
     return tiles
 
 
+def get_region_code(tile_id: tuple[int, int]) -> str:
+    """Get the tile ID for a tile in the region code
+    format "x{x:02d}y{y:02d}" .
+
+    Parameters
+    ----------
+    tile_id : tuple[int, int]
+        Tile ID (x,y) for a tile
+
+    Returns
+    -------
+    str
+        Tile ID in the region code format string "x{x:02d}y{y:02d}".
+    """
+    region_code_format = "x{x:02d}y{y:02d}"
+
+    x, y = tile_id
+    region_code = region_code_format.format(x=x, y=y)
+    return region_code
+
+
+def get_tile_region_codes(
+    tiles: Iterator[tuple[tuple[int, int], GeoBox]]
+    | list[tuple[tuple[int, int], GeoBox]],
+) -> list[str]:
+    """
+    Get the region codes for a list of tiles.
+
+    Parameters
+    ----------
+    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | list[tuple[tuple[int, int], GeoBox]]
+        Tiles to get the region codes for.
+
+    Returns
+    -------
+    list[str]
+        List of region codes for the tiles.
+    """
+    if not isinstance(tiles, list):
+        tiles = list(tiles)
+
+    tile_ids = []
+    for tile in tiles:
+        tile_id = tile[0]
+        tile_ids.append(get_region_code(tile_id))
+    return tile_ids
+
+
+def get_tile_extents(
+    tiles: Iterator[tuple[tuple[int, int], GeoBox]]
+    | list[tuple[tuple[int, int], GeoBox]],
+) -> list[Geometry]:
+    """
+    Get the extent geometry of each tile in a list of tiles.
+
+    Parameters
+    ----------
+    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | list[tuple[tuple[int, int], GeoBox]]
+        Tiles to get the extents for.
+
+    Returns
+    -------
+    list[Geometry]
+        List of the tile extent Geometries for each tile in the input tile list.
+    """
+    if not isinstance(tiles, list):
+        tiles = list(tiles)
+
+    tile_extents = []
+    for tile in tiles:
+        tile_geobox = tile[-1]
+        tile_extent = tile_geobox.extent
+        tile_extents.append(tile_extent)
+
+    # Check if all extents have the same crs
+    crs_list = [i.crs for i in tile_extents]
+    crs_list = list(set(crs_list))
+    try:
+        assert len(crs_list) == 1
+    except AssertionError:
+        raise ValueError(
+            "List of input tiles contains tiles with "
+            f"different CRS: {', '.join(crs_list)}"
+        )
+    else:
+        return tile_extents
+
+
+def tiles_to_gdf(
+    tiles: Iterator[tuple[tuple[int, int], GeoBox]]
+    | list[tuple[tuple[int, int], GeoBox]],
+) -> gpd.GeoDataFrame:
+    if not isinstance(tiles, list):
+        tiles = list(tiles)
+
+    region_codes = get_tile_region_codes(tiles)
+    tile_extents = get_tile_extents(tiles)
+    crs = tile_extents[0].crs
+
+    tiles_extents_gdf = gpd.GeoDataFrame(
+        data={"region_code": region_codes},
+        geometry=tile_extents,
+        crs=crs,
+    )
+    return tiles_extents_gdf
+
+
 def get_africa_tiles(
     save_to_disk: bool = False,
 ) -> Iterator[tuple[tuple[int, int], GeoBox]]:
@@ -153,36 +165,8 @@ def get_africa_tiles(
     )
     tiles = get_aoi_tiles(africa_extent_geom)
     if save_to_disk is True:
-        gdf = tiles_to_gdf(tiles)
+        tiles_gdf = tiles_to_gdf(tiles)
         output_fp = "water_quality_regions.parquet"
-        gdf.to_parquet(output_fp)
+        tiles_gdf.to_parquet(output_fp)
         log.info(f"Regions saved to {output_fp}")
     return tiles
-
-
-def tiles_to_gdf(
-    tiles: Iterator[tuple[tuple[int, int], GeoBox]]
-    | list[tuple[tuple[int, int], GeoBox]],
-) -> gpd.GeoDataFrame:
-    if not isinstance(tiles, list):
-        tiles = list(tiles)
-
-    tiles_list = []
-    for tile in tiles:
-        tile_id = tile[0]
-        tile_id_str = get_tile_index_str(tile_id)
-
-        tile_geobox = tile[-1]
-        tile_extent = tile_geobox.extent
-
-        tile_gdf = gpd.GeoDataFrame(
-            data={"region_code": [tile_id_str]},
-            geometry=[tile_extent],
-            crs=tile_extent.crs,
-        )
-        tiles_list.append(tile_gdf)
-
-    gdf_all = gpd.GeoDataFrame(
-        pd.concat(tiles_list, ignore_index=True), geometry="geometry"
-    )
-    return gdf_all
