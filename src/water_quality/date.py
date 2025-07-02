@@ -1,22 +1,26 @@
+"""
+This module provides functions to validate input dates.
+"""
+
 import calendar
 from datetime import date, datetime
 
 
-def check_date_format(date_str: str, date_format: str) -> tuple[date, str]:
+def check_date_str_format(date_str: str, date_format: str) -> date:
     """
     Check if a date string matches a provided date format.
 
     Parameters
     ----------
     date_str : str
-        Date string to check.
+        Date in string to check.
     date_format : str
         Date format to match date sting to.
 
     Returns
     -------
-    tuple[date, str]
-        Date in the specified format if it matches and the date format strings.
+    date
+        Date object if the date string matches the specified date format.
     """
     if not isinstance(date_str, str):
         raise TypeError(f"{date_str} is type ({type(date_str)}) not a string")
@@ -26,18 +30,18 @@ def check_date_format(date_str: str, date_format: str) -> tuple[date, str]:
     except ValueError:
         raise
     else:
-        return valid_date, date_format
+        return valid_date
 
 
-def validate_date_str(date_str: str) -> tuple[date, str]:
+def date_str_to_date(date_str: str) -> tuple[date, str]:
     """
-    Parse a date string into a datetime.date object and find the
-    format the date matches.
+    Find the format a date string matches and parse a
+    date string into a datetime.date object.
 
     Parameters
     ----------
     date_str : str
-        Date to parse in string format.
+        Date string to parse.
 
     Returns
     -------
@@ -50,9 +54,9 @@ def validate_date_str(date_str: str) -> tuple[date, str]:
     if not isinstance(date_str, str):
         raise TypeError(f"{date_str} is type ({type(date_str)}) not a string")
 
-    for date_str_format in expected_date_formats:
+    for date_format in expected_date_formats:
         try:
-            valid_date, date_format = check_date_format(date_str, date_str_format)
+            valid_date = check_date_str_format(date_str, date_format)
         except ValueError:
             continue
         else:
@@ -76,7 +80,7 @@ def validate_start_date(date_str: str) -> date:
     date
         Start date as datetime.date object.
     """
-    valid_start_date, date_format = validate_date_str(date_str)
+    valid_start_date, date_format = date_str_to_date(date_str)
     if date_format == "%Y-%m":
         year = valid_start_date.year
         month = valid_start_date.month
@@ -105,7 +109,7 @@ def validate_end_date(date_str: str) -> date:
     date
         End date as datetime.date object.
     """
-    valid_end_date, date_format = validate_date_str(date_str)
+    valid_end_date, date_format = date_str_to_date(date_str)
     if date_format == "%Y-%m":
         year = valid_end_date.year
         month = valid_end_date.month
