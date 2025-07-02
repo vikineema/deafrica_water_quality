@@ -1,3 +1,9 @@
+"""
+This module provides functions to apply
+various water quality algorithms to EO data from a set of
+instruments.
+"""
+
 import logging
 from typing import Any
 

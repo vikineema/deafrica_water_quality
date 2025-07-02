@@ -1,3 +1,8 @@
+"""
+This module provides functions to get DE Africa Waterbodies
+Historical Extent data for SDG Indicator 6.6.1 water quality reporting.
+"""
+
 import io
 import zipfile
 
