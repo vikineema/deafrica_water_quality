@@ -4,6 +4,7 @@ as building blocks in the DE Africa Water Quality workflow.
 """
 
 import logging
+from functools import partial
 from typing import Iterator
 
 import geopandas as gpd
@@ -39,30 +40,33 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
     return tiles
 
 
-def get_region_code(tile_id: tuple[int, int]) -> str:
-    """Get the tile ID for a tile in the region code
-    format "x{x:02d}y{y:02d}" .
+def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
+    """
+    Get the region code for a tile from its tile ID in the format
+    format "x{x:02d}{sep}y{y:02d}".
 
     Parameters
     ----------
     tile_id : tuple[int, int]
-        Tile ID (x,y) for a tile
+        Tile ID for the tile.
+    sep : str, optional
+        Seperator between the x and y parts of the region code., by default ""
 
     Returns
     -------
     str
-        Tile ID in the region code format string "x{x:02d}y{y:02d}".
+        Region code for the input tile ID.
     """
-    region_code_format = "x{x:02d}y{y:02d}"
-
     x, y = tile_id
-    region_code = region_code_format.format(x=x, y=y)
+    region_code_format = "x{x:02d}{sep}y{y:02d}"
+    region_code = region_code_format.format(x=x, y=y, sep=sep)
     return region_code
 
 
 def get_tile_region_codes(
     tiles: Iterator[tuple[tuple[int, int], GeoBox]]
     | list[tuple[tuple[int, int], GeoBox]],
+    sep: str = "",
 ) -> list[str]:
     """
     Get the region codes for a list of tiles.
@@ -71,11 +75,12 @@ def get_tile_region_codes(
     ----------
     tiles : Iterator[tuple[tuple[int, int], GeoBox]] | list[tuple[tuple[int, int], GeoBox]]
         Tiles to get the region codes for.
-
+    sep : str, optional
+        Seperator between the x and y parts of the region code., by default ""
     Returns
     -------
     list[str]
-        List of region codes for the tiles.
+        List of region codes for the input tiles.
     """
     if not isinstance(tiles, list):
         tiles = list(tiles)
@@ -83,7 +88,7 @@ def get_tile_region_codes(
     tile_ids = []
     for tile in tiles:
         tile_id = tile[0]
-        tile_ids.append(get_region_code(tile_id))
+        tile_ids.append(get_region_code(tile_id, sep))
     return tile_ids
 
 
