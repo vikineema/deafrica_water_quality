@@ -136,4 +136,4 @@ def cli(
     with fs.open(output_file, "w") as file:
         for task_id in tasks:
             file.write(str(task_id) + "\n")
-    log.info(f"Tasks written to {output_file}")
+    log.info(f"{len(tasks)} tasks written to {output_file}")

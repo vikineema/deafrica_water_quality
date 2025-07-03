@@ -1,16 +1,21 @@
 import json
 import sys
-from importlib.resources import files
 
 import click
-import geopandas as gpd
 import numpy as np
-from odc.geo.geom import Geometry
 from odc.stats._cli_common import click_yaml_cfg
 
+from water_quality.config import check_config
+from water_quality.date import (
+    validate_end_date,
+    validate_start_date,
+)
 from water_quality.grid import WaterbodiesGrid
 from water_quality.hue import hue_calculation
-from water_quality.instruments import check_instrument_dates, get_instruments_list
+from water_quality.instruments import (
+    check_instrument_dates,
+    get_instruments_list,
+)
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
@@ -21,24 +26,14 @@ from water_quality.load_data import build_dc_queries, build_wq_dataset
 from water_quality.logs import setup_logging
 from water_quality.optical_water_type import OWT_pixel
 from water_quality.pixel_corrections import R_correction
-from water_quality.tiling import (
-    get_aoi_tiles,
-    get_tile_index_int_tuple,
-    get_tile_index_str,
-)
-from water_quality.utils import AFRICA_EXTENT_URL
+from water_quality.tasks import parse_task_id
 from water_quality.water_detection import water_analysis
-from water_quality.wq_algorithms import ALGORITHMS_CHLA, ALGORITHMS_TSM, WQ_vars
+from water_quality.wq_algorithms import (
+    ALGORITHMS_CHLA,
+    ALGORITHMS_TSM,
+    WQ_vars,
+)
 
-CONFIG_ITEMS = [
-    "start_date",
-    "end_date",
-    "instruments_to_use",
-    "water_frequency_threshold_high",
-    "water_frequency_threshold_low",
-    "permanent_water_threshold",
-    "sigma_coefficient",
-]
 # Parameters for dark pixel correction
 DP_ADJUST = {
     "msi_agm": {
@@ -68,22 +63,16 @@ DP_ADJUST = {
     no_args_is_help=True,
 )
 @click.option(
-    "--input-file",
-    type=str,
-    required=False,
-    help=(
-        "Optional path to a text file containing tile IDs for which to generate water quality variables. "
-        "This file can be generated using the `wq-generate-tasks` command."
-    ),
+    "--tasks",
+    help="List of comma seperated tasks in the format"
+    "year/x{x:02d}/y{y:02d} to generate water quality variables for. "
+    "For example `2015/x200/y34,x178/y095,x199y/100`",
 )
 @click.option(
-    "--place-name",
-    type=str,
-    required=False,
-    help=(
-        "Optional name of a predefined test area for which to generate water quality variables. "
-        "To list available test areas, run the `wq-list-test-areas` command."
-    ),
+    "--tasks-file",
+    help="Optional path to a text file containing the tasks to generate"
+    "water quality variables for. This file can be generated using the "
+    "command `wq-generate-tiles`.",
 )
 @click.argument(
     "output-directory",
@@ -107,12 +96,13 @@ DP_ADJUST = {
     default=False,
     show_default=True,
     help=(
-        "If overwrite is True tasks that have already been processed will be rerun. "
+        "If overwrite is True tasks that have already been processed "
+        "will be rerun. "
     ),
 )
 def cli(
-    input_file: str,
-    place_name: str,
+    tasks: str,
+    tasks_file: str,
     output_directory: str,
     max_parallel_steps: int,
     worker_idx: int,
@@ -120,118 +110,85 @@ def cli(
     overwrite: bool,
 ):
     """
-    Get the Water Quality variables for the input tiles and write the resulting water
-    quality variables to netCDF files.
+    Get the Water Quality variables for the input tasks and write the
+    resulting water quality variables to COG files.
 
-    OUTPUT_DIRECTORY: The directory to write the water quality variables NETCDF
-    file to for each tile.
+    OUTPUT_DIRECTORY: The directory to write the water quality variables
+    COG files to for each task.
 
-    MAX_PARALLEL_STEPS: The total number of parallel workers or pods expected in the workflow.
-    This value is used to divide the list of input tiles among the available workers.
+    MAX_PARALLEL_STEPS: The total number of parallel workers or pods
+    expected in the workflow. This value is used to divide the list of
+    tasks to be processed among the available workers.
 
     WORKER_IDX: The sequential index (0-indexed) of the current worker.
-    This index determines which subset of tiles the current worker will process.
+    This index determines which subset of tasks the current worker will
+    process.
     """
     log = setup_logging()
 
     # Enforce mutual exclusivity
-    if input_file and place_name:
-        raise click.UsageError("Use either --input-file or --place-name, not both.")
+    if tasks and tasks_file:
+        raise click.UsageError("Use either --tasks or --tasks-file, not both.")
 
-    # ------------------------------------------------ #
-    # Get tile ids for all tiles to be processed       #
-    # ------------------------------------------------ #
-    if input_file:
-        # Expecting file to be public-read
-        if not check_file_exists(input_file):
-            raise FileNotFoundError(f"Input file {input_file} does not exist.")
-        else:
-            fs = get_filesystem(input_file, anon=True)
-            with fs.open(input_file, "r") as file:
-                # Read all lines and strip leading/trailing whitespace (including newlines)
-                all_tile_ids = [line.strip() for line in file if line.strip()]
-
-    elif place_name:
-        places_fp = files("water_quality.data").joinpath("places.parquet")
-        places_gdf = gpd.read_parquet(places_fp)
-        place_name_list = places_gdf["name"].to_list()
-        if place_name not in place_name_list:
-            raise ValueError(
-                f"{place_name} not in found in test areas file. Expected names include {' ,'.join(place_name_list)}"
-            )
-        else:
-            log.info(f"Getting tiles for test area {place_name}")
-            place = places_gdf[places_gdf["name"].isin([place_name])]
-            aoi_geom = Geometry(geom=place.iloc[0].geometry, crs=place.crs)
-            tiles = get_aoi_tiles(aoi_geom)
-            tiles = list(tiles)
-            tile_ids = [tile[0] for tile in tiles]
-            all_tile_ids = [get_tile_index_str(tile_id) for tile_id in tile_ids]
-
-    else:
-        log.info("Neither --input-file or --place-name provided")
-        log.info("Getting tiles for Africa for continental run")
-        africa_extent_gdf = gpd.read_file(AFRICA_EXTENT_URL)
-        aoi_geom = Geometry(
-            geom=africa_extent_gdf.iloc[0].geometry, crs=africa_extent_gdf.crs
+    if not tasks and not tasks_file:
+        raise click.UsageError(
+            "Please provide either --tasks or --tasks-file."
         )
-        tiles = get_aoi_tiles(aoi_geom)
-        tiles = list(tiles)
-        tile_ids = [tile[0] for tile in tiles]
-        all_tile_ids = [get_tile_index_str(tile_id) for tile_id in tile_ids]
 
-    log.info(f"Found {len(all_tile_ids)} to be processed.")
+    if tasks:
+        all_task_ids = tasks.split(",")
+        all_task_ids = [i.strip() for i in all_task_ids]
 
-    # ------------------------------------------------ #
-    # Get tile ids for worker process                  #
-    # ------------------------------------------------ #
-    # Split files equally among the workers
-    task_chunks = np.array_split(np.array(all_tile_ids), max_parallel_steps)
+    if tasks_file:
+        # Assumption here is the file is public-read.
+        if not check_file_exists(tasks_file):
+            raise FileNotFoundError(f"{tasks_file} does not exist!")
+        else:
+            fs = get_filesystem(tasks_file, anon=True)
+            with fs.open(tasks_file, "r") as f:
+                all_task_ids = f.readlines()
+                all_task_ids = [i.strip() for i in all_task_ids]
+
+    log.info(f"Total number of tasks found: {len(all_task_ids)}")
+
+    # Split tasks equally among the workers
+    task_chunks = np.array_split(np.array(all_task_ids), max_parallel_steps)
     task_chunks = [chunk.tolist() for chunk in task_chunks]
     task_chunks = list(filter(None, task_chunks))
 
-    # In case of the index being bigger than the number of positions in the array, the extra POD isn't necessary
+    # In case of the index being bigger than the number of positions
+    # in the array, the extra POD isn't necessary
     if len(task_chunks) <= worker_idx:
         log.warning(f"Worker {worker_idx} Skipped!")
         sys.exit(0)
 
     log.info(f"Executing worker {worker_idx}")
-    tile_ids = task_chunks[worker_idx]
-    tile_ids.sort()
-    log.info(f"Worker {worker_idx} to process {len(tile_ids)} tasks.")
+    task_ids = task_chunks[worker_idx]
+    log.info(f"Worker {worker_idx} to process {len(task_ids)} tasks.")
 
-    # Verify parameters config
-    if analysis_config is None:
-        raise ValueError(
-            "Please provide a config for the analysis parameters in yaml format, file or text"
-        )
+    # ------------------------------------------------ #
+    # Get water quality variables                      #
+    # ------------------------------------------------ #
+    analysis_config = check_config(analysis_config)
 
-    missing_parameters = []
-    for k in CONFIG_ITEMS:
-        if k not in list(analysis_config.keys()):
-            missing_parameters.append(k)
-    if missing_parameters:
-        raise ValueError(
-            f"The following analysis parameters not found {', '.join(missing_parameters)} "
-        )
-
-    start_date = str(analysis_config["start_date"])
-    end_date = str(analysis_config["end_date"])
     instruments_to_use = analysis_config["instruments_to_use"]
     WFTH = analysis_config["water_frequency_threshold_high"]
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
-
     gridspec = WaterbodiesGrid().gridspec
 
     failed_tasks = []
-    for idx, tile_idx in enumerate(tile_ids):
-        log.info(f"Processing tile {tile_idx} {idx + 1} / {len(tile_ids)}")
+    for idx, task_id in enumerate(task_ids):
+        log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
+
         try:
-            tile_geobox = gridspec.tile_geobox(
-                tile_index=get_tile_index_int_tuple(tile_idx)
-            )
+            year, tile_id = parse_task_id(task_id)
+
+            start_date = validate_start_date(str(year))
+            end_date = validate_end_date(str(year))
+
+            tile_geobox = gridspec.tile_geobox(tile_index=tile_id)
 
             # don't try to use instruments for which there are no data
             instruments_to_use = check_instrument_dates(
@@ -272,9 +229,7 @@ def cli(
             # or by moving them into new dimensions, 'tss' and 'chla'
             # If the arguments 'new_dimension_name' or 'new_varname' are None (or empty),
             # then the outputs will be retained as separate variables in a 3d dataset
-            if (
-                True
-            ):  # put the data into a new dimension, call the variable 'tss' or 'chla'
+            if True:  # put the data into a new dimension, call the variable 'tss' or 'chla'
                 ds, tsm_vlist = WQ_vars(
                     ds.where(ds.wofs_ann_freq >= WFTL),
                     algorithms=ALGORITHMS_TSM,
@@ -304,7 +259,7 @@ def cli(
                     new_dimension_name=None,
                     new_varname=None,
                 )
-            wq_varlist = np.append(tsm_vlist, chla_vlist)
+            wq_varlist = np.append(tsm_vlist, chla_vlist)  # # noqa F841
 
             keeplist = (
                 "wofs_ann_clearcount",
@@ -338,7 +293,8 @@ def cli(
 
             parent_dir = join_url(output_directory, "WP1.4")
             output_file = join_url(
-                parent_dir, f"wp12_ds_{tile_idx}_{start_date}_{end_date}.nc"
+                parent_dir,
+                f"wp12_ds_{tile_idx}_{start_date}_{end_date}.nc",
             )
 
             fs = get_filesystem(output_directory, anon=False)
