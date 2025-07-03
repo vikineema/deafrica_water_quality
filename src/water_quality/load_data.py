@@ -39,7 +39,8 @@ def get_dc_products(instrument_name: str) -> list[str]:
     dc_products = INSTRUMENTS_PRODUCTS.get(instrument_name, None)
     if dc_products is None:
         raise NotImplementedError(
-            f"Datacube products for the instrument {instrument_name} are not defined."
+            f"Datacube products for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         return dc_products
@@ -63,7 +64,8 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
-            f"Datacube measurements for the instrument {instrument_name} are not defined."
+            f"Datacube measurements for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         dc_measurements: list[str] = []
@@ -79,8 +81,8 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
 
 def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     """
-    Get the dictionary for re-naming measurements to have unique dataset variable name
-    for the loaded data for an instrument.
+    Get the dictionary for re-naming measurements to have unique
+    dataset variable names for the loaded data for an instrument.
 
     Parameters
     ----------
@@ -90,14 +92,16 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     Returns
     -------
     dict[str, tuple[str]]
-        Dictionary whose keys are the datacube measurements loaded for the instrument
-        and whose values are the desired names for the measurements
+        Dictionary whose keys are the datacube measurements loaded for
+        the instrument and whose values are the desired names for the
+        measurements
 
     """
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
-            f"Datacube measurements for the instrument {instrument_name} are not defined."
+            f"Datacube measurements for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         measurements_name_dict: dict[str, tuple[str]] = {}
@@ -196,10 +200,11 @@ def process_st_data_to_annnual(
     - Converts raw surface temperature values to degrees Celsius.
     - Filters data by temperature validity, quality assurance threshold,
       and high surface emissivity.
-    - Aggregates daily temperature data into annual median, 10th percentile (min),
-      and 90th percentile (max) statistics.
+    - Aggregates daily temperature data into annual median, 10th
+        percentile (min), and 90th percentile (max) statistics.
     - Masks aggregated temperature data to include only pixels with
-      consistent water presence based on the WOfS annual frequency threshold.
+      consistent water presence based on the WOfS annual frequency
+      threshold.
 
     Parameters
     ----------
@@ -212,17 +217,19 @@ def process_st_data_to_annnual(
 
     ds_wofs_ann : xr.Dataset
         An xarray Dataset of Water Observations from Space (WOfS) annual
-        water frequency statistics. It must include the band:'wofs_ann_freq'
+        water frequency statistics. It must include the band:
+        'wofs_ann_freq'
 
     Returns
     -------
     xr.Dataset
         An annual xarray Dataset with the following data variables:
-            - 'tirs_st_ann_med' : Median annual surface temperature (°C).
-            - 'tirs_st_ann_min' : 10th percentile annual temperature (°C).
-            - 'tirs_st_ann_max' : 90th percentile annual temperature (°C).
-        All layers are masked to include only pixels where the WOfS annual
-        water frequency exceeds 0.5.
+            - 'tirs_st_ann_med': Median annual surface temperature (°C).
+            - 'tirs_st_ann_min': 10th percentile annual temperature (°C).
+            - 'tirs_st_ann_max': 90th percentile annual temperature (°C).
+
+        All layers are masked to include only pixels where the WOfS
+        annual water frequency exceeds 0.5.
     """
     # Rescale the daily timeseries to centigrade, remove outliers,
     # apply quality filter and also filter on emissivity > 0.95.
@@ -325,8 +332,9 @@ def build_wq_dataset(
     if "tirs" in loaded_data.keys():
         if "wofs_ann" not in loaded_data.keys():
             raise ValueError(
-                "Data for the wofs_ann instrument is required to process daily surface temperature "
-                "data for the tirs instrument into an annual timeseries."
+                "Data for the wofs_ann instrument is required to process "
+                "daily surface temperature data for the tirs instrument into "
+                "an annual timeseries."
             )
         else:
             loaded_data["tirs"] = process_st_data_to_annnual(
