@@ -4,7 +4,7 @@ as building blocks in the DE Africa Water Quality workflow.
 """
 
 import logging
-from functools import partial
+import re
 from typing import Iterator
 
 import geopandas as gpd
@@ -17,9 +17,12 @@ from water_quality.utils import AFRICA_EXTENT_URL
 log = logging.getLogger(__name__)
 
 
-def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]]:
+def get_aoi_tiles(
+    aoi_geom: Geometry,
+) -> Iterator[tuple[tuple[int, int], GeoBox]]:
     """
-    Get the tiles covering an area of interest defined by the input polygon.
+    Get the tiles covering an area of interest defined by the input
+    polygon.
 
     Parameters
     ----------
@@ -29,7 +32,8 @@ def get_aoi_tiles(aoi_geom: Geometry) -> Iterator[tuple[tuple[int, int], GeoBox]
     Returns
     -------
     Iterator[tuple[tuple[int, int], GeoBox]]
-        Output is a sequence of tile_index, odc.geo.geobox.GeoBox tuples.
+        Output is a sequence of tile_index, odc.geo.geobox.GeoBox
+        tuples.
     """
     # Tiles to match the DE Africa Landsat GeoMAD products tiles.
     gridspec = WaterbodiesGrid().gridspec
@@ -50,7 +54,8 @@ def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
     tile_id : tuple[int, int]
         Tile ID for the tile.
     sep : str, optional
-        Seperator between the x and y parts of the region code., by default ""
+        Seperator between the x and y parts of the region code, by
+        default ""
 
     Returns
     -------
@@ -73,10 +78,12 @@ def get_tile_region_codes(
 
     Parameters
     ----------
-    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | list[tuple[tuple[int, int], GeoBox]]
+    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | \
+            list[tuple[tuple[int, int], GeoBox]]
         Tiles to get the region codes for.
     sep : str, optional
-        Seperator between the x and y parts of the region code., by default ""
+        Seperator between the x and y parts of the region code,
+        by default ""
     Returns
     -------
     list[str]
@@ -85,11 +92,11 @@ def get_tile_region_codes(
     if not isinstance(tiles, list):
         tiles = list(tiles)
 
-    tile_ids = []
+    region_codes = []
     for tile in tiles:
         tile_id = tile[0]
-        tile_ids.append(get_region_code(tile_id, sep))
-    return tile_ids
+        region_codes.append(get_region_code(tile_id, sep))
+    return region_codes
 
 
 def get_tile_extents(
@@ -101,13 +108,15 @@ def get_tile_extents(
 
     Parameters
     ----------
-    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | list[tuple[tuple[int, int], GeoBox]]
+    tiles : Iterator[tuple[tuple[int, int], GeoBox]] | \
+            list[tuple[tuple[int, int], GeoBox]]
         Tiles to get the extents for.
 
     Returns
     -------
     list[Geometry]
-        List of the tile extent Geometries for each tile in the input tile list.
+        List of the tile extent Geometries for each tile in the input 
+        tile list.
     """
     if not isinstance(tiles, list):
         tiles = list(tiles)
@@ -125,8 +134,8 @@ def get_tile_extents(
         assert len(crs_list) == 1
     except AssertionError:
         raise ValueError(
-            "List of input tiles contains tiles with "
-            f"different CRS: {', '.join(crs_list)}"
+            "List of input tiles contains tiles with different CRS: "
+            f"{', '.join(crs_list)}"
         )
     else:
         return tile_extents
@@ -136,6 +145,21 @@ def tiles_to_gdf(
     tiles: Iterator[tuple[tuple[int, int], GeoBox]]
     | list[tuple[tuple[int, int], GeoBox]],
 ) -> gpd.GeoDataFrame:
+    """
+    Get the tile extents for a list of tiles into a GeoDataFrame.
+
+    Parameters
+    ----------
+    tiles : Iterator[tuple[tuple[int, int], GeoBox]] |
+            list[tuple[tuple[int, int], GeoBox]]
+        Tiles to get the extent Geometries for
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Table containing the region codes and extent Geometries
+        for a list
+    """
     if not isinstance(tiles, list):
         tiles = list(tiles)
 
@@ -157,10 +181,16 @@ def get_africa_tiles(
     """
     Get tiles over Africa's extent.
 
+    Parameters
+    ----------
+    save_to_disk : bool
+        If True write the tile extents for the tiles to a parquet file.
+
     Returns
     -------
     Iterator[tuple[tuple[int, int], GeoBox]]
-        Output is a sequence of tile_index, odc.geo.geobox.GeoBox tuples.
+        Output is a sequence of tile_index, odc.geo.geobox.GeoBox
+        tuples.
     """
 
     # Get the tiles over Africa
@@ -175,3 +205,34 @@ def get_africa_tiles(
         tiles_gdf.to_parquet(output_fp)
         log.info(f"Regions saved to {output_fp}")
     return tiles
+
+
+def parse_region_code(region_code: str) -> tuple[int, int]:
+    """
+    Parse a tile id in the string format "x{x:02d}{sep}y{y:02d}", into
+    the a tuple of integers (x, y).
+
+
+    Parameters
+    ----------
+    region_code : str
+        Tile id in string format "x{x:02d}{sep}y{y:02d}".
+
+    Returns
+    -------
+    tuple[int, int]
+        Tile  id as a tuple of integers (x, y).
+    """
+
+    x_pattern = re.compile(r"x\d{3}")
+    y_pattern = re.compile(r"y\d{3}")
+
+    tile_id_x_str = re.search(x_pattern, region_code).group(0)
+    tile_id_y_str = re.search(y_pattern, region_code).group(0)
+
+    tile_id_x = int(tile_id_x_str.lstrip("x"))
+    tile_id_y = int(tile_id_y_str.lstrip("y"))
+
+    tile_id = (tile_id_x, tile_id_y)
+
+    return tile_id

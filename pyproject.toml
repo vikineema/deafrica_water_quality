@@ -65,7 +65,7 @@ where = ["src"]
 water_quality = ["data/*.parquet"]
 
 [tool.ruff]
-line-length = 99
+line-length = 79
 
 [tool.pytest.ini_options]
 addopts = "-s"
