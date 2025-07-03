@@ -20,7 +20,8 @@ def check_date_str_format(date_str: str, date_format: str) -> date:
     Returns
     -------
     date
-        Date object if the date string matches the specified date format.
+        Date object if the date string matches the specified date
+        format.
     """
     if not isinstance(date_str, str):
         raise TypeError(f"{date_str} is type ({type(date_str)}) not a string")
@@ -62,7 +63,8 @@ def date_str_to_date(date_str: str) -> tuple[date, str]:
         else:
             return valid_date, date_format
     raise ValueError(
-        f"{date_str} does not match any expected format {' or '.join(expected_date_formats)}"
+        f"{date_str} does not match any expected format "
+        f"{' or '.join(expected_date_formats)}"
     )
 
 
