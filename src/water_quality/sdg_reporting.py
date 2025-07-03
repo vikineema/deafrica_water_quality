@@ -176,7 +176,9 @@ def get_monthly_deviations(
         return deviations.drop_vars("month")
 
     monthly_deviations = target_years_monthly_avgs.groupby("time.year").map(
-        lambda year_data: _get_deviations(year_data, monthly_multiannual_baseline)
+        lambda year_data: _get_deviations(
+            year_data, monthly_multiannual_baseline
+        )
     )
 
     return monthly_deviations
@@ -372,9 +374,13 @@ def get_turbidity_and_tsi_summary_tables(
         affected = waterbody["affected"]
         for year, indicators in affected.items():
             if indicators["turbidity"] is True:
-                turbidity_affected_lakes_count[year]["no_of_affected_lakes"] += 1
+                turbidity_affected_lakes_count[year][
+                    "no_of_affected_lakes"
+                ] += 1
             else:
-                turbidity_affected_lakes_count[year]["no_of_not_affected_lakes"] += 1
+                turbidity_affected_lakes_count[year][
+                    "no_of_not_affected_lakes"
+                ] += 1
             if indicators["TSI"] is True:
                 tsi_affected_lakes_count[year]["no_of_affected_lakes"] += 1
             else:
@@ -397,10 +403,16 @@ def get_turbidity_and_tsi_summary_tables(
     # Get the proportion of waterbodies affected
     turbidity_affected_lakes_count["EN_LKW_QLTRB %"] = (
         turbidity_affected_lakes_count.apply(
-            lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
+            lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"])
+            * 100,
+            axis=1,
         )
     )
-    tsi_affected_lakes_count["EN_LKW_QLTRST %"] = tsi_affected_lakes_count.apply(
-        lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"]) * 100, axis=1
+    tsi_affected_lakes_count["EN_LKW_QLTRST %"] = (
+        tsi_affected_lakes_count.apply(
+            lambda x: (x["no_of_affected_lakes"] / x["total_no_of_lakes"])
+            * 100,
+            axis=1,
+        )
     )
     return turbidity_affected_lakes_count, tsi_affected_lakes_count
