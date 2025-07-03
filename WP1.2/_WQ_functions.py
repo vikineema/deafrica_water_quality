@@ -495,7 +495,6 @@ def water_analysis(ds,
     
     return(ds)
 
-#this is not needed if the "errors='ignore'" option is used
 def rename_vars_robust(dataset,var_names,verbose=False):
         # --- helpful function when renaming variables. var_names nees to be pairs of old and new names  --- 
         for var in var_names :
@@ -555,7 +554,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Ethiopia_Lake_Tana':  {'run':True, "xyt" :{"x": ( 37.05,   37.22),    "y" : (  11.9  ,  12.0),  "time": (year1,year2)  },"desc": "Ethiopia_Lake_Tana"          },
         'Mare_aux_Vacoas':     {'run':True, "xyt" :{"x": ( 57.485,  57.524),   "y" : ( -20.389, -20.359),"time": (year1,year2)  },"desc": "Mare_aux_Vacoas"          },
         'SA_smalldam':         {'run':True, "xyt" :{"x": ( 19.494,  19.498),   "y" : ( -33.802, -33.800),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa"          },
-        'SA_smalldam1':        {'run':True, "xyt" :{"x": ( 19.500,  19.510),   "y" : ( -33.8065, -33.835),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa, clear water"     },
+        'SA_smalldam1':        {'run':True, "xyt" :{"x": ( 19.505, 19.510),   "y" : ( -33.8065, -33.803),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa, clear water"     },
         'Ethiopia_both':       {'run':False, "xyt" :{"x": ( 38.35,   38.83),    "y" : (   7.37 ,   7.71), "time": (year1,year2)  },"desc": "Ethiopia, Lake Abiata +"          },
         'Madagascar':          {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
         'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.724 ,  35.929 ), "y" : ( -03.814, -03.409), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
