@@ -29,7 +29,7 @@ def cli(place_name: str, output_file: str):
     and write the tile IDs to the file OUTPUT_FILE.
 
     """
-    _log = setup_logging()
+    log = setup_logging()
 
     places_fp = files("water_quality.data").joinpath("places.parquet")
     places_gdf = gpd.read_parquet(places_fp)
@@ -40,19 +40,19 @@ def cli(place_name: str, output_file: str):
                 f"{place_name} not in found in test areas file. Expected names include {' ,'.join(place_name_list)}"
             )
         else:
-            _log.info(f"Getting tiles for test area {place_name}")
+            log.info(f"Getting tiles for test area {place_name}")
             place = places_gdf[places_gdf["name"].isin([place_name])]
             aoi_geom = Geometry(geom=place.iloc[0].geometry, crs=place.crs)
             tiles = get_aoi_tiles(aoi_geom)
     else:
-        _log.info("Getting tiles for all of Africa for continental run")
+        log.info("Getting tiles for all of Africa for continental run")
         tiles = get_africa_tiles(save_to_disk=False)
 
     tiles = list(tiles)
     tile_ids = get_tile_region_codes(tiles, sep="/")
 
-    _log.info(f"Tiles found: {', '.join(tile_ids)}")
-    _log.info(f"Total number of tiles: {len(tile_ids)}")
+    log.info(f"Tiles found: {', '.join(tile_ids)}")
+    log.info(f"Total number of tiles: {len(tile_ids)}")
 
     tile_ids.sort()
 
@@ -65,7 +65,7 @@ def cli(place_name: str, output_file: str):
         for item in tile_ids:
             file.write(str(item) + "\n")
 
-    _log.info(f"Tile IDs written to {output_file}")
+    log.info(f"Tile IDs written to {output_file}")
 
 
 if __name__ == "__main__":
