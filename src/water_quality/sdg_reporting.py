@@ -183,14 +183,15 @@ def get_monthly_deviations(
     for year in years:
         for month in months:
             time_coord = np.datetime64(
-                datetime(year, month, calendar.monthrange(year, month)[1]), "ns"
+                datetime(year, month, calendar.monthrange(year, month)[1]),
+                "ns",
             )
             ds_sel = monthly_deviations.sel(year=year, month=month).drop_vars(
                 ["year", "month"]
             )
-            ds_sel = ds_sel.assign_coords(coords={"time": time_coord}).expand_dims(
-                dim={"time": 1}
-            )
+            ds_sel = ds_sel.assign_coords(
+                coords={"time": time_coord}
+            ).expand_dims(dim={"time": 1})
             stack.append(ds_sel)
 
     monthly_deviations = xr.concat(stack, dim="time")
@@ -198,7 +199,9 @@ def get_monthly_deviations(
     return monthly_deviations
 
 
-def get_deviation_categories(var: str, deviations_ds: xr.Dataset) -> np.ndarray:
+def get_deviation_categories(
+    var: str, deviations_ds: xr.Dataset
+) -> np.ndarray:
     """
     Classify pixels in a monthly or annual deviation synthesis data variable
     into categorical deviation levels.
@@ -315,7 +318,9 @@ def get_annual_deviations(monthly_deviations: xr.Dataset) -> xr.Dataset:
     return annual_deviations
 
 
-def waterbody_is_affected(annual_deviation_classes: xr.Dataset) -> pd.DataFrame:
+def waterbody_is_affected(
+    annual_deviation_classes: xr.Dataset,
+) -> pd.DataFrame:
     """
     Determine whether a waterbody is affected based on annual deviation classifications.
 
@@ -351,6 +356,8 @@ def waterbody_is_affected(annual_deviation_classes: xr.Dataset) -> pd.DataFrame:
             (annual_deviation_classes == value).astype(int).sum(dim=["x", "y"])
         )
 
-    affected = (count["high"] + count["extreme"]) > (count["low"] + count["medium"])
+    affected = (count["high"] + count["extreme"]) > (
+        count["low"] + count["medium"]
+    )
     affected_df = affected.to_dataframe().drop(columns=["spatial_ref"])
     return affected_df

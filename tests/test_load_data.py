@@ -72,7 +72,11 @@ def test_build_dc_queries_single_instrument(sample_tile_geobox):
         }
     }
     result = build_dc_queries(
-        instruments_to_use, sample_tile_geobox, start_date, end_date, resampling
+        instruments_to_use,
+        sample_tile_geobox,
+        start_date,
+        end_date,
+        resampling,
     )
     assert expected_result == result
 
@@ -138,7 +142,11 @@ def test_build_dc_queries_multi_instrument(sample_tile_geobox):
         },
     }
     results = build_dc_queries(
-        instruments_to_use, sample_tile_geobox, start_date, end_date, resampling
+        instruments_to_use,
+        sample_tile_geobox,
+        start_date,
+        end_date,
+        resampling,
     )
 
     expected_instruments = ["oli_agm", "msi_agm", "wofs_ann", "wofs_all"]
@@ -164,7 +172,11 @@ def test_build_wq_dataset_single_instrument(
     ds = build_wq_dataset(dc_queries)
 
     expected_results = build_dataset_validation_ds[
-        [i for i in list(build_dataset_validation_ds.data_vars) if "wofs_ann" in i]
+        [
+            i
+            for i in list(build_dataset_validation_ds.data_vars)
+            if "wofs_ann" in i
+        ]
     ].sel(time=slice(*time))
 
     xr.testing.assert_allclose(ds, expected_results)

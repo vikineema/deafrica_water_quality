@@ -6,7 +6,11 @@ from odc.geo.geom import Geometry
 
 from water_quality.io import check_directory_exists, get_filesystem
 from water_quality.logs import setup_logging
-from water_quality.tiling import get_africa_tiles, get_aoi_tiles, get_tile_region_codes
+from water_quality.tiling import (
+    get_africa_tiles,
+    get_aoi_tiles,
+    get_tile_region_codes,
+)
 
 
 @click.command(

@@ -20,7 +20,9 @@ def test_water_detection_on_valid_ds(
     build_dataset_validation_ds, water_analysis_validation_ds
 ):
     expected_results = water_analysis_validation_ds
-    results = water_analysis(build_dataset_validation_ds, wofs_varname="wofs_ann_freq")
+    results = water_analysis(
+        build_dataset_validation_ds, wofs_varname="wofs_ann_freq"
+    )
     expected_added_vars = [
         "wofs_ann_freq_sigma",
         "wofs_ann_confidence",

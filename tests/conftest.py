@@ -24,14 +24,18 @@ def sample_tile_geobox():
 
 @pytest.fixture
 def build_dataset_validation_ds():
-    ds = xr.open_dataset(os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset.nc"))
+    ds = xr.open_dataset(
+        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset.nc")
+    )
     return ds
 
 
 @pytest.fixture
 def water_analysis_validation_ds():
     ds = xr.open_dataset(
-        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_water_analysis.nc")
+        os.path.join(
+            TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_water_analysis.nc"
+        )
     )
     return ds
 
@@ -39,7 +43,9 @@ def water_analysis_validation_ds():
 @pytest.fixture
 def pixel_corrections_validation_ds():
     ds = xr.open_dataset(
-        os.path.join(TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_pixel_correction.nc")
+        os.path.join(
+            TEST_DATA_DIR, "wq_agm_mutli_sensor_dataset_pixel_correction.nc"
+        )
     )
     return ds
 
@@ -67,7 +73,9 @@ def random_xr_dataset():
         month = np.random.randint(1, 13)
         day = np.random.randint(1, calendar.monthrange(year, month)[1] + 1)
         start_date = pd.Timestamp(f"{year}-{month:02d}-{day:02d}")
-        time = pd.date_range(start=start_date, periods=shape[0], freq=time_freq)
+        time = pd.date_range(
+            start=start_date, periods=shape[0], freq=time_freq
+        )
 
         if seed is not None:
             np.random.seed(seed)

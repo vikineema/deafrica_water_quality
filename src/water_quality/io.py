@@ -93,7 +93,9 @@ def check_directory_exists(path: str) -> bool:
         return False
 
 
-def check_file_extension(path: str, accepted_file_extensions: list[str]) -> bool:
+def check_file_extension(
+    path: str, accepted_file_extensions: list[str]
+) -> bool:
     _, file_extension = os.path.splitext(path)
     if file_extension.lower() in accepted_file_extensions:
         return True
@@ -108,7 +110,9 @@ def is_geotiff(path: str) -> bool:
     )
 
 
-def find_geotiff_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_geotiff_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -139,7 +143,9 @@ def is_json(path: str) -> bool:
     )
 
 
-def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_json_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -163,7 +169,9 @@ def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[
     return json_file_paths
 
 
-def download_file_from_url(url: str, output_file_path: str, chunks: int = 100) -> str:
+def download_file_from_url(
+    url: str, output_file_path: str, chunks: int = 100
+) -> str:
     """Download a file from a URL
 
     Parameters
@@ -292,7 +300,9 @@ def write_xr_to_parquet(ds: xr.Dataset | xr.DataArray, output_file_path: str):
         }
         table = table.replace_schema_metadata(combined_meta)
     else:
-        raise ValueError("Dataset is missing CRS and grid mapping info in attributes")
+        raise ValueError(
+            "Dataset is missing CRS and grid mapping info in attributes"
+        )
     pq.write_table(table, output_file_path, compression="GZIP")
 
 

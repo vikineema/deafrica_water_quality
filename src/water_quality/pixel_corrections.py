@@ -16,7 +16,9 @@ def R_correction(
         if sensor in instruments_to_use.keys():
             usage = instruments_to_use[sensor]["use"]
             if usage:
-                log.info(f"Performing dark pixel correction for sensor {sensor} ...")
+                log.info(
+                    f"Performing dark pixel correction for sensor {sensor} ..."
+                )
                 ref_var = dp_adjust[sensor]["ref_var"]
                 if ref_var not in ds.data_vars:
                     raise ValueError(
@@ -35,7 +37,8 @@ def R_correction(
                                 .where(ds[target_var] > ds[ref_var], 0)
                                 .where(ds[target_var] > 0)
                                 .where(
-                                    ds.wofs_ann_freq > water_frequency_threshold,
+                                    ds.wofs_ann_freq
+                                    > water_frequency_threshold,
                                     ds[target_var],
                                 )
                             )

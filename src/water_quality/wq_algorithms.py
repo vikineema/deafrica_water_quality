@@ -42,7 +42,9 @@ def WQ_vars(
     tuple[list[str], xr.Dataset]
         _description_
     """
-    log.info(f"Running  WQ algorithms for: {', '.join(list(algorithms.keys()))}")
+    log.info(
+        f"Running  WQ algorithms for: {', '.join(list(algorithms.keys()))}"
+    )
     wq_varlist = []
     for alg in algorithms.keys():
         log.info(f"Running  WQ algorithm {alg}")
@@ -55,8 +57,12 @@ def WQ_vars(
                     for option in params.keys():
                         opparams = params[option]
                         function = opparams["func"]
-                        ds[opparams["wq_varname"]] = function(ds, **opparams["args"])
-                        wq_varlist = np.append(wq_varlist, opparams["wq_varname"])
+                        ds[opparams["wq_varname"]] = function(
+                            ds, **opparams["args"]
+                        )
+                        wq_varlist = np.append(
+                            wq_varlist, opparams["wq_varname"]
+                        )
                 else:
                     function = params["func"]
                     ds[params["wq_varname"]] = function(ds, **params["args"])
@@ -83,11 +89,20 @@ def WQ_vars(
         ds = ds.assign_coords({new_dimension_name: new_dim_labels})
         ds[new_varname] = (
             ("time", "y", "x", new_dimension_name),
-            np.zeros((ds.time.size, ds.y.size, ds.x.size, ds[new_dimension_name].size)),
+            np.zeros(
+                (
+                    ds.time.size,
+                    ds.y.size,
+                    ds.x.size,
+                    ds[new_dimension_name].size,
+                )
+            ),
         )
         log.debug("\n", ds[new_varname])
         log.debug(
-            "\n--->  ", ds[new_dimension_name].values, "  <---- new dimension values\n"
+            "\n--->  ",
+            ds[new_dimension_name].values,
+            "  <---- new dimension values\n",
         )
         log.debug(
             "\n--->  ",
@@ -107,7 +122,9 @@ def WQ_vars(
     return ds, wq_varlist
 
 
-def NDCI_NIR_R(dataset: xr.Dataset, NIR_band: str, red_band: str) -> xr.DataArray:
+def NDCI_NIR_R(
+    dataset: xr.Dataset, NIR_band: str, red_band: str
+) -> xr.DataArray:
     """
     Function to calculate ndci from input nir and red bands ----
     """
@@ -138,7 +155,9 @@ def ChlA_MERIS2B(
     return (25.28 * (X) * 2) + 14.85 * (X) - 15.18
 
 
-def ChlA_MODIS2B(dataset: xr.Dataset, band_748: str, band_667: str) -> xr.DataArray:
+def ChlA_MODIS2B(
+    dataset: xr.Dataset, band_748: str, band_667: str
+) -> xr.DataArray:
     """
     MODIS
     Chla = 190.34 x MODIS_2BM – 32.45
@@ -157,14 +176,18 @@ def ChlA_MODIS2B(dataset: xr.Dataset, band_748: str, band_667: str) -> xr.DataAr
 #    These are essentially
 #        red-green / red_+green, or,
 #        blue-NIR / blue + NIR
-def NDSSI_RG(dataset: xr.Dataset, red_band: str, green_band: str) -> xr.DataArray:
+def NDSSI_RG(
+    dataset: xr.Dataset, red_band: str, green_band: str
+) -> xr.DataArray:
     log.info("NDSSI_RG")
     return (dataset[red_band] - dataset[green_band]) / (
         dataset[red_band] + dataset[green_band]
     )
 
 
-def NDSSI_BNIR(dataset: xr.Dataset, blue_band: str, NIR_band: str) -> xr.DataArray:
+def NDSSI_BNIR(
+    dataset: xr.Dataset, blue_band: str, NIR_band: str
+) -> xr.DataArray:
     log.info("NDSSI_BNIR")
     return (dataset[blue_band] - dataset[NIR_band]) / (
         dataset[blue_band] + dataset[NIR_band]
@@ -178,12 +201,17 @@ def NDSSI_BNIR(dataset: xr.Dataset, blue_band: str, NIR_band: str) -> xr.DataArr
 #    Initially developed with TM
 #    -TI = ((Red − green) − (NIR − Rgreen)) ^ 0.5
 def TI_yu(
-    dataset: xr.Dataset, NIR: str, Red: str, Green: str, scalefactor: float = 0.01
+    dataset: xr.Dataset,
+    NIR: str,
+    Red: str,
+    Green: str,
+    scalefactor: float = 0.01,
 ) -> xr.DataArray:
     log.info("TI_yu")
     # TODO check scalefactor * ((dataset[Red] - dataset[Green]) - ((dataset[NIR] - dataset[Green]) * 0.5)) correction!
     return scalefactor * (
-        ((dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green])) ** 0.5
+        ((dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]))
+        ** 0.5
     )
 
 
@@ -193,20 +221,30 @@ def TI_yu(
 # These models, developed by leo lymburner and arnold dekker, are simple, stable, and produce credible
 # results over a range of observations
 def TSM_LYM_ETM(
-    dataset: xr.Dataset, green_band: str, red_band: str, scale_factor: float = 0.0001
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
 ) -> xr.DataArray:
     log.info("TSM_LYM_ETM")
     return (
-        3983 * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6246
+        3983
+        * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2)
+        ** 1.6246
     )
 
 
 def TSM_LYM_OLI(
-    dataset: xr.Dataset, green_band: str, red_band: str, scale_factor: float = 0.0001
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
 ) -> xr.DataArray:
     log.info("TSM_LYM_OLI")
     return (
-        3957 * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6436
+        3957
+        * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2)
+        ** 1.6436
     )
 
 
@@ -215,7 +253,9 @@ def TSM_LYM_OLI(
 # This model seems to discriminate well although the scaling is questionable and it goes below zero due
 # to the final subtraction.
 # (The final subtraction seems immaterial in the context of our work (overly precise) and I skip it.)
-def SPM_QIU(dataset: xr.Dataset, green_band: str, red_band: str) -> xr.DataArray:
+def SPM_QIU(
+    dataset: xr.Dataset, green_band: str, red_band: str
+) -> xr.DataArray:
     log.info("SPM_QIU")
     return (
         10.0
@@ -394,7 +434,11 @@ ti_yu = {  # "msi_agm" : {'func': TI_yu,        "wq_varname" : 'ti_yu_msi_agm'  
     "oli_agm": {
         "func": TI_yu,
         "wq_varname": "ti_yu_oli_agm",
-        "args": {"NIR": "oli06_agm", "Red": "oli04_agmr", "Green": "oli03_agmr"},
+        "args": {
+            "NIR": "oli06_agm",
+            "Red": "oli04_agmr",
+            "Green": "oli03_agmr",
+        },
     },
     "oli": {
         "func": TI_yu,
@@ -510,7 +554,11 @@ tss_zhang = {
     "oli": {
         "func": TSS_Zhang,
         "wq_varname": "tss_zhang_oli",
-        "args": {"blue_band": "oli02r", "red_band": "oli04r", "green_band": "oli03r"},
+        "args": {
+            "blue_band": "oli02r",
+            "red_band": "oli04r",
+            "green_band": "oli03r",
+        },
     },
 }
 
