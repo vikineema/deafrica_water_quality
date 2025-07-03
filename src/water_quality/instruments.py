@@ -20,13 +20,25 @@ INSTRUMENTS_DATES = {
 # Here is where to turn a particular band on or off, using the 'parameters' entry
 INSTRUMENTS_MEASUREMENTS = {
     "wofs_ann": {
-        "frequency": {"varname": ("wofs_ann_freq"), "parameters": (True, "other")},
-        "count_clear": {"varname": ("wofs_ann_clearcount"), "parameters": (True,)},
+        "frequency": {
+            "varname": ("wofs_ann_freq"),
+            "parameters": (True, "other"),
+        },
+        "count_clear": {
+            "varname": ("wofs_ann_clearcount"),
+            "parameters": (True,),
+        },
         "count_wet": {"varname": ("wofs_ann_wetcount"), "parameters": (True,)},
     },
     "wofs_all": {
-        "frequency": {"varname": ("wofs_all_freq"), "parameters": (True, "other")},
-        "count_clear": {"varname": ("wofs_all_clearcount"), "parameters": (True,)},
+        "frequency": {
+            "varname": ("wofs_all_freq"),
+            "parameters": (True, "other"),
+        },
+        "count_clear": {
+            "varname": ("wofs_all_clearcount"),
+            "parameters": (True,),
+        },
         "count_wet": {"varname": ("wofs_all_wetcount"), "parameters": (True,)},
     },
     "oli_agm": {
@@ -92,7 +104,10 @@ INSTRUMENTS_MEASUREMENTS = {
         "count": {"varname": ("msi_agm_count"), "parameters": (True,)},
     },
     "msi": {
-        "B01": {"varname": ("msi01"), "parameters": (False, "Coastal aerosol")},
+        "B01": {
+            "varname": ("msi01"),
+            "parameters": (False, "Coastal aerosol"),
+        },
         "B02": {"varname": ("msi02"), "parameters": (True, "460-525")},
         "B03": {"varname": ("msi03"), "parameters": (True,)},
         "B04": {"varname": ("msi04"), "parameters": (True,)},
@@ -130,12 +145,30 @@ INSTRUMENTS_MEASUREMENTS = {
         "qa": {"varname": ("msi_qa"), "parameters": (True,)},
     },
     "tm_agm": {
-        "SR_B1": {"varname": ("tm01_agm"), "parameters": (True, "blue 450-520")},
-        "SR_B2": {"varname": ("tm02_agm"), "parameters": (True, "green 520-600")},
-        "SR_B3": {"varname": ("tm03_agm"), "parameters": (True, "red   630-690")},
-        "SR_B4": {"varname": ("tm04_agm"), "parameters": (True, "nir   760-900")},
-        "SR_B5": {"varname": ("tm05_agm"), "parameters": (True, "swir1 1550-1750")},
-        "SR_B7": {"varname": ("tm07_agm"), "parameters": (True, "swir2 2080-2350")},
+        "SR_B1": {
+            "varname": ("tm01_agm"),
+            "parameters": (True, "blue 450-520"),
+        },
+        "SR_B2": {
+            "varname": ("tm02_agm"),
+            "parameters": (True, "green 520-600"),
+        },
+        "SR_B3": {
+            "varname": ("tm03_agm"),
+            "parameters": (True, "red   630-690"),
+        },
+        "SR_B4": {
+            "varname": ("tm04_agm"),
+            "parameters": (True, "nir   760-900"),
+        },
+        "SR_B5": {
+            "varname": ("tm05_agm"),
+            "parameters": (True, "swir1 1550-1750"),
+        },
+        "SR_B7": {
+            "varname": ("tm07_agm"),
+            "parameters": (True, "swir2 2080-2350"),
+        },
         "smad": {"varname": ("tm_agm_smad"), "parameters": (True,)},
         "emad": {"varname": ("tm_agm_emad"), "parameters": (True,)},
         "bcmad": {"varname": ("tm_agm_bcmad"), "parameters": (True,)},
@@ -146,8 +179,14 @@ INSTRUMENTS_MEASUREMENTS = {
         "SR_B2": {"varname": ("tm02"), "parameters": (True, "green 520-600")},
         "SR_B3": {"varname": ("tm03"), "parameters": (True, "red   630-690")},
         "SR_B4": {"varname": ("tm04"), "parameters": (True, "nir   760-900")},
-        "SR_B5": {"varname": ("tm05"), "parameters": (True, "swir1 1550-1750")},
-        "SR_B7": {"varname": ("tm07"), "parameters": (True, "swir2 2080-2350")},
+        "SR_B5": {
+            "varname": ("tm05"),
+            "parameters": (True, "swir1 1550-1750"),
+        },
+        "SR_B7": {
+            "varname": ("tm07"),
+            "parameters": (True, "swir2 2080-2350"),
+        },
         "pq": {"varname": ("tm_pq"), "parameters": (True,)},
     },
     "tirs": {
@@ -263,7 +302,9 @@ def check_instrument_dates(
     valid_instruments_to_use: dict[str, dict[str, bool]] = {}
     for instrument_name, usage in instruments_to_use.items():
         if usage["use"] is True:
-            instruments_data_date_range = INSTRUMENTS_DATES.get(instrument_name, None)
+            instruments_data_date_range = INSTRUMENTS_DATES.get(
+                instrument_name, None
+            )
             if instruments_data_date_range is None:
                 valid_instruments_to_use[instrument_name] = {"use": False}
                 log.error(

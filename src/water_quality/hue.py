@@ -100,7 +100,9 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
             f"Hue calculation for the instrument {instrument} is not available"
         )
     else:
-        missing_bands = [i for i in band_list if i not in list(dataset.data_vars)]
+        missing_bands = [
+            i for i in band_list if i not in list(dataset.data_vars)
+        ]
         if missing_bands:
             raise KeyError(
                 f"Bands {', '.join(missing_bands)} missing in dataset for hue calculation"
@@ -124,7 +126,9 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
         Cdata[XYZ] = Cdata.dims, np.zeros(n).reshape(s)
         for var in band_list:
             var_shortname = var[0:5]
-            Cdata[XYZ] = Cdata[XYZ] + dataset[var] * chrom_coeffs[XYZ][var_shortname]
+            Cdata[XYZ] = (
+                Cdata[XYZ] + dataset[var] * chrom_coeffs[XYZ][var_shortname]
+            )
 
     # ---- normalise the X and Y parameters
     Cdata["Xn"] = Cdata["X"] / (Cdata["X"] + Cdata["Y"] + Cdata["Z"])
@@ -143,13 +147,18 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
 
     # ---- code below is not used for pixel level processing, but is used by others / later!
     Cdata_summary["Xnd"] = (
-        Cdata["Xnd"].where(dataset["wofs_ann_freq"] > 0.9).median(dim=("x", "y"))
+        Cdata["Xnd"]
+        .where(dataset["wofs_ann_freq"] > 0.9)
+        .median(dim=("x", "y"))
     )
     Cdata_summary["Ynd"] = (
-        Cdata["Ynd"].where(dataset["wofs_ann_freq"] > 0.9).median(dim=("x", "y"))
+        Cdata["Ynd"]
+        .where(dataset["wofs_ann_freq"] > 0.9)
+        .median(dim=("x", "y"))
     )
     Cdata_summary["hue"] = np.mod(
-        np.arctan2(Cdata_summary["Ynd"], Cdata_summary["Xnd"]) * (180.00 / np.pi)
+        np.arctan2(Cdata_summary["Ynd"], Cdata_summary["Xnd"])
+        * (180.00 / np.pi)
         + 360.0,
         360,
     )

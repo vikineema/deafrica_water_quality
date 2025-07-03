@@ -20,7 +20,9 @@ def water_analysis(
     sigma_coefficient: float = 1.2,
 ):
     if wofs_varname not in VALID_VARIABLES:
-        log.error(f"Invalid variable name {wofs_varname}! Defaulting to wofs_ann_freq")
+        log.error(
+            f"Invalid variable name {wofs_varname}! Defaulting to wofs_ann_freq"
+        )
         wofs_varname = "wofs_ann_freq"
 
     data_vars = list(ds.data_vars)
@@ -33,7 +35,8 @@ def water_analysis(
         # --- standard deviation of the annual frequency at each pixel -
         # should really be dividing by n-1 but then I would need to change SC ---
         ds["wofs_ann_freq_sigma"] = (
-            (ds.wofs_ann_freq * (1 - ds.wofs_ann_freq)) / ds.wofs_ann_clearcount
+            (ds.wofs_ann_freq * (1 - ds.wofs_ann_freq))
+            / ds.wofs_ann_clearcount
         ) ** 0.5
         ds["wofs_ann_confidence"] = (
             (1.0 - (ds.wofs_ann_freq_sigma / ds.wofs_ann_freq)) * 100

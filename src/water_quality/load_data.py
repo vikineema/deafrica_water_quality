@@ -227,8 +227,12 @@ def process_st_data_to_annnual(
     # Rescale the daily timeseries to centigrade, remove outliers,
     # apply quality filter and also filter on emissivity > 0.95.
     ds_tirs["tirs_st"] = (ds_tirs.tirs_st * 0.00341802 + 149.0) - 273.15
-    ds_tirs["tirs_st_qa"] = ds_tirs["tirs_st_qa"] * 0.01  # -- uncertainty in kelvin
-    ds_tirs["tirs_emis"] = ds_tirs["tirs_emis"] * 0.0001  # -- emissivity fraction
+    ds_tirs["tirs_st_qa"] = (
+        ds_tirs["tirs_st_qa"] * 0.01
+    )  # -- uncertainty in kelvin
+    ds_tirs["tirs_emis"] = (
+        ds_tirs["tirs_emis"] * 0.0001
+    )  # -- emissivity fraction
     ds_tirs["tirs_st"] = xr.where(
         ds_tirs["tirs_st"] > 0,
         xr.where(
@@ -239,7 +243,9 @@ def process_st_data_to_annnual(
         np.nan,
     )
     # Create an empty annual dataset
-    annual_ds_tirs = xr.Dataset(coords=ds_tirs.coords).groupby("time.year").mean()
+    annual_ds_tirs = (
+        xr.Dataset(coords=ds_tirs.coords).groupby("time.year").mean()
+    )
 
     # Average the temperatures up to years - min, max and mean
     annual_ds_tirs["tirs_st_ann_med"] = (
@@ -263,17 +269,20 @@ def process_st_data_to_annnual(
     # Restrict values to areas of water
     water_frequency_threshold = 0.5
     annual_ds_tirs["tirs_st_ann_med"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
+        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
+        > water_frequency_threshold,
         annual_ds_tirs["tirs_st_ann_med"],
         np.nan,
     )
     annual_ds_tirs["tirs_st_ann_min"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
+        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
+        > water_frequency_threshold,
         annual_ds_tirs["tirs_st_ann_min"],
         np.nan,
     )
     annual_ds_tirs["tirs_st_ann_max"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
+        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
+        > water_frequency_threshold,
         annual_ds_tirs["tirs_st_ann_max"],
         np.nan,
     )
@@ -321,7 +330,8 @@ def build_wq_dataset(
             )
         else:
             loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"], ds_wofs_ann=loaded_data["wofs_ann"]
+                ds_tirs=loaded_data["tirs"],
+                ds_wofs_ann=loaded_data["wofs_ann"],
             )
 
     combined = xr.Dataset()
