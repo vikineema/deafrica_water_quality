@@ -168,8 +168,13 @@ def cli(
         try:
             year, tile_id = parse_task_id(task_id)
 
-            start_date = validate_start_date(str(year))
-            end_date = validate_end_date(str(year))
+            # Start date of the year
+            year_start = validate_start_date(str(year))
+            start_date = year_start.strftime("%Y-%m-%d")
+
+            # End date of the year
+            year_end = validate_end_date(str(year))
+            end_date = year_end.strftime("%Y-%m-%d")
 
             tile_geobox = gridspec.tile_geobox(tile_index=tile_id)
 
@@ -206,7 +211,12 @@ def cli(
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
 
             log.info("Determining the open water type for each pixel.")
-            ds["owt_msi"] = OWT_pixel(ds, instrument="msi_agm")
+            ds["owt_msi"] = OWT_pixel(
+                ds,
+                instrument="msi_agm",
+                water_frequency_threshold=0.8,
+                resample_rate=3,
+            )
 
             log.info("Applying the WQ algorithms to water areas.")
             # Apply the WQ algorithms to water areas, adding variables
