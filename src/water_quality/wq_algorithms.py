@@ -1,7 +1,6 @@
 """
-This module provides functions to apply
-various water quality algorithms to EO data from a set of
-instruments.
+This module provides functions to apply various water quality algorithms
+to EO data from a set of instruments.
 """
 
 import logging
@@ -21,8 +20,10 @@ def WQ_vars(
     new_varname: str | None = None,
 ) -> tuple[list[str], xr.Dataset]:
     """
-    Run the TSS/TSP algorithms applying each algorithm to the instruments and band combinations
-    set in the `algorithms` dictionary, checking that the necessary instruments are in the dataset.
+    Run the TSS/TSP algorithms applying each algorithm to the
+    instruments and band combinations set in the `algorithms`
+    dictionary, checking that the necessary instruments are in the
+    dataset.
 
     Parameters
     ----------
@@ -72,7 +73,8 @@ def WQ_vars(
                 # skip
                 pass
 
-    # If relevant arguments are provided, then create a dimension for the data variables and move them into it
+    # If relevant arguments are provided, then create a dimension for
+    # the data variables and move them into it
     if new_dimension_name is not None and new_varname is not None:
         if new_dimension_name not in ["tss_measure", "chla_measure"]:
             raise ValueError()
@@ -195,8 +197,9 @@ def NDSSI_BNIR(
 
 
 # ---- Turbidity index of Yu, X. et al.
-#    An empirical algorithm to seamlessly retrieve the concentration of suspended particulate matter
-#    from water color across ocean to turbid river mouths. Remote Sens. Environ. 235, 111491 (2019).
+#    An empirical algorithm to seamlessly retrieve the concentration
+#    of suspended particulate matter from water color across ocean to
+#    turbid river mouths. Remote Sens. Environ. 235, 111491 (2019).
 #    Used in screening turbid waters for mapping floating algal blooms
 #    Initially developed with TM
 #    -TI = ((Red − green) − (NIR − Rgreen)) ^ 0.5
@@ -208,7 +211,8 @@ def TI_yu(
     scalefactor: float = 0.01,
 ) -> xr.DataArray:
     log.info("TI_yu")
-    # TODO check scalefactor * ((dataset[Red] - dataset[Green]) - ((dataset[NIR] - dataset[Green]) * 0.5)) correction!
+    # TODO check scalefactor * ((dataset[Red] - dataset[Green])
+    # - ((dataset[NIR] - dataset[Green]) * 0.5)) correction!
     return scalefactor * (
         ((dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]))
         ** 0.5
@@ -216,10 +220,12 @@ def TI_yu(
 
 
 # ---- Lymburner Total Suspended Matter (TSM)
-# Paper: [Lymburner et al. 2016](https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
-# Units of mg/L concentration. Variants for ETM and OLT, slight difference in parameters.
-# These models, developed by leo lymburner and arnold dekker, are simple, stable, and produce credible
-# results over a range of observations
+# Paper: [Lymburner et al. 2016] (https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
+# Units of mg/L concentration. Variants for ETM and OLT, slight
+# difference in parameters.
+# These models, developed by leo lymburner and arnold dekker, are
+# simple, stable, and produce credible results over a range of
+# observations
 def TSM_LYM_ETM(
     dataset: xr.Dataset,
     green_band: str,
@@ -250,9 +256,10 @@ def TSM_LYM_OLI(
 
 # Qui Function to calculate Suspended Particulate Model value
 # Paper: Zhongfeng Qiu et.al. 2013 - except it's not.
-# This model seems to discriminate well although the scaling is questionable and it goes below zero due
-# to the final subtraction.
-# (The final subtraction seems immaterial in the context of our work (overly precise) and I skip it.)
+# This model seems to discriminate well although the scaling is
+# questionable and it goes below zero due to the final subtraction.
+# (The final subtraction seems immaterial in the context of our work
+# (overly precise) and I skip it.)
 def SPM_QIU(
     dataset: xr.Dataset, green_band: str, red_band: str
 ) -> xr.DataArray:
