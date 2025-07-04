@@ -22,13 +22,16 @@ def R_correction(
                 ref_var = dp_adjust[sensor]["ref_var"]
                 if ref_var not in ds.data_vars:
                     raise ValueError(
-                        f"Variable {ref_var} expected  but not found in the dataset - correction FAILING for sensor {sensor}",
+                        f"Variable {ref_var} expected  but not found in the "
+                        f"dataset - correction FAILING for sensor {sensor}",
                     )
                 else:
                     for target_var in dp_adjust[sensor]["var_list"]:
                         if target_var not in ds.data_vars:
                             raise ValueError(
-                                f"Variable {target_var} expected  but not found in the dataset; terminating the R_correction"
+                                f"Variable {target_var} expected  but not "
+                                "found in the dataset; terminating the "
+                                "R_correction"
                             )
                         else:
                             new_var = str(target_var + "r")
@@ -45,10 +48,12 @@ def R_correction(
 
             else:
                 log.info(
-                    f"Dark pixel correction requested for sensor {sensor} , but sensor is not used in analysis."
+                    f"Dark pixel correction requested for sensor {sensor}, "
+                    "but sensor is not used in analysis."
                 )
         else:
             raise ValueError(
-                f"Dark pixel correction requested for sensor {sensor}, but sensor is not listed in instruments to use."
+                f"Dark pixel correction requested for sensor {sensor}, but "
+                "sensor is not listed in instruments to use."
             )
     return ds
