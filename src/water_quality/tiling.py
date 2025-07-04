@@ -186,7 +186,7 @@ def get_africa_tiles(
 def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
     """
     Get the region code for a tile from its tile ID in the format
-    format "x{x:02d}{sep}y{y:02d}".
+    format "x{x:03d}{sep}y{y:03d}".
 
     Parameters
     ----------
@@ -202,20 +202,20 @@ def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
         Region code for the input tile ID.
     """
     x, y = tile_id
-    region_code_format = "x{x:02d}{sep}y{y:02d}"
+    region_code_format = "x{x:03d}{sep}y{y:03d}"
     region_code = region_code_format.format(x=x, y=y, sep=sep)
     return region_code
 
 
 def parse_region_code(region_code: str) -> tuple[int, int]:
     """
-    Parse a tile id in the string format "x{x:02d}{sep}y{y:02d}", into
+    Parse a tile id in the string format "x{x:03d}{sep}y{y:03d}", into
     the a tuple of integers (x, y).
 
     Parameters
     ----------
     region_code : str
-        Tile id in string format "x{x:02d}{sep}y{y:02d}".
+        Tile id in string format "x{x:03d}{sep}y{y:03d}".
 
     Returns
     -------
