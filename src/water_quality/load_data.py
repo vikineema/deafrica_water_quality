@@ -347,7 +347,7 @@ def build_wq_agm_dataset(
             )
 
     # All datasets expect those for the instrument wofs_all
-    # are expected to have the same time dimensions
+    # are expected to have the same time dimensions.
     combined = xr.merge(list(loaded_data.values()))
 
     return combined
