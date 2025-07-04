@@ -10,6 +10,7 @@ from typing import Iterator
 import geopandas as gpd
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
+from odc.stats._text import split_and_check
 
 from water_quality.africa_extent import AFRICA_EXTENT_URL
 from water_quality.grid import WaterbodiesGrid
@@ -42,30 +43,6 @@ def get_aoi_tiles(
     tiles = gridspec.tiles_from_geopolygon(aoi_geom)
 
     return tiles
-
-
-def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
-    """
-    Get the region code for a tile from its tile ID in the format
-    format "x{x:02d}{sep}y{y:02d}".
-
-    Parameters
-    ----------
-    tile_id : tuple[int, int]
-        Tile ID for the tile.
-    sep : str, optional
-        Seperator between the x and y parts of the region code, by
-        default ""
-
-    Returns
-    -------
-    str
-        Region code for the input tile ID.
-    """
-    x, y = tile_id
-    region_code_format = "x{x:02d}{sep}y{y:02d}"
-    region_code = region_code_format.format(x=x, y=y, sep=sep)
-    return region_code
 
 
 def get_tile_region_codes(
@@ -207,11 +184,34 @@ def get_africa_tiles(
     return tiles
 
 
+def get_region_code(tile_id: tuple[int, int], sep: str = "") -> str:
+    """
+    Get the region code for a tile from its tile ID in the format
+    format "x{x:02d}{sep}y{y:02d}".
+
+    Parameters
+    ----------
+    tile_id : tuple[int, int]
+        Tile ID for the tile.
+    sep : str, optional
+        Seperator between the x and y parts of the region code, by
+        default ""
+
+    Returns
+    -------
+    str
+        Region code for the input tile ID.
+    """
+    x, y = tile_id
+    region_code_format = "x{x:02d}{sep}y{y:02d}"
+    region_code = region_code_format.format(x=x, y=y, sep=sep)
+    return region_code
+
+
 def parse_region_code(region_code: str) -> tuple[int, int]:
     """
     Parse a tile id in the string format "x{x:02d}{sep}y{y:02d}", into
     the a tuple of integers (x, y).
-
 
     Parameters
     ----------
@@ -236,3 +236,54 @@ def parse_region_code(region_code: str) -> tuple[int, int]:
     tile_id = (tile_id_x, tile_id_y)
 
     return tile_id
+
+
+def create_task_id(year: str | int, tile_id: tuple[int, int] | str) -> str:
+    """Create  a task given a year and a tile id.
+
+    Parameters
+    ----------
+    year : str | int
+        Year to create the task for.
+    tile_id : tuple[int, int] | str
+        Tile ID for the tile to create the task for.
+
+    Returns
+    -------
+    str
+        Task ID
+    """
+    if isinstance(year, int):
+        year = str(year)
+    # task id format "{year}/x{x:02d}/y{y:02d}"
+    region_code = get_region_code(tile_id, sep="/")
+    task_id = f"{year}/{region_code}"
+    return task_id
+
+
+def parse_task_id(task_id: str) -> tuple[int, tuple[int, int]]:
+    """
+    Parse a task ID into the year and tile ID it was created from.
+
+    Parameters
+    ----------
+    task_id : str
+        Task ID to parse.
+
+    Returns
+    -------
+    tuple[int, tuple[int, int]]
+        Year and tile ID components of the task.
+    """
+    # Check Task id has only 3 parts
+    sep = "/" # based on seperator used in create_task_id
+    _ = split_and_check(task_id, sep, 3)
+
+    # Get the tile ID 
+    tile_id = parse_region_code(task_id)
+    
+    # Get the year
+    year_pattern = re.compile(r"\d{4}")
+    year_str = re.search(year_pattern, task_id).group(0) 
+    year = int(year_str)
+    return year, tile_id
