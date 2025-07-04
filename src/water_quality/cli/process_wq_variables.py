@@ -22,7 +22,11 @@ from water_quality.io import (
     get_filesystem,
     join_url,
 )
-from water_quality.load_data import build_dc_queries, build_wq_dataset
+from water_quality.load_data import (
+    build_dc_queries,
+    build_wq_agm_dataset,
+    fix_wofs_all_time,
+)
 from water_quality.logs import setup_logging
 from water_quality.optical_water_type import OWT_pixel
 from water_quality.pixel_corrections import R_correction
@@ -33,29 +37,6 @@ from water_quality.wq_algorithms import (
     ALGORITHMS_TSM,
     WQ_vars,
 )
-
-# Parameters for dark pixel correction
-DP_ADJUST = {
-    "msi_agm": {
-        "ref_var": "msi12_agm",
-        "var_list": [
-            "msi04_agm",
-            "msi03_agm",
-            "msi02_agm",
-            "msi05_agm",
-            "msi06_agm",
-            "msi07_agm",
-        ],
-    },
-    "oli_agm": {
-        "ref_var": "oli07_agm",
-        "var_list": ["oli04_agm", "oli03_agm", "oli02_agm"],
-    },
-    "tm_agm": {
-        "ref_var": "tm07_agm",
-        "var_list": ["tm04_agm", "tm03_agm", "tm02_agm", "tm01_agm"],
-    },
-}
 
 
 @click.command(
@@ -201,7 +182,12 @@ def cli(
             dc_queries = build_dc_queries(
                 instruments_to_use, tile_geobox, start_date, end_date
             )
-            ds = build_wq_dataset(dc_queries)
+            ds = build_wq_agm_dataset(dc_queries)
+
+            # Since only one year worth of data is loaded at a time
+            # assign data for the wofs_all instrument with the same
+            # time value as data from all other instruments.
+            ds = fix_wofs_all_time(ds)
 
             log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
@@ -214,7 +200,7 @@ def cli(
             )
 
             # Dark pixel correction
-            ds = R_correction(ds, DP_ADJUST, instruments_to_use, WFTL)
+            ds = R_correction(ds, instruments_to_use, WFTL)
 
             log.info("Calculating the hue.")
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
@@ -291,6 +277,7 @@ def cli(
                 (1.0 - (ds.wofs_ann_freq_sigma / ds.wofs_ann_freq)) * 100
             ).astype("int16")
 
+            # Write to disk
             parent_dir = join_url(output_directory, "WP1.4")
             output_file = join_url(
                 parent_dir,

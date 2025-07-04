@@ -351,3 +351,51 @@ def build_wq_agm_dataset(
     combined = xr.merge(list(loaded_data.values()))
 
     return combined
+
+
+def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
+    """
+    This is a work around to get data for the `wofs_all` instrument,
+    i.e. data loaded from the DE Africa `wofs_ls_summary_alltime`
+    product, to have the same time dimension (year) as data loaded from
+    all other instruments in a dataset.
+    > This only works if data loaded for all other instruments apart from
+    `wofs_all` was loaded for **one specific year only** using
+    `build_wq_agm_dataset`.
+
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset built using `build_wq_agm_dataset`.
+
+    Returns
+    -------
+    xr.Dataset
+        Input dataset with updated time dimension.
+    """
+    time_values = list(ds.time.values)
+    count = len(time_values)
+    if count < 1 or count > 2:
+        raise ValueError(
+            f"Expecting data for a single year.Found data for {time_values}"
+        )
+    else:
+        if count == 2:
+            wofs_all_vars = list(
+                get_measurements_name_dict("wofs_all").values()
+            )
+            # Recombine datasets with the correct time dimensions
+            ds_list = []
+            for var in list(ds.data_vars):
+                da = ds[var]
+                all_nan = da.isnull().all(dim=["y", "x"])
+                da = da.sel(time=~all_nan)
+                if var in wofs_all_vars:
+                    new_wofs_all_time = [
+                        i for i in time_values if i != da.time.values
+                    ][0]
+                    da = da.assign_coords(time=[new_wofs_all_time])
+                ds_list.append(da)
+            ds = xr.merge(ds_list)
+        return ds
