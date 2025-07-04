@@ -105,7 +105,8 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
         ]
         if missing_bands:
             raise KeyError(
-                f"Bands {', '.join(missing_bands)} missing in dataset for hue calculation"
+                f"Bands {', '.join(missing_bands)} missing in dataset for "
+                "hue calculation."
             )
 
     # Hue calculation
@@ -142,10 +143,13 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
         np.arctan2(Cdata["Ynd"], Cdata["Xnd"]) * (180.00 / np.pi) + 360.0, 360
     )
 
-    # ---- this gives the correct mathematical angle, ie. from 0 (=east), counter-clockwise as a positive number
-    # ---- note the 'arctan2' function, and that x and y are switched compared to expectations
+    # ---- this gives the correct mathematical angle, ie. from 0 (=east),
+    # counter-clockwise as a positive number.
+    # ---- note the 'arctan2' function, and that x and y are switched
+    # compared to expectations
 
-    # ---- code below is not used for pixel level processing, but is used by others / later!
+    # ---- code below is not used for pixel level processing, but is
+    # used by others / later!
     Cdata_summary["Xnd"] = (
         Cdata["Xnd"]
         .where(dataset["wofs_ann_freq"] > 0.9)
@@ -164,12 +168,14 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
     )
     # apply the hue adjustment - only do it once!
     log.info(
-        f"Average Hue values pre-adjustment : {Cdata_summary['hue'].values.round(1)}"
+        "Average Hue values pre-adjustment: "
+        f"{Cdata_summary['hue'].values.round(1)}"
     )
     Cdata = hue_adjust(Cdata)
     Cdata_summary = hue_adjust(Cdata_summary)
     log.info(
-        f"Average Hue values post-ajustment : {Cdata_summary['hue'].values.round(1)}"
+        "Average Hue values post-ajustment: "
+        f"{Cdata_summary['hue'].values.round(1)}"
     )
     # The summary output is not required for pixel-level processing,
     # but could be used later.
