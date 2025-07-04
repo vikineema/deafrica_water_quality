@@ -27,7 +27,7 @@ def create_task_id(year: str | int, tile_id: tuple[int, int] | str) -> str:
     """
     if isinstance(year, int):
         year = str(year)
-    # task id format "{year}/x{x:02d}/y{y:02d}"
+    # task id format "{year}/x{x:03d}/y{y:03d}"
     region_code = get_region_code(tile_id, sep="/")
     task_id = f"{year}/{region_code}"
     return task_id
