@@ -3,6 +3,8 @@ import sys
 
 import click
 import numpy as np
+import pandas as pd
+from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 
 from water_quality.dates import (
@@ -36,6 +38,7 @@ from water_quality.mapping.optical_water_type import OWT_pixel
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.tasks import parse_task_id
+from water_quality.tiling import get_region_code
 
 
 @click.command(
@@ -214,86 +217,93 @@ def cli(
             # If the arguments 'new_dimension_name' or 'new_varname'
             # are None (or empty), then the outputs will be retained as
             # separate variables in a 3d dataset.
-            if True:  # put the data into a new dimension, call the variable 'tss' or 'chla'
-                ds, tsm_vlist = WQ_vars(
-                    ds.where(ds.wofs_ann_freq >= WFTL),
-                    algorithms=ALGORITHMS_TSM,
-                    instruments_list=instruments_list,
-                    new_dimension_name="tss_measure",
-                    new_varname="tss",
-                )
-                ds, chla_vlist = WQ_vars(
-                    ds.where(ds.wofs_ann_freq >= WFTL),
-                    algorithms=ALGORITHMS_CHLA,
-                    instruments_list=instruments_list,
-                    new_dimension_name="chla_measure",
-                    new_varname="chla",
-                )
-            else:  # keep it simple, just add new data as new variables in a 3-D dataset
-                ds, tsm_vlist = WQ_vars(
-                    ds.where(ds.wofs_ann_freq >= WFTL),
-                    algorithms=ALGORITHMS_TSM,
-                    instruments_list=instruments_list,
-                    new_dimension_name=None,
-                    new_varname=None,
-                )
-                ds, chla_vlist = WQ_vars(
-                    ds.where(ds.wofs_ann_freq >= WFTL),
-                    algorithms=ALGORITHMS_CHLA,
-                    instruments_list=instruments_list,
-                    new_dimension_name=None,
-                    new_varname=None,
-                )
-            wq_varlist = np.append(tsm_vlist, chla_vlist)  # # noqa F841
+            ds, tsm_vlist = WQ_vars(
+                ds.where(ds.wofs_ann_freq >= WFTL),
+                algorithms=ALGORITHMS_TSM,
+                instruments_list=instruments_list,
+                new_dimension_name=None,
+                new_varname=None,
+            )
+            ds, chla_vlist = WQ_vars(
+                ds.where(ds.wofs_ann_freq >= WFTL),
+                algorithms=ALGORITHMS_CHLA,
+                instruments_list=instruments_list,
+                new_dimension_name=None,
+                new_varname=None,
+            )
+            # wq_varlist = np.append(tsm_vlist, chla_vlist)
 
-            keeplist = (
+            initial_keep_list = [
+                # wofs_ann instrument
+                "wofs_ann_freq",
                 "wofs_ann_clearcount",
                 "wofs_ann_wetcount",
-                "wofs_ann_freq",
+                # water_analysis
                 "wofs_ann_freq_sigma",
+                "wofs_ann_confidence",
                 "wofs_pw_threshold",
                 "wofs_ann_pwater",
                 "watermask",
+                # optical water type
                 "owt_msi",
+                # wq variables
                 "tss",
                 "chla",
-            )
-            # the keeplist is not complete;
-            # if the wq variables are retained as variables they will appear in a listing of data_vars.
-            # therefore, revert to the instruments dictionary to list variables to drop
+            ]
+            # The keeplist is not complete;
+            # if the wq variables are retained as variables they will
+            # appear in a listing of data_vars. Therefore, revert to the
+            # instruments dictionary to list variables to drop
             droplist = []
             for instrument in list(instruments_list.keys()):
                 for band in list(instruments_list[instrument].keys()):
                     variable = instruments_list[instrument][band]["varname"]
-                    if variable not in keeplist:
+                    if variable not in initial_keep_list:
                         droplist = np.append(droplist, variable)
                         droplist = np.append(droplist, variable + "r")
             for varname in droplist:
                 if varname in ds.data_vars:
                     ds = ds.drop_vars(varname)
 
-            ds["wofs_ann_confidence"] = (
-                (1.0 - (ds.wofs_ann_freq_sigma / ds.wofs_ann_freq)) * 100
-            ).astype("int16")
-
-            # Write to disk
-            parent_dir = join_url(output_directory, "WP1.4")
-            output_file = join_url(
-                parent_dir,
-                f"wp12_ds_{tile_idx}_{start_date}_{end_date}.nc",
+            # output_dir/x/y/year/file
+            parent_dir = join_url(
+                output_directory, get_region_code(tile_id, sep="/"), year
             )
-
-            fs = get_filesystem(output_directory, anon=False)
+            fs = get_filesystem(parent_dir, anon=False)
             if not check_directory_exists(parent_dir):
                 fs.makedirs(parent_dir, exist_ok=True)
 
-            with fs.open(output_file, "wb") as f:
-                ds.to_netcdf(f, engine="h5netcdf")
+            # Save each band into a COG file.
+            bands = list(ds.data_vars)
+            for band in bands:
+                file_name = (
+                    f"{band}_{get_region_code(tile_id, sep='')}_{year}.tif"
+                )
+                output_cog_url = join_url(parent_dir, file_name)
 
-            log.info(f"Water Quality variables written to {output_file}")
+                da = ds[band]
+                cog_bytes = write_cog(
+                    geo_im=da,
+                    fname=":mem:",
+                    overwrite=True,
+                )
+                with fs.open(output_cog_url, "wb") as f:
+                    f.write(cog_bytes)
+                log.info(f"Band {band} saved to {output_cog_url}")
+
+            # Save a table containing the water quality parameters
+            chla_df = pd.DataFrame(data=dict(chla_measure=chla_vlist))
+            tss_df = pd.DataFrame(data=dict(tss_measure=tsm_vlist))
+            wq_parameters_df = pd.concat([tss_df, chla_df], axis=1)
+            output_csv_url = join_url(
+                parent_dir,
+                f"water_quality_measures_{get_region_code(tile_id, sep='')}_{year}.csv",
+            )
+            with fs.open(output_csv_url, mode="w") as f:
+                wq_parameters_df.to_csv(f, index=False)
         except Exception as error:
             log.exception(error)
-            failed_tasks.append(tile_idx)
+            failed_tasks.append(task_id)
 
     if failed_tasks:
         failed_tasks_json_array = json.dumps(failed_tasks)
