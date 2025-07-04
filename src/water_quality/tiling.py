@@ -276,14 +276,14 @@ def parse_task_id(task_id: str) -> tuple[int, tuple[int, int]]:
         Year and tile ID components of the task.
     """
     # Check Task id has only 3 parts
-    sep = "/" # based on seperator used in create_task_id
+    sep = "/"  # based on seperator used in create_task_id
     _ = split_and_check(task_id, sep, 3)
 
-    # Get the tile ID 
+    # Get the tile ID
     tile_id = parse_region_code(task_id)
-    
+
     # Get the year
     year_pattern = re.compile(r"\d{4}")
-    year_str = re.search(year_pattern, task_id).group(0) 
+    year_str = re.search(year_pattern, task_id).group(0)
     year = int(year_str)
     return year, tile_id
