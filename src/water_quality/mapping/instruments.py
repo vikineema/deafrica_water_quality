@@ -7,14 +7,14 @@ log = logging.getLogger(__name__)
 
 INSTRUMENTS_DATES = {
     "oli_agm": [2013, 2024],
-    "oli": [2013, 2024],
+    "oli": [2013, 2025],
     "msi_agm": [2017, 2024],
-    "msi": [2017, 2024],
+    "msi": [2017, 2025],
     "wofs_ann": [1990, 2024],
     "wofs_all": [1990, 2024],
     "tm_agm": [1990, 2012],
-    "tm": [1990, 2012],
-    "tirs": [2000, 2024],
+    "tm": [1990, 2023],
+    "tirs": [2000, 2025],
 }
 
 # Here is where to turn a particular band on or off, using the 'parameters' entry
@@ -98,7 +98,7 @@ INSTRUMENTS_MEASUREMENTS = {
                 "uint16 	1 	0.0 	[band_12, swir_2, swir_22] 	NaN",
             ),
         },
-        "smad": {"varname": ("msi05_agm_smad"), "parameters": (True,)},
+        "smad": {"varname": ("msi_agm_smad"), "parameters": (True,)},
         "emad": {"varname": ("msi_agm_emad"), "parameters": (True,)},
         "bcmad": {"varname": ("msi_agm_bcmad"), "parameters": (True,)},
         "count": {"varname": ("msi_agm_count"), "parameters": (True,)},
