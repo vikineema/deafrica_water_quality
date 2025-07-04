@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 
-from water_quality.hue import hue_calculation
+from water_quality.mapping.hue import hue_calculation
 
 
 def test_hue_oli_agm_instrument(pixel_corrections_validation_ds):

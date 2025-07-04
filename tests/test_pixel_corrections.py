@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 
-from water_quality.pixel_corrections import R_correction
+from water_quality.mapping.pixel_correction import R_correction
 
 TEST_DP_ADJUST = {
     "msi_agm": {

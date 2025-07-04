@@ -1,5 +1,4 @@
 import logging
-from datetime import date, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -7,7 +6,8 @@ import xarray as xr
 from datacube import Datacube
 from odc.geo.geobox import GeoBox
 
-from water_quality.instruments import INSTRUMENTS_MEASUREMENTS
+from water_quality.dates import year_to_dc_datetime
+from water_quality.mapping.instruments import INSTRUMENTS_MEASUREMENTS
 
 log = logging.getLogger(__name__)
 
@@ -163,32 +163,6 @@ def build_dc_queries(
     return dc_queries
 
 
-def middle_date(year: int) -> date:
-    start = date(year, 1, 1)
-    end = date(year, 12, 31)
-    delta = (end - start).days // 2
-    return start + timedelta(days=delta)
-
-
-def year_to_datetime(year: int) -> datetime:
-    mid_year_date = middle_date(year)
-    # Convert to datetime (default time is midnight)
-    mid_year_datetime = datetime.combine(mid_year_date, datetime.min.time())
-    if mid_year_datetime.day == 2:
-        mid_year_datetime = mid_year_datetime.replace(
-            hour=11, minute=59, second=59, microsecond=999999
-        )
-    elif mid_year_datetime.day == 1:
-        mid_year_datetime = mid_year_datetime.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
-    else:
-        raise ValueError(
-            f"Unexpected mid year date {mid_year_datetime} for the year {year}"
-        )
-    return mid_year_datetime
-
-
 def process_st_data_to_annnual(
     ds_tirs: xr.Dataset, ds_wofs_ann: xr.Dataset
 ) -> xr.Dataset:
@@ -268,7 +242,7 @@ def process_st_data_to_annnual(
     # Replace the year coordinate with datetime64[ns] time coordinate
     annual_ds_tirs = annual_ds_tirs.rename({"year": "time"})
     time_values = np.array(
-        [year_to_datetime(i) for i in annual_ds_tirs.time.values],
+        [year_to_dc_datetime(i) for i in annual_ds_tirs.time.values],
         dtype="datetime64[ns]",
     )
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
@@ -300,59 +274,6 @@ def process_st_data_to_annnual(
     return annual_ds_tirs
 
 
-def build_wq_agm_dataset(
-    dc_queries: dict[str, dict[str, Any]], dc: Datacube = None
-) -> xr.Dataset:
-    """Build a combined annual dataset from loading data
-    for each instrument using the datacube queries provided.
-
-    Parameters
-    ----------
-    dc_queries : dict[str, dict[str, Any]]
-        Datacube query to use to load data for each instrument.
-
-    Returns
-    -------
-    xr.Dataset
-        A single dataset containing all the data found for each instrument
-        in the datacube.
-    """
-    if dc is None:
-        dc = Datacube()
-
-    loaded_data = {}
-    for instrument_name, dc_query in dc_queries.items():
-        ds = dc.load(**dc_query)
-        # Skipping squeeze for wofs_all
-        # until further notice.
-        """
-        if instrument_name == "wofs_all":
-            ds = ds.squeeze(dim="time", drop=True)
-        """
-        ds = ds.rename(get_measurements_name_dict(instrument_name))
-        loaded_data[instrument_name] = ds
-
-    # Process temperature data to an annual timeseries
-    if "tirs" in loaded_data.keys():
-        if "wofs_ann" not in loaded_data.keys():
-            raise ValueError(
-                "Data for the wofs_ann instrument is required to process "
-                "daily surface temperature data for the tirs instrument into "
-                "an annual timeseries."
-            )
-        else:
-            loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"],
-                ds_wofs_ann=loaded_data["wofs_ann"],
-            )
-
-    # All datasets expect those for the instrument wofs_all
-    # are expected to have the same time dimensions.
-    combined = xr.merge(list(loaded_data.values()))
-
-    return combined
-
-
 def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
     """
     This is a work around to get data for the `wofs_all` instrument,
@@ -378,7 +299,7 @@ def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
     count = len(time_values)
     if count < 1 or count > 2:
         raise ValueError(
-            f"Expecting data for a single year.Found data for {time_values}"
+            f"Expecting data for a single year. Found data for {time_values}"
         )
     else:
         if count == 2:
@@ -390,6 +311,7 @@ def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
             for var in list(ds.data_vars):
                 da = ds[var]
                 all_nan = da.isnull().all(dim=["y", "x"])
+                # Remove empty time steps.
                 da = da.sel(time=~all_nan)
                 if var in wofs_all_vars:
                     new_wofs_all_time = [
@@ -399,3 +321,61 @@ def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
                 ds_list.append(da)
             ds = xr.merge(ds_list)
         return ds
+
+
+def build_wq_agm_dataset(
+    dc_queries: dict[str, dict[str, Any]],
+    dc: Datacube = None,
+    single_year: bool = False,
+) -> xr.Dataset:
+    """Build a combined annual dataset from loading data
+    for each instrument using the datacube queries provided.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+
+    single_year : bool
+        Specify if data is being loaded for **one specific year only**.
+        If it is and data for the `wofs_all` instrument is loaded, the
+        `wofs_all` DataArrays will be assigned the time value matching
+        other annual datasets.
+
+    Returns
+    -------
+    xr.Dataset
+        A single dataset containing all the data found for each instrument
+        in the datacube.
+    """
+    if dc is None:
+        dc = Datacube()
+
+    loaded_data: dict[str, xr.Dataset] = {}
+    for instrument_name, dc_query in dc_queries.items():
+        ds = dc.load(**dc_query)
+        ds = ds.rename(get_measurements_name_dict(instrument_name))
+        loaded_data[instrument_name] = ds
+
+    # Process temperature data to an annual timeseries
+    if "tirs" in loaded_data.keys():
+        if "wofs_ann" not in loaded_data.keys():
+            raise ValueError(
+                "Data for the wofs_ann instrument is required to process "
+                "daily surface temperature data for the tirs instrument into "
+                "an annual timeseries."
+            )
+        else:
+            loaded_data["tirs"] = process_st_data_to_annnual(
+                ds_tirs=loaded_data["tirs"],
+                ds_wofs_ann=loaded_data["wofs_ann"],
+            )
+
+    # All datasets expect those for the instrument wofs_all
+    # are expected to have the same time dimensions.
+    combined = xr.merge(list(loaded_data.values()))
+
+    if single_year:
+        combined = fix_wofs_all_time(combined)
+
+    return combined

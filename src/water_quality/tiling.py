@@ -11,8 +11,8 @@ import geopandas as gpd
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
+from water_quality.africa_extent import AFRICA_EXTENT_URL
 from water_quality.grid import WaterbodiesGrid
-from water_quality.utils import AFRICA_EXTENT_URL
 
 log = logging.getLogger(__name__)
 

@@ -5,38 +5,37 @@ import click
 import numpy as np
 from odc.stats._cli_common import click_yaml_cfg
 
-from water_quality.config import check_config
-from water_quality.date import (
+from water_quality.dates import (
     validate_end_date,
     validate_start_date,
 )
 from water_quality.grid import WaterbodiesGrid
-from water_quality.hue import hue_calculation
-from water_quality.instruments import (
-    check_instrument_dates,
-    get_instruments_list,
-)
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
     get_filesystem,
     join_url,
 )
-from water_quality.load_data import (
-    build_dc_queries,
-    build_wq_agm_dataset,
-    fix_wofs_all_time,
-)
 from water_quality.logs import setup_logging
-from water_quality.optical_water_type import OWT_pixel
-from water_quality.pixel_corrections import R_correction
-from water_quality.tasks import parse_task_id
-from water_quality.water_detection import water_analysis
-from water_quality.wq_algorithms import (
+from water_quality.mapping.algorithms import (
     ALGORITHMS_CHLA,
     ALGORITHMS_TSM,
     WQ_vars,
 )
+from water_quality.mapping.config import check_config
+from water_quality.mapping.hue import hue_calculation
+from water_quality.mapping.instruments import (
+    check_instrument_dates,
+    get_instruments_list,
+)
+from water_quality.mapping.load_data import (
+    build_dc_queries,
+    build_wq_agm_dataset,
+)
+from water_quality.mapping.optical_water_type import OWT_pixel
+from water_quality.mapping.pixel_correction import R_correction
+from water_quality.mapping.water_detection import water_analysis
+from water_quality.tasks import parse_task_id
 
 
 @click.command(
@@ -182,12 +181,10 @@ def cli(
             dc_queries = build_dc_queries(
                 instruments_to_use, tile_geobox, start_date, end_date
             )
-            ds = build_wq_agm_dataset(dc_queries)
-
             # Since only one year worth of data is loaded at a time
             # assign data for the wofs_all instrument with the same
             # time value as data from all other instruments.
-            ds = fix_wofs_all_time(ds)
+            ds = build_wq_agm_dataset(dc_queries, single_year=True)
 
             log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
@@ -209,12 +206,14 @@ def cli(
             ds["owt_msi"] = OWT_pixel(ds, instrument="msi_agm")
 
             log.info("Applying the WQ algorithms to water areas.")
-            # Apply the WQ algorithms to water areas, adding variables to the dataset and building
-            # a list of water quality variable names
-            # this can be run either keeping the wq variables as separate variables on the dataset,
-            # or by moving them into new dimensions, 'tss' and 'chla'
-            # If the arguments 'new_dimension_name' or 'new_varname' are None (or empty),
-            # then the outputs will be retained as separate variables in a 3d dataset
+            # Apply the WQ algorithms to water areas, adding variables
+            # to the dataset and building a list of water quality
+            # variable names. This can be run by either keeping the wq
+            # variables as separate variables in the dataset, or by
+            # moving them into new dimensions, 'tss' and 'chla'.
+            # If the arguments 'new_dimension_name' or 'new_varname'
+            # are None (or empty), then the outputs will be retained as
+            # separate variables in a 3d dataset.
             if True:  # put the data into a new dimension, call the variable 'tss' or 'chla'
                 ds, tsm_vlist = WQ_vars(
                     ds.where(ds.wofs_ann_freq >= WFTL),

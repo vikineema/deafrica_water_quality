@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from water_quality.instruments import (
+from water_quality.mapping.instruments import (
     check_instrument_dates,
     validate_date_str,
     validate_end_date,
