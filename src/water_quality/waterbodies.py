@@ -15,7 +15,7 @@ from deafrica_tools.waterbodies import (
 )
 from shapely.geometry import box
 
-from water_quality.utils import AFRICA_EXTENT_URL
+from water_quality.africa_extent import AFRICA_EXTENT_URL
 
 
 def get_processed_lakes() -> gpd.GeoDataFrame:

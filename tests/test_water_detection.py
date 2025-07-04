@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 
-from water_quality.water_detection import water_analysis
+from water_quality.mapping.water_detection import water_analysis
 
 
 def test_water_detection_invalid_wofs_varname(random_xr_dataset):

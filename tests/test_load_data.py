@@ -1,9 +1,9 @@
 import pytest
 import xarray as xr
 
-from water_quality.load_data import (
+from water_quality.mapping.load_data import (
     build_dc_queries,
-    build_wq_dataset,
+    build_wq_agm_dataset,
     get_dc_measurements,
     get_dc_products,
     get_measurements_name_dict,
@@ -169,7 +169,7 @@ def test_build_wq_dataset_single_instrument(
             "resampling": "bilinear",
         },
     }
-    ds = build_wq_dataset(dc_queries)
+    ds = build_wq_agm_dataset(dc_queries)
 
     expected_results = build_dataset_validation_ds[
         [
@@ -237,5 +237,5 @@ def test_build_wq_dataset_multi_instrument(
             "resampling": "bilinear",
         },
     }
-    ds = build_wq_dataset(dc_queries)
+    ds = build_wq_agm_dataset(dc_queries)
     xr.testing.assert_allclose(ds, expected_results)

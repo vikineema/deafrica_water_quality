@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from water_quality.date import validate_end_date, validate_start_date
+from water_quality.dates import validate_end_date, validate_start_date
 
 log = logging.getLogger(__name__)
 
