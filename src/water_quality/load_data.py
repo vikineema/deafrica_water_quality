@@ -293,13 +293,17 @@ def process_st_data_to_annnual(
         annual_ds_tirs["tirs_st_ann_max"],
         np.nan,
     )
+
+    # Clean up
+    annual_ds_tirs = annual_ds_tirs.drop_vars("quantile")
+
     return annual_ds_tirs
 
 
-def build_wq_dataset(
+def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]], dc: Datacube = None
 ) -> xr.Dataset:
-    """Build a combined dataset from loading data
+    """Build a combined annual dataset from loading data
     for each instrument using the datacube queries provided.
 
     Parameters
@@ -342,8 +346,8 @@ def build_wq_dataset(
                 ds_wofs_ann=loaded_data["wofs_ann"],
             )
 
-    combined = xr.Dataset()
-    for instrument_name, ds in loaded_data.items():
-        combined = combined.combine_first(ds)
+    # All datasets expect those for the instrument wofs_all
+    # are expected to have the same time dimensions
+    combined = xr.merge(list(loaded_data.values()))
 
     return combined
