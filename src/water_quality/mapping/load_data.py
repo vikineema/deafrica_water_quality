@@ -122,6 +122,7 @@ def build_dc_queries(
     start_date: str,
     end_date: str,
     resampling: str = "bilinear",
+    dask_chunks: dict[str, int] = {},
 ) -> dict[str, dict[str, Any]]:
     """
     Build a reusable datacube query for each instrument to load
@@ -140,7 +141,8 @@ def build_dc_queries(
         The end of the time range to load data for.
     resampling : str, optional
         Resampling method to use, by default "bilinear".
-
+    dask_chunks:  dict[str, int]
+        Number of chunks for dask arrays, by default {}
     Returns
     -------
     dict[str, dict[str, Any]]
@@ -157,6 +159,7 @@ def build_dc_queries(
                 like=tile_geobox,
                 time=(start_date, end_date),
                 resampling=resampling,
+                dask_chunks=dask_chunks,
                 # align=(0, 0), not supported when using like
             )
             dc_queries[instrument_name] = dc_query
