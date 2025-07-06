@@ -556,6 +556,10 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'SA_smalldam':         {'run':True, "xyt" :{"x": ( 19.494,  19.498),   "y" : ( -33.802, -33.800),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa"          },
         'SA_smalldam1':        {'run':True, "xyt" :{"x": ( 19.505, 19.510),   "y" : ( -33.8065, -33.803),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa, clear water"     },
         'Ethiopia_both':       {'run':False, "xyt" :{"x": ( 38.35,   38.83),    "y" : (   7.37 ,   7.71), "time": (year1,year2)  },"desc": "Ethiopia, Lake Abiata +"          },
+        'Lake Chomo'   :       {'run':True, "xyt" :{"x": ( 37.45,   37.65) ,   "y" : (   5.685 ,  5.979), "time": (year1,year2)  },"desc": "Lake Chomo, Ethiopia"          },
+        'Lake Ziway'   :       {'run':True, "xyt" :{"x": ( 38.711,  38.966),   "y" : (   7.838 ,  8.148), "time": (year1,year2)  },"desc": "Lake Ziway, Ethiopia"          },
+        'Lake Alwassa' :       {'run':True, "xyt" :{"x": ( 38.380,  38.493),   "y" : (   6.977 ,  7.133), "time": (year1,year2)  },"desc": "Lake Alwassa, Ethiopia"          },
+        'Lake Elmenteita' :    {'run':True, "xyt" :{"x": ( 36.211,  36.273),   "y" : (  -0.488 , -0.401), "time": (year1,year2)  },"desc": "Lake Elmenteita, Kenya"          },
         'Madagascar':          {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
         'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.724 ,  35.929 ), "y" : ( -03.814, -03.409), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
         'Farihy_':             {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
