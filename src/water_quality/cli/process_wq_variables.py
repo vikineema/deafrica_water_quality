@@ -11,7 +11,7 @@ from water_quality.dates import (
     validate_end_date,
     validate_start_date,
 )
-from water_quality.grid import WaterbodiesGrid
+from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
@@ -154,12 +154,13 @@ def cli(
     # ------------------------------------------------ #
     analysis_config = check_config(analysis_config)
 
+    resolution_m = int(analysis_config["resolution"])
     instruments_to_use = analysis_config["instruments_to_use"]
     WFTH = analysis_config["water_frequency_threshold_high"]
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
-    gridspec = WaterbodiesGrid().gridspec
+    gridspec = get_waterbodies_grid(resolution_m)
 
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
