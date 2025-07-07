@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+import dask
 import numpy as np
 import xarray as xr
 from datacube import Datacube
@@ -210,37 +211,32 @@ def process_st_data_to_annnual(
     """
     # Rescale the daily timeseries to centigrade, remove outliers,
     # apply quality filter and also filter on emissivity > 0.95.
-    ds_tirs["tirs_st"] = (ds_tirs.tirs_st * 0.00341802 + 149.0) - 273.15
-    ds_tirs["tirs_st_qa"] = (
-        ds_tirs["tirs_st_qa"] * 0.01
-    )  # -- uncertainty in kelvin
-    ds_tirs["tirs_emis"] = (
-        ds_tirs["tirs_emis"] * 0.0001
-    )  # -- emissivity fraction
-    ds_tirs["tirs_st"] = xr.where(
-        ds_tirs["tirs_st"] > 0,
-        xr.where(
-            ds_tirs["tirs_st_qa"] < 5,
-            xr.where(ds_tirs["tirs_emis"] > 0.95, ds_tirs["tirs_st"], np.nan),
-            np.nan,
-        ),
-        np.nan,
-    )
+    tirs_st = (ds_tirs["tirs_st"] * 0.00341802 + 149.0) - 273.15
+    # -- uncertainty in kelvin
+    tirs_st_qa = ds_tirs["tirs_st_qa"] * 0.01
+    # -- emissivity fraction
+    tirs_emis = ds_tirs["tirs_emis"] * 0.0001
+
+    valid_mask = (tirs_st > 0) & (tirs_st_qa < 5) & (tirs_emis > 0.95)
+    ds_tirs["tirs_st"] = tirs_st.where(valid_mask)
+
+    # Drop intermediate arrays to reduce memory
+    del tirs_st, tirs_st_qa, tirs_emis, valid_mask
+
+    # If dask backed
+    if ds_tirs.chunks is not None:
+        # Rechunk so the time dimension has only one chunk
+        # for the quantile commputation
+        ds_tirs = ds_tirs.chunk({"time": ds_tirs.sizes["time"]})
+
     # Create an empty annual dataset
-    annual_ds_tirs = (
-        xr.Dataset(coords=ds_tirs.coords).groupby("time.year").mean()
-    )
+    annual_ds_tirs = xr.Dataset()
 
     # Average the temperatures up to years - min, max and mean
-    annual_ds_tirs["tirs_st_ann_med"] = (
-        ds_tirs["tirs_st"].groupby("time.year").median(dim="time")
-    )
-    annual_ds_tirs["tirs_st_ann_min"] = (
-        ds_tirs["tirs_st"].groupby("time.year").quantile(0.1, dim="time")
-    )
-    annual_ds_tirs["tirs_st_ann_max"] = (
-        ds_tirs["tirs_st"].groupby("time.year").quantile(0.9, dim="time")
-    )
+    group = ds_tirs["tirs_st"].groupby("time.year")
+    annual_ds_tirs["tirs_st_ann_med"] = group.median(dim="time")
+    annual_ds_tirs["tirs_st_ann_min"] = group.quantile(0.1, dim="time")
+    annual_ds_tirs["tirs_st_ann_max"] = group.quantile(0.9, dim="time")
 
     # Replace the year coordinate with datetime64[ns] time coordinate
     annual_ds_tirs = annual_ds_tirs.rename({"year": "time"})
@@ -252,28 +248,17 @@ def process_st_data_to_annnual(
 
     # Restrict values to areas of water
     water_frequency_threshold = 0.5
-    annual_ds_tirs["tirs_st_ann_med"] = xr.where(
+    water_mask = (
         ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
-        > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_med"],
-        np.nan,
+        > water_frequency_threshold
     )
-    annual_ds_tirs["tirs_st_ann_min"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
-        > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_min"],
-        np.nan,
-    )
-    annual_ds_tirs["tirs_st_ann_max"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
-        > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_max"],
-        np.nan,
-    )
+
+    for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
+        annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
 
     # Clean up
-    annual_ds_tirs = annual_ds_tirs.drop_vars("quantile")
-
+    # annual_ds_tirs = annual_ds_tirs.compute()
+    # annual_ds_tirs = annual_ds_tirs.drop_vars("quantile")
     return annual_ds_tirs
 
 
@@ -376,7 +361,9 @@ def build_wq_agm_dataset(
 
     # All datasets expect those for the instrument wofs_all
     # are expected to have the same time dimensions.
-    combined = xr.merge(list(loaded_data.values()))
+    results = dask.compute(*list(loaded_data.values()))
+    combined = xr.merge(results)
+    combined = combined.drop_vars("quantile", errors="ignore")
 
     if single_year:
         combined = fix_wofs_all_time(combined)
