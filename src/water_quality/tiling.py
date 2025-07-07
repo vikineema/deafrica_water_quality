@@ -12,13 +12,13 @@ from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
 from water_quality.africa_extent import AFRICA_EXTENT_URL
-from water_quality.grid import WaterbodiesGrid
+from water_quality.grid import get_waterbodies_grid
 
 log = logging.getLogger(__name__)
 
 
 def get_aoi_tiles(
-    aoi_geom: Geometry,
+    aoi_geom: Geometry, resolution: int
 ) -> Iterator[tuple[tuple[int, int], GeoBox]]:
     """
     Get the tiles covering an area of interest defined by the input
@@ -28,6 +28,8 @@ def get_aoi_tiles(
     ----------
     aoi_geom : Geometry
         Polygon defining the area of interest.
+    resolution: int
+        Resolution for each tile's Geobox
 
     Returns
     -------
@@ -36,7 +38,7 @@ def get_aoi_tiles(
         tuples.
     """
     # Tiles to match the DE Africa Landsat GeoMAD products tiles.
-    gridspec = WaterbodiesGrid().gridspec
+    gridspec = get_waterbodies_grid(resolution)
     aoi_geom = aoi_geom.to_crs(gridspec.crs)
 
     tiles = gridspec.tiles_from_geopolygon(aoi_geom)
@@ -152,6 +154,7 @@ def tiles_to_gdf(
 
 
 def get_africa_tiles(
+    resolution: int,
     save_to_disk: bool = False,
 ) -> Iterator[tuple[tuple[int, int], GeoBox]]:
     """
@@ -161,7 +164,8 @@ def get_africa_tiles(
     ----------
     save_to_disk : bool
         If True write the tile extents for the tiles to a parquet file.
-
+    resolution: int
+        Resolution for each tile's Geobox
     Returns
     -------
     Iterator[tuple[tuple[int, int], GeoBox]]
@@ -174,7 +178,7 @@ def get_africa_tiles(
     africa_extent_geom = Geometry(
         geom=africa_extent.iloc[0].geometry, crs=africa_extent.crs
     )
-    tiles = get_aoi_tiles(africa_extent_geom)
+    tiles = get_aoi_tiles(africa_extent_geom, resolution)
     if save_to_disk is True:
         tiles_gdf = tiles_to_gdf(tiles)
         output_fp = "water_quality_regions.parquet"
