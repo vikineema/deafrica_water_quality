@@ -6,7 +6,8 @@ def check_config(analysis_config: dict):
         )
 
     config_items = [
-        "resolutioninstruments_to_use",
+        "resolution",
+        "instruments_to_use",
         "water_frequency_threshold_high",
         "water_frequency_threshold_low",
         "permanent_water_threshold",
