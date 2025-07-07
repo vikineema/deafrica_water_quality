@@ -128,4 +128,9 @@ water_frequency_threshold_high: 0.5
 water_frequency_threshold_low: 0.1
 permanent_water_threshold : 0.0875
 sigma_coefficient : 1.2
-```
+````
+
+## Water Quality
+
+The file `"wq_tile_ids_and_waterbodies_uids.parquet"` in the data folder matches the `uids` for all waterbodies in the DE Africa Historical Extent product with the tile IDs  of the tiles each waterbody intersects with.
+This file is to be updated with each new release of the DE Africa Historical Extent product using the script `data/tiles_and_waterbody_uids.py`.

@@ -1,12 +1,18 @@
+from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import box
 
+from water_quality.io import join_url
 from water_quality.logs import setup_logging
 
 
-def place_to_parquet(output_file: str):
+def place_to_parquet():
     log = setup_logging()
+    data_dir = Path(__file__).resolve().parent
+    output_file = join_url(str(data_dir), "places.parquet")
+
     year1, year2 = 2000, 2000
     places = {
         "Lake_Baringo": {
@@ -609,4 +615,4 @@ def place_to_parquet(output_file: str):
 
 
 if __name__ == "__main__":
-    place_to_parquet("places.parquet")
+    place_to_parquet()
