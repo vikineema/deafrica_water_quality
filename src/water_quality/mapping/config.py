@@ -1,11 +1,12 @@
 def check_config(analysis_config: dict):
     if analysis_config is None:
         raise ValueError(
-            "Please provide a config for the analysis parameters in yaml format, file or text"
+            "Please provide a config for the analysis parameters in "
+            "yaml format, file or text"
         )
 
     config_items = [
-        "instruments_to_use",
+        "resolutioninstruments_to_use",
         "water_frequency_threshold_high",
         "water_frequency_threshold_low",
         "permanent_water_threshold",
