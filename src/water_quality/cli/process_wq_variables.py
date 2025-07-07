@@ -187,8 +187,14 @@ def cli(
 
             log.info("Building the multivariate/multi-sensor dataset")
             # build the multivariate/multi-sensor dataset.
+            xy_chunk_size = int(tile_geobox.shape.x / 5)
+            dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
             dc_queries = build_dc_queries(
-                instruments_to_use, tile_geobox, start_date, end_date
+                instruments_to_use=instruments_to_use,
+                tile_geobox=tile_geobox,
+                start_date=start_date,
+                end_date=end_date,
+                dask_chunks=dask_chunks,
             )
             # Since only one year worth of data is loaded at a time
             # assign data for the wofs_all instrument with the same
