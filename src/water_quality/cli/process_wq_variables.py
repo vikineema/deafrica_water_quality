@@ -284,7 +284,7 @@ def cli(
 
             # output_dir/x/y/year/file
             parent_dir = join_url(
-                output_directory, get_region_code(tile_id, sep="/"), year
+                output_directory, get_region_code(tile_id, sep="/"), str(year)
             )
             fs = get_filesystem(parent_dir, anon=False)
             if not check_directory_exists(parent_dir):
