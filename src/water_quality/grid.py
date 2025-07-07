@@ -17,7 +17,15 @@ def get_waterbodies_grid(resolution: int) -> GridSpec:
     GridSpec
         Gridspec to be used for tiling.
     """
-    resolution = abs(resolution)
+    if resolution < 0:
+        raise ValueError(
+            f"Expecting positive value for resolution not {resolution}"
+        )
+    if not isinstance(resolution, int):
+        raise ValueError(
+            f"Expecting resolution to be an integer not {resolution}"
+        )
+
     tile_size = 96000
     tile_shape = tile_size / resolution
 
