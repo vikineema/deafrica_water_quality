@@ -8,7 +8,7 @@ export ENV_FILE
 
 BBOX := 19.235895457610976,-34.027444770665454,19.567548827569784,-33.72657357504392
 INDEX_LIMIT := 200
-INDEX_DATE_START := 2023-01-01
+INDEX_DATE_START := 2013-01-01
 INDEX_DATE_END := 2024-12-31
 
 build:
@@ -68,6 +68,14 @@ index-wofs_ls_summary_alltime:
 		--collections=wofs_ls_summary_alltime \
 		--bbox=$(BBOX) \
 		--limit=$(INDEX_LIMIT)
+	@echo "$$(date) Done with wofs_ls_summary_alltime"
+
+index-landsat-temp:
+	@echo "$$(date) Start with landsat temp"
+	docker compose exec -T jupyter stac-to-dc \
+		--catalog-href=https://explorer.digitalearth.africa/stac/ \
+		--collections=ls5_st,ls7_st,ls8_st,ls9_st \
+		--bbox=$(BBOX) 
 	@echo "$$(date) Done with wofs_ls_summary_alltime"
 
 install-pkg: ## Editable install of package for development
