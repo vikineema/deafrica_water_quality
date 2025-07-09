@@ -511,6 +511,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     # - the input argument tells it which parameters to choose
     # - secondary parameters such as the grid resolution are computed and returned
 
+    if year1 == None: year1 = '2000'
+    if year2 == None: year2 = '2024'
     '''
     the structure is:
     - a dictionary of lists, called 'places'. Each list contains:
