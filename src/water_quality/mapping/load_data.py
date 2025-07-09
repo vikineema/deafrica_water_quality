@@ -291,7 +291,7 @@ def build_wq_agm_dataset(
         instrument in the datacube.
     """
     if dc is None:
-        dc = Datacube("Build_wq_agm_dataset")
+        dc = Datacube(app="Build_wq_agm_dataset")
 
     loaded_data: dict[str, xr.Dataset] = {}
     for instrument_name, dc_query in dc_queries.items():
