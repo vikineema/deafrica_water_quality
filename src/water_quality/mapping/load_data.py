@@ -331,6 +331,7 @@ def build_wq_agm_dataset(
             loaded_data["tirs"].odc.geobox,
             resolution_m=most_common_res,
         )
+        loaded_data["tirs"] = loaded_data["tirs"].compute()
         loaded_data["tirs"] = xr_reproject(
             loaded_data["tirs"],
             how=new_geobox,
