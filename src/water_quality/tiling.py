@@ -12,7 +12,7 @@ from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
 from water_quality.africa_extent import AFRICA_EXTENT_URL
-from water_quality.grid import get_waterbodies_grid
+from water_quality.grid import check_resolution, get_waterbodies_grid
 
 log = logging.getLogger(__name__)
 
@@ -235,3 +235,30 @@ def parse_region_code(region_code: str) -> tuple[int, int]:
     tile_id = (tile_id_x, tile_id_y)
 
     return tile_id
+
+
+def reproject_tile_geobox(tile_geobox: GeoBox, resolution_m: int) -> GeoBox:
+    """
+    Modify GeoBox to have a different pixel resolution but still
+    covering the same region.
+
+    Parameters
+    ----------
+    tile_geobox : GeoBox
+        Geobox to reproject.
+    resolution_m : int
+        Resolution in metres to reproject the Geobox to.
+
+    Returns
+    -------
+    GeoBox
+        Modified Geobox.
+    """
+    resolution_m = check_resolution(resolution_m)
+
+    new_geobox = GeoBox.from_geopolygon(
+        geopolygon=tile_geobox.extent,
+        resolution=resolution_m,
+        crs=tile_geobox.crs,
+    )
+    return new_geobox

@@ -201,7 +201,7 @@ def cli(
             # Since only one year worth of data is loaded at a time
             # assign data for the wofs_all instrument with the same
             # time value as data from all other instruments.
-            ds = build_wq_agm_dataset(dc_queries, single_year=True)
+            ds = build_wq_agm_dataset(dc_queries)
 
             log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
