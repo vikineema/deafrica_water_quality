@@ -18,7 +18,7 @@ def water_analysis(
     permanent_water_threshold: float = 0.875,
     sigma_coefficient: float = 1.2,
 ):
-    VALID_VARIABLES = ["wofs_ann_freq", "wofs_all_freq"]
+    VALID_VARIABLES = ["wofs_ann_freq"]
     if wofs_varname not in VALID_VARIABLES:
         log.error(
             f"Invalid variable name {wofs_varname}! "

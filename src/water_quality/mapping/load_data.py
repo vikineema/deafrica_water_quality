@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from typing import Any
 
 import dask
@@ -6,9 +7,11 @@ import numpy as np
 import xarray as xr
 from datacube import Datacube
 from odc.geo.geobox import GeoBox
+from odc.geo.xr import xr_reproject
 
 from water_quality.dates import year_to_dc_datetime
 from water_quality.mapping.instruments import INSTRUMENTS_MEASUREMENTS
+from water_quality.tiling import reproject_tile_geobox
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +21,6 @@ INSTRUMENTS_PRODUCTS = {
     "msi_agm": ["gm_s2_annual"],
     "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
     "wofs_ann": ["wofs_ls_summary_annual"],
-    "wofs_all": ["wofs_ls_summary_alltime"],
 }
 
 
@@ -154,10 +156,18 @@ def build_dc_queries(
         if usage["use"] is True:
             dc_products = get_dc_products(instrument_name)
             dc_measurements = get_dc_measurements(instrument_name)
+            if (
+                instrument_name == "tirs"
+                and int(tile_geobox.resolution.x) != 30
+            ):
+                # Load temperature data at native resolution.
+                like = reproject_tile_geobox(tile_geobox, 30)
+            else:
+                like = tile_geobox
             dc_query = dict(
                 product=dc_products,
                 measurements=dc_measurements,
-                like=tile_geobox,
+                like=like,
                 time=(start_date, end_date),
                 resampling=resampling,
                 dask_chunks=dask_chunks,
@@ -262,59 +272,9 @@ def process_st_data_to_annnual(
     return annual_ds_tirs
 
 
-def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
-    """
-    This is a work around to get data for the `wofs_all` instrument,
-    i.e. data loaded from the DE Africa `wofs_ls_summary_alltime`
-    product, to have the same time dimension (year) as data loaded from
-    all other instruments in a dataset.
-    > This only works if data loaded for all other instruments apart from
-    `wofs_all` was loaded for **one specific year only** using
-    `build_wq_agm_dataset`.
-
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset built using `build_wq_agm_dataset`.
-
-    Returns
-    -------
-    xr.Dataset
-        Input dataset with updated time dimension.
-    """
-    time_values = list(ds.time.values)
-    count = len(time_values)
-    if count < 1 or count > 2:
-        raise ValueError(
-            f"Expecting data for a single year. Found data for {time_values}"
-        )
-    else:
-        if count == 2:
-            wofs_all_vars = list(
-                get_measurements_name_dict("wofs_all").values()
-            )
-            # Recombine datasets with the correct time dimensions
-            ds_list = []
-            for var in list(ds.data_vars):
-                da = ds[var]
-                all_nan = da.isnull().all(dim=["y", "x"])
-                # Remove empty time steps.
-                da = da.sel(time=~all_nan)
-                if var in wofs_all_vars:
-                    new_wofs_all_time = [
-                        i for i in time_values if i != da.time.values
-                    ][0]
-                    da = da.assign_coords(time=[new_wofs_all_time])
-                ds_list.append(da)
-            ds = xr.merge(ds_list)
-        return ds
-
-
 def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
     dc: Datacube = None,
-    single_year: bool = False,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
     for each instrument using the datacube queries provided.
@@ -324,20 +284,14 @@ def build_wq_agm_dataset(
     dc_queries : dict[str, dict[str, Any]]
         Datacube query to use to load data for each instrument.
 
-    single_year : bool
-        Specify if data is being loaded for **one specific year only**.
-        If it is and data for the `wofs_all` instrument is loaded, the
-        `wofs_all` DataArrays will be assigned the time value matching
-        other annual datasets.
-
     Returns
     -------
     xr.Dataset
-        A single dataset containing all the data found for each instrument
-        in the datacube.
+        A single dataset containing all the data found for each
+        instrument in the datacube.
     """
     if dc is None:
-        dc = Datacube()
+        dc = Datacube("Build_wq_agm_dataset")
 
     loaded_data: dict[str, xr.Dataset] = {}
     for instrument_name, dc_query in dc_queries.items():
@@ -359,13 +313,34 @@ def build_wq_agm_dataset(
                 ds_wofs_ann=loaded_data["wofs_ann"],
             )
 
+    # Landsat surface temperature data is loaded and processed at the
+    # native resolution of 30m .
+    # This step reprojects the data back to the same resolution as data
+    # from other instruments.
+
+    # Get the resolution all other data is in.
+    resolutions = [
+        int(ds.odc.geobox.resolution.x)
+        for instrument_name, ds in loaded_data.items()
+        if instrument_name != "tirs"
+    ]
+    most_common_res, _ = Counter(resolutions).most_common(1)[0]
+    # Reproject the temperature data
+    if loaded_data["tirs"].odc.geobox.resolution.x != most_common_res:
+        new_geobox = reproject_tile_geobox(
+            loaded_data["tirs"].odc.geobox,
+            resolution_m=most_common_res,
+        )
+        loaded_data["tirs"] = xr_reproject(
+            loaded_data["tirs"],
+            how=new_geobox,
+            resampling=dc_queries["tirs"]["resampling"],
+        )
+
     # All datasets expect those for the instrument wofs_all
     # are expected to have the same time dimensions.
     results = dask.compute(*list(loaded_data.values()))
     combined = xr.merge(results)
     combined = combined.drop_vars("quantile", errors="ignore")
-
-    if single_year:
-        combined = fix_wofs_all_time(combined)
 
     return combined
