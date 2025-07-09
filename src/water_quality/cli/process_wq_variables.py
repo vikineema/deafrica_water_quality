@@ -1,9 +1,11 @@
 import json
+import os
 import sys
 
 import click
 import numpy as np
 import pandas as pd
+from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 
@@ -198,10 +200,18 @@ def cli(
                 end_date=end_date,
                 dask_chunks=dask_chunks,
             )
-            # Since only one year worth of data is loaded at a time
-            # assign data for the wofs_all instrument with the same
-            # time value as data from all other instruments.
+            # Set up a dask client if on the sandbox.
+            if bool(os.environ.get("JUPYTERHUB_USER", None)):
+                client = create_local_dask_cluster(
+                    display_client=True, return_client=True
+                )
+            else:
+                client = None
+
             ds = build_wq_agm_dataset(dc_queries)
+
+            if client is not None:
+                client.close()
 
             log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
