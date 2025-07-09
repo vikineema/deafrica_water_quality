@@ -105,14 +105,10 @@ def cli(
                 log.info(f"Getting tiles for test area {place_name}")
                 place = places_gdf[places_gdf["name"].isin([place_name])]
                 aoi_geom = Geometry(geom=place.iloc[0].geometry, crs=place.crs)
-                # Any resolution can be used here as
-                # the tile extents will be the same.
-                tiles = get_aoi_tiles(aoi_geom, resolution_m=30)
+                tiles = get_aoi_tiles(aoi_geom)
         else:
             log.info("Getting tiles for all of Africa for continental run")
-            # Any resolution can be used here as
-            # the tile extents will be the same.
-            tiles = get_africa_tiles(save_to_disk=False, resolution_m=30)
+            tiles = get_africa_tiles(save_to_disk=False)
 
         tiles = list(tiles)
         tile_ids_list = [tile[0] for tile in tiles]
