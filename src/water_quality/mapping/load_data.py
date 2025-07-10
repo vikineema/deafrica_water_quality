@@ -322,7 +322,7 @@ def build_wq_agm_dataset(
 
     log.info("Reprojecting instrument datasets ...")
     for instrument_name, ds in loaded_data.items():
-        if ds.odc.geobox.resolution != tile_geobox.geobox.resolution:
+        if ds.odc.geobox.resolution != tile_geobox.resolution:
             loaded_data[instrument_name] = xr_reproject(
                 loaded_data[instrument_name],
                 how=tile_geobox,
