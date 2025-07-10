@@ -5,6 +5,7 @@ import sys
 import click
 import numpy as np
 import pandas as pd
+from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
@@ -165,7 +166,7 @@ def cli(
     SC = analysis_config["sigma_coefficient"]
 
     gridspec = get_waterbodies_grid(resolution_m)
-
+    dc = Datacube(app="Process_WQ_variables")
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
@@ -191,24 +192,22 @@ def cli(
 
             log.info("Building the multivariate/multi-sensor dataset")
             # build the multivariate/multi-sensor dataset.
-            xy_chunk_size = int(tile_geobox.shape.x / 5)
-            dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
             dc_queries = build_dc_queries(
                 instruments_to_use=instruments_to_use,
-                tile_geobox=tile_geobox,
                 start_date=start_date,
                 end_date=end_date,
-                dask_chunks=dask_chunks,
             )
             # Set up a dask client if on the sandbox.
             if bool(os.environ.get("JUPYTERHUB_USER", None)):
                 client = create_local_dask_cluster(
-                    display_client=True, return_client=True
+                    display_client=False, return_client=True
                 )
             else:
                 client = None
 
-            ds = build_wq_agm_dataset(dc_queries)
+            ds = build_wq_agm_dataset(
+                dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
+            )
 
             if client is not None:
                 client.close()
