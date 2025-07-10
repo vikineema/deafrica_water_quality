@@ -97,7 +97,7 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     dict[str, tuple[str]]
         Dictionary whose keys are the datacube measurements loaded for
         the instrument and whose values are the desired names for the
-        measurements
+        measurements.
 
     """
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
@@ -121,11 +121,9 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
 
 def build_dc_queries(
     instruments_to_use: dict[str, dict[str, bool]],
-    tile_geobox: GeoBox,
     start_date: str,
     end_date: str,
     resampling: str = "bilinear",
-    dask_chunks: dict[str, int] = {},
 ) -> dict[str, dict[str, Any]]:
     """
     Build a reusable datacube query for each instrument to load
@@ -135,17 +133,12 @@ def build_dc_queries(
     ----------
     instruments_to_use : dict[str, dict[str, bool]]
         A dictionary of the selected instruments to use for the analysis.
-    tile_geobox : GeoBox
-        Defines the location and resolution of a rectangular grid of data,
-        including it’s crs.
     start_date : str
         The start of the time range to load data for.
     end_date : str
         The end of the time range to load data for.
     resampling : str, optional
         Resampling method to use, by default "bilinear".
-    dask_chunks:  dict[str, int]
-        Number of chunks for dask arrays, by default {}
     Returns
     -------
     dict[str, dict[str, Any]]
@@ -156,21 +149,11 @@ def build_dc_queries(
         if usage["use"] is True:
             dc_products = get_dc_products(instrument_name)
             dc_measurements = get_dc_measurements(instrument_name)
-            if (
-                instrument_name == "tirs"
-                and int(tile_geobox.resolution.x) != 30
-            ):
-                # Load temperature data at native resolution.
-                like = reproject_tile_geobox(tile_geobox, 30)
-            else:
-                like = tile_geobox
             dc_query = dict(
                 product=dc_products,
                 measurements=dc_measurements,
-                like=like,
                 time=(start_date, end_date),
                 resampling=resampling,
-                dask_chunks=dask_chunks,
                 # align=(0, 0), not supported when using like
             )
             dc_queries[instrument_name] = dc_query
@@ -230,19 +213,15 @@ def process_st_data_to_annnual(
     valid_mask = (tirs_st > 0) & (tirs_st_qa < 5) & (tirs_emis > 0.95)
     ds_tirs["tirs_st"] = tirs_st.where(valid_mask)
 
-    # Drop intermediate arrays to reduce memory
     del tirs_st, tirs_st_qa, tirs_emis, valid_mask
 
-    # If dask backed
     if ds_tirs.chunks is not None:
         # Rechunk so the time dimension has only one chunk
         # for the quantile commputation
         ds_tirs = ds_tirs.chunk({"time": ds_tirs.sizes["time"]})
 
-    # Create an empty annual dataset
     annual_ds_tirs = xr.Dataset()
 
-    # Average the temperatures up to years - min, max and mean
     group = ds_tirs["tirs_st"].groupby("time.year")
     annual_ds_tirs["tirs_st_ann_med"] = group.median(dim="time")
     annual_ds_tirs["tirs_st_ann_min"] = group.quantile(0.1, dim="time")
@@ -266,14 +245,12 @@ def process_st_data_to_annnual(
     for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
         annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
 
-    # Clean up
-    # annual_ds_tirs = annual_ds_tirs.compute()
-    # annual_ds_tirs = annual_ds_tirs.drop_vars("quantile")
     return annual_ds_tirs
 
 
 def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
     dc: Datacube = None,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
@@ -284,6 +261,13 @@ def build_wq_agm_dataset(
     dc_queries : dict[str, dict[str, Any]]
         Datacube query to use to load data for each instrument.
 
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including it’s crs.
+
+    dc: Datacube
+        Datacube connection to use when loading data.
+
     Returns
     -------
     xr.Dataset
@@ -293,13 +277,31 @@ def build_wq_agm_dataset(
     if dc is None:
         dc = Datacube(app="Build_wq_agm_dataset")
 
+    # Get default resolution to load data in from the tile Geobox
+    # should be 10m.
+    default_res = int(abs(tile_geobox.resolution.x))
+
+    # Load Landsat surface temperature, surface reflectance, and
+    # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
+    # of 30m .
+    log.info("Loading data using datacube queries ...")
     loaded_data: dict[str, xr.Dataset] = {}
     for instrument_name, dc_query in dc_queries.items():
-        ds = dc.load(**dc_query)
+        if instrument_name != "msi_agm" and default_res != 30:
+            like = reproject_tile_geobox(
+                tile_geobox=tile_geobox, resolution_m=30
+            )
+        else:
+            like = tile_geobox
+
+        xy_chunk_size = int(like.shape.x / 5)
+        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
+
+        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
 
-    # Process temperature data to an annual timeseries
+    log.info("Processing surface temperature data to annual composite ...")
     if "tirs" in loaded_data.keys():
         if "wofs_ann" not in loaded_data.keys():
             raise ValueError(
@@ -313,35 +315,21 @@ def build_wq_agm_dataset(
                 ds_wofs_ann=loaded_data["wofs_ann"],
             )
 
-    # Landsat surface temperature data is loaded and processed at the
-    # native resolution of 30m .
-    # This step reprojects the data back to the same resolution as data
-    # from other instruments.
+    log.info("Computing instrument datasets ...")
+    loaded_data = dict(
+        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    )
 
-    # Get the resolution all other data is in.
-    resolutions = [
-        int(ds.odc.geobox.resolution.x)
-        for instrument_name, ds in loaded_data.items()
-        if instrument_name != "tirs"
-    ]
-    most_common_res, _ = Counter(resolutions).most_common(1)[0]
-    # Reproject the temperature data
-    if loaded_data["tirs"].odc.geobox.resolution.x != most_common_res:
-        new_geobox = reproject_tile_geobox(
-            loaded_data["tirs"].odc.geobox,
-            resolution_m=most_common_res,
-        )
-        loaded_data["tirs"] = loaded_data["tirs"].compute()
-        loaded_data["tirs"] = xr_reproject(
-            loaded_data["tirs"],
-            how=new_geobox,
-            resampling=dc_queries["tirs"]["resampling"],
-        )
+    log.info("Reprojecting instrument datasets ...")
+    for instrument_name, ds in loaded_data:
+        if ds.odc.geobox.resolution != tile_geobox.geobox.resolution:
+            loaded_data[instrument_name] = xr_reproject(
+                loaded_data[instrument_name],
+                how=tile_geobox,
+                resampling=dc_queries[instrument_name]["resampling"],
+            )
 
-    # All datasets expect those for the instrument wofs_all
-    # are expected to have the same time dimensions.
-    results = dask.compute(*list(loaded_data.values()))
-    combined = xr.merge(results)
+    combined = xr.merge(list(loaded_data.values()))
     combined = combined.drop_vars("quantile", errors="ignore")
 
     return combined
