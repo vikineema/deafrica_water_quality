@@ -82,44 +82,23 @@ def WQ_vars(
             raise ValueError()
 
         new_dim_labels = list(wq_varlist)
-        log.debug(
-            "New dimension labels (variables):\n",
-            new_dim_labels,
-            "\nnew dimension name: ",
-            new_dimension_name,
-        )
         ds = ds.assign_coords({new_dimension_name: new_dim_labels})
-        ds[new_varname] = (
-            ("time", "y", "x", new_dimension_name),
-            np.zeros(
-                (
-                    ds.time.size,
-                    ds.y.size,
-                    ds.x.size,
-                    ds[new_dimension_name].size,
-                )
-            ),
-        )
-        log.debug("\n", ds[new_varname])
-        log.debug(
-            "\n--->  ",
-            ds[new_dimension_name].values,
-            "  <---- new dimension values\n",
-        )
-        log.debug(
-            "\n--->  ",
-            new_varname,
-            "  <---- new variable name (should be tss or chla\n",
-        )
-        # Move the tss data into the new dimension
-        for name in list(ds[new_dimension_name].values):
-            log.debug("\nnew_dimension_name -->", new_dimension_name)
-            log.debug("\nname               -->", name)
-            log.debug("\nnew_varname        -->", new_varname)
-            ds[new_varname].loc[:, :, :, name] = ds[name]
 
-        # Drop the old variables to keep it tidy:
-        ds = ds.drop_vars(list(ds[new_dimension_name].values))
+        da_dims = ["time", "x", "y", new_dimension_name]
+        da_coords = {dim: ds.coords[dim] for dim in da_dims}
+        da_data_shape = tuple(len(da_coords[dim]) for dim in da_dims)
+        da = xr.DataArray(
+            data=np.zeros(da_data_shape, dtype=np.float32),
+            coords=da_coords,
+            dims=da_dims,
+            name=new_varname,
+        )
+
+        for name in new_dim_labels:
+            da.sel({new_dimension_name: name})[:] = ds[name]
+
+        ds[new_varname] = da
+        ds = ds.drop_vars(new_dim_labels, errors="ignore")
 
     return ds, wq_varlist
 
