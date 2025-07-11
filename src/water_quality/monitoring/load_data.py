@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from importlib.resources import files
 
@@ -22,7 +23,10 @@ from water_quality.io import (
 from water_quality.tiling import (
     get_aoi_tiles,
     get_region_code,
+    get_tile_region_codes,
 )
+
+log = logging.getLogger(__name__)
 
 NORMALISATION_PARAMETERS = {
     "ndssi_rg_msi_agm": {"scale": 83.711, "offset": 56.756},
@@ -97,9 +101,13 @@ def _get_cog_year(cog_url: str) -> str:
 
 def get_wq_measures_cogs(
     waterbody_uid: str, wq_measures_dir: str
-) -> dict[str, dict[str, list]]:
+) -> dict[str, dict[tuple[int, int], list]]:
     tiles = get_waterbody_tiles(waterbody_uid)
-
+    region_codes = get_tile_region_codes(tiles, sep="")
+    log.info(
+        f"Found {len(tiles)} covering "
+        f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
+    )
     grouped_by_year_and_tile = defaultdict(lambda: defaultdict(list))
     for tile_id, _ in tiles:
         region_code = get_region_code(tile_id, "/")
@@ -155,7 +163,9 @@ def create_ds_from_cogs(
     return ds
 
 
-def format_dataset(ds: xr.Dataset, wq_parameters_csv_url: str) -> xr.Dataset:
+def normalise_water_quality_measures(
+    ds: xr.Dataset, wq_parameters_csv_url: str
+) -> xr.Dataset:
     wq_parameters_df = load_wq_measurements_table(wq_parameters_csv_url)
 
     for col in wq_parameters_df.columns:
@@ -173,9 +183,14 @@ def format_dataset(ds: xr.Dataset, wq_parameters_csv_url: str) -> xr.Dataset:
             dims=da_dims,
             name=var_name,
         )
-
+        log.info("Applying scale and offset to water quality variables")
         for band in bands:
-            da.sel({col: band})[:] = ds[band]
+            log.debug(
+                f"Apply scale and offset for water quality variables {band}"
+            )
+            scale = NORMALISATION_PARAMETERS[band]["scale"]
+            offset = NORMALISATION_PARAMETERS[band]["offset"]
+            da.sel({col: band})[:] = ds[band] * scale + offset
 
         ds[var_name] = da
         ds = ds.drop_vars(bands, errors="ignore")
@@ -186,6 +201,7 @@ def format_dataset(ds: xr.Dataset, wq_parameters_csv_url: str) -> xr.Dataset:
 def load_water_quality_measures(
     waterbody_uid: str, wq_measures_dir: str
 ) -> xr.Dataset:
+    log.info(f"Loading data for waterbody {waterbody_uid}")
     grouped_by_year_and_tile = get_wq_measures_cogs(
         waterbody_uid, wq_measures_dir
     )
@@ -193,6 +209,10 @@ def load_water_quality_measures(
     for year, grouped_by_tile in grouped_by_year_and_tile.items():
         per_tile_ds = []
         for tile_id, cog_urls in grouped_by_tile.items():
+            log.info(
+                f"Loading data for year {year} "
+                f"and tile {get_region_code(tile_id)}"
+            )
             wq_parameters_csv_url = get_wq_csv_url(
                 output_directory=wq_measures_dir, tile_id=tile_id, year=year
             )
@@ -200,7 +220,7 @@ def load_water_quality_measures(
 
             ds = create_ds_from_cogs(cog_urls, bands_to_load, waterbody_uid)
             ds = ds.compute()
-            ds = format_dataset(ds, wq_parameters_csv_url)
+            ds = normalise_water_quality_measures(ds, wq_parameters_csv_url)
             per_tile_ds.append(ds)
         ds = xr.merge(per_tile_ds)
         per_year_ds.append(ds)
