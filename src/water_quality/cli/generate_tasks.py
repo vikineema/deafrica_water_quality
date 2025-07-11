@@ -89,7 +89,7 @@ def cli(
             fs = get_filesystem(tile_ids_file, anon=True)
             with fs.open(tile_ids_file, "r") as f:
                 region_codes = f.readlines()
-                region_codes = [i.strip() for i in tile_ids]
+                region_codes = [i.strip() for i in region_codes]
                 tile_ids_list = [parse_region_code(i) for i in region_codes]
     else:
         if place_name:
