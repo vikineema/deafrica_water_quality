@@ -260,7 +260,14 @@ def get_bands_to_load(wq_parameters_csv_url: str) -> list[str]:
     for col in wq_parameters_df:
         bands = wq_parameters_df[col].dropna().to_list()
         bands_to_load.extend(bands)
-    bands_to_load.append("wofs_ann_pwater")
+
+    other_bands = [
+        "wofs_ann_pwater",
+        "wofs_ann_wetcount",
+        "wofs_ann_clearcount",
+        "wofs_ann_freq",
+    ]
+    bands_to_load.extend(other_bands)
     return bands_to_load
 
 
