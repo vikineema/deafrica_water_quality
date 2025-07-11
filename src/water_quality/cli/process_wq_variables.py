@@ -51,7 +51,7 @@ from water_quality.tasks import parse_task_id
 )
 @click.option(
     "--tasks",
-    help="List of comma seperated tasks in the format"
+    help="List of comma separated tasks in the format"
     "year/x{x:02d}/y{y:02d} to generate water quality variables for. "
     "For example `2015/x200/y34,x178/y095,x199y/100`",
 )
