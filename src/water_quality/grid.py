@@ -76,7 +76,7 @@ def get_waterbodies_grid(resolution_m: int = 10) -> GridSpec:
         Gridspec to be used for tiling.
     """
     crs = check_crs("EPSG:6933")
-    resolution_m = check_resolution(10)
+    resolution_m = check_resolution(resolution_m)
 
     # Size of each tile in meters (CRS units).
     # To match the tile size for DE Africa GeoMAD products.
