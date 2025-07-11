@@ -135,6 +135,7 @@ def get_bands_to_load(wq_parameters_csv_url: str) -> list[str]:
     for col in wq_parameters_df:
         bands = wq_parameters_df[col].dropna().to_list()
         bands_to_load.extend(bands)
+    bands_to_load.append("wofs_ann_pwater")
     return bands_to_load
 
 
