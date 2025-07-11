@@ -25,7 +25,7 @@ from water_quality.tiling import (
 )
 @click.option(
     "--tile-ids",
-    help="Optional list of comma seperated tile IDs in the format "
+    help="Optional list of comma separated tile IDs in the format "
     "x{x:02d}/y{y:02d} to generate tasks for. For example "
     "`x188/y109,x178/y095,x199y/100`",
 )
@@ -89,7 +89,7 @@ def cli(
             fs = get_filesystem(tile_ids_file, anon=True)
             with fs.open(tile_ids_file, "r") as f:
                 region_codes = f.readlines()
-                region_codes = [i.strip() for i in tile_ids]
+                region_codes = [i.strip() for i in region_codes]
                 tile_ids_list = [parse_region_code(i) for i in region_codes]
     else:
         if place_name:
