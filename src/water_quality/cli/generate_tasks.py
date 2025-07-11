@@ -25,7 +25,7 @@ from water_quality.tiling import (
 )
 @click.option(
     "--tile-ids",
-    help="Optional list of comma seperated tile IDs in the format "
+    help="Optional list of comma separated tile IDs in the format "
     "x{x:02d}/y{y:02d} to generate tasks for. For example "
     "`x188/y109,x178/y095,x199y/100`",
 )
