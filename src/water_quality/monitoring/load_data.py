@@ -1,5 +1,3 @@
-import itertools
-import os
 from collections import defaultdict
 from importlib.resources import files
 
@@ -12,13 +10,11 @@ from deafrica_tools.waterbodies import get_waterbody
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 from odc.geo.xr import assign_crs
-from toolz import groupby
 
 from water_quality.dates import year_to_dc_datetime
 from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
     find_geotiff_files,
-    find_json_files,
     get_wq_csv_url,
     join_url,
     parse_wq_cog_url,
@@ -26,7 +22,6 @@ from water_quality.io import (
 from water_quality.tiling import (
     get_aoi_tiles,
     get_region_code,
-    get_tile_region_codes,
 )
 
 NORMALISATION_PARAMETERS = {
