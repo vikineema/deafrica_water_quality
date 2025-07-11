@@ -105,7 +105,7 @@ def get_wq_measures_cogs(
     tiles = get_waterbody_tiles(waterbody_uid)
     region_codes = get_tile_region_codes(tiles, sep="")
     log.info(
-        f"Found {len(tiles)} covering "
+        f"Found {len(tiles)} tiles covering "
         f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
     )
     grouped_by_year_and_tile = defaultdict(lambda: defaultdict(list))
@@ -183,10 +183,13 @@ def normalise_water_quality_measures(
             dims=da_dims,
             name=var_name,
         )
-        log.info("Applying scale and offset to water quality variables")
+        log.info(
+            f"Applying scale and offset to {var_name} water quality variables"
+        )
         for band in bands:
             log.debug(
-                f"Apply scale and offset for water quality variables {band}"
+                f"Applying scale and offset to {var_name} "
+                f"water quality variable {band}"
             )
             scale = NORMALISATION_PARAMETERS[band]["scale"]
             offset = NORMALISATION_PARAMETERS[band]["offset"]
@@ -207,12 +210,10 @@ def load_water_quality_measures(
     )
     per_year_ds = []
     for year, grouped_by_tile in grouped_by_year_and_tile.items():
+        log.info(f"Loading data for year {year}")
         per_tile_ds = []
         for tile_id, cog_urls in grouped_by_tile.items():
-            log.info(
-                f"Loading data for year {year} "
-                f"and tile {get_region_code(tile_id)}"
-            )
+            log.info(f"Loading data for tile {get_region_code(tile_id)}")
             wq_parameters_csv_url = get_wq_csv_url(
                 output_directory=wq_measures_dir, tile_id=tile_id, year=year
             )
