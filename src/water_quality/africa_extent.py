@@ -1,5 +1,5 @@
 """
-Utils adapted from the deafrica-scripts.deafrica.utils module
+Africa extent in various formats.
 """
 
 # GDAL format: [ulx, uly, lrx, lry]

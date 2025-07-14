@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 
-from water_quality.water_detection import water_analysis
+from water_quality.mapping.water_detection import water_analysis
 
 
 def test_water_detection_invalid_wofs_varname(random_xr_dataset):
@@ -20,7 +20,9 @@ def test_water_detection_on_valid_ds(
     build_dataset_validation_ds, water_analysis_validation_ds
 ):
     expected_results = water_analysis_validation_ds
-    results = water_analysis(build_dataset_validation_ds, wofs_varname="wofs_ann_freq")
+    results = water_analysis(
+        build_dataset_validation_ds, wofs_varname="wofs_ann_freq"
+    )
     expected_added_vars = [
         "wofs_ann_freq_sigma",
         "wofs_ann_confidence",

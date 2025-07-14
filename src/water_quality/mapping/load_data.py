@@ -1,13 +1,14 @@
 import logging
-from datetime import date, datetime, timedelta
 from typing import Any
 
+import dask
 import numpy as np
 import xarray as xr
 from datacube import Datacube
 from odc.geo.geobox import GeoBox
 
-from water_quality.instruments import INSTRUMENTS_MEASUREMENTS
+from water_quality.dates import year_to_dc_datetime
+from water_quality.mapping.instruments import INSTRUMENTS_MEASUREMENTS
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +40,8 @@ def get_dc_products(instrument_name: str) -> list[str]:
     dc_products = INSTRUMENTS_PRODUCTS.get(instrument_name, None)
     if dc_products is None:
         raise NotImplementedError(
-            f"Datacube products for the instrument {instrument_name} are not defined."
+            f"Datacube products for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         return dc_products
@@ -63,7 +65,8 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
-            f"Datacube measurements for the instrument {instrument_name} are not defined."
+            f"Datacube measurements for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         dc_measurements: list[str] = []
@@ -79,8 +82,8 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
 
 def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     """
-    Get the dictionary for re-naming measurements to have unique dataset variable name
-    for the loaded data for an instrument.
+    Get the dictionary for re-naming measurements to have unique
+    dataset variable names for the loaded data for an instrument.
 
     Parameters
     ----------
@@ -90,14 +93,16 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     Returns
     -------
     dict[str, tuple[str]]
-        Dictionary whose keys are the datacube measurements loaded for the instrument
-        and whose values are the desired names for the measurements
+        Dictionary whose keys are the datacube measurements loaded for
+        the instrument and whose values are the desired names for the
+        measurements
 
     """
     measurements = INSTRUMENTS_MEASUREMENTS.get(instrument_name, None)
     if measurements is None:
         raise NotImplementedError(
-            f"Datacube measurements for the instrument {instrument_name} are not defined."
+            f"Datacube measurements for the instrument {instrument_name} "
+            "are not defined."
         )
     else:
         measurements_name_dict: dict[str, tuple[str]] = {}
@@ -118,6 +123,7 @@ def build_dc_queries(
     start_date: str,
     end_date: str,
     resampling: str = "bilinear",
+    dask_chunks: dict[str, int] = {},
 ) -> dict[str, dict[str, Any]]:
     """
     Build a reusable datacube query for each instrument to load
@@ -136,7 +142,8 @@ def build_dc_queries(
         The end of the time range to load data for.
     resampling : str, optional
         Resampling method to use, by default "bilinear".
-
+    dask_chunks:  dict[str, int]
+        Number of chunks for dask arrays, by default {}
     Returns
     -------
     dict[str, dict[str, Any]]
@@ -153,36 +160,11 @@ def build_dc_queries(
                 like=tile_geobox,
                 time=(start_date, end_date),
                 resampling=resampling,
+                dask_chunks=dask_chunks,
                 # align=(0, 0), not supported when using like
             )
             dc_queries[instrument_name] = dc_query
     return dc_queries
-
-
-def middle_date(year: int) -> date:
-    start = date(year, 1, 1)
-    end = date(year, 12, 31)
-    delta = (end - start).days // 2
-    return start + timedelta(days=delta)
-
-
-def year_to_datetime(year: int) -> datetime:
-    mid_year_date = middle_date(year)
-    # Convert to datetime (default time is midnight)
-    mid_year_datetime = datetime.combine(mid_year_date, datetime.min.time())
-    if mid_year_datetime.day == 2:
-        mid_year_datetime = mid_year_datetime.replace(
-            hour=11, minute=59, second=59, microsecond=999999
-        )
-    elif mid_year_datetime.day == 1:
-        mid_year_datetime = mid_year_datetime.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
-    else:
-        raise ValueError(
-            f"Unexpected mid year date {mid_year_datetime} for the year {year}"
-        )
-    return mid_year_datetime
 
 
 def process_st_data_to_annnual(
@@ -196,10 +178,11 @@ def process_st_data_to_annnual(
     - Converts raw surface temperature values to degrees Celsius.
     - Filters data by temperature validity, quality assurance threshold,
       and high surface emissivity.
-    - Aggregates daily temperature data into annual median, 10th percentile (min),
-      and 90th percentile (max) statistics.
+    - Aggregates daily temperature data into annual median, 10th
+        percentile (min), and 90th percentile (max) statistics.
     - Masks aggregated temperature data to include only pixels with
-      consistent water presence based on the WOfS annual frequency threshold.
+      consistent water presence based on the WOfS annual frequency
+      threshold.
 
     Parameters
     ----------
@@ -212,84 +195,140 @@ def process_st_data_to_annnual(
 
     ds_wofs_ann : xr.Dataset
         An xarray Dataset of Water Observations from Space (WOfS) annual
-        water frequency statistics. It must include the band:'wofs_ann_freq'
+        water frequency statistics. It must include the band:
+        'wofs_ann_freq'
 
     Returns
     -------
     xr.Dataset
         An annual xarray Dataset with the following data variables:
-            - 'tirs_st_ann_med' : Median annual surface temperature (°C).
-            - 'tirs_st_ann_min' : 10th percentile annual temperature (°C).
-            - 'tirs_st_ann_max' : 90th percentile annual temperature (°C).
-        All layers are masked to include only pixels where the WOfS annual
-        water frequency exceeds 0.5.
+            - 'tirs_st_ann_med': Median annual surface temperature (°C).
+            - 'tirs_st_ann_min': 10th percentile annual temperature (°C).
+            - 'tirs_st_ann_max': 90th percentile annual temperature (°C).
+
+        All layers are masked to include only pixels where the WOfS
+        annual water frequency exceeds 0.5.
     """
     # Rescale the daily timeseries to centigrade, remove outliers,
     # apply quality filter and also filter on emissivity > 0.95.
-    ds_tirs["tirs_st"] = (ds_tirs.tirs_st * 0.00341802 + 149.0) - 273.15
-    ds_tirs["tirs_st_qa"] = ds_tirs["tirs_st_qa"] * 0.01  # -- uncertainty in kelvin
-    ds_tirs["tirs_emis"] = ds_tirs["tirs_emis"] * 0.0001  # -- emissivity fraction
-    ds_tirs["tirs_st"] = xr.where(
-        ds_tirs["tirs_st"] > 0,
-        xr.where(
-            ds_tirs["tirs_st_qa"] < 5,
-            xr.where(ds_tirs["tirs_emis"] > 0.95, ds_tirs["tirs_st"], np.nan),
-            np.nan,
-        ),
-        np.nan,
-    )
+    tirs_st = (ds_tirs["tirs_st"] * 0.00341802 + 149.0) - 273.15
+    # -- uncertainty in kelvin
+    tirs_st_qa = ds_tirs["tirs_st_qa"] * 0.01
+    # -- emissivity fraction
+    tirs_emis = ds_tirs["tirs_emis"] * 0.0001
+
+    valid_mask = (tirs_st > 0) & (tirs_st_qa < 5) & (tirs_emis > 0.95)
+    ds_tirs["tirs_st"] = tirs_st.where(valid_mask)
+
+    # Drop intermediate arrays to reduce memory
+    del tirs_st, tirs_st_qa, tirs_emis, valid_mask
+
+    # If dask backed
+    if ds_tirs.chunks is not None:
+        # Rechunk so the time dimension has only one chunk
+        # for the quantile commputation
+        ds_tirs = ds_tirs.chunk({"time": ds_tirs.sizes["time"]})
+
     # Create an empty annual dataset
-    annual_ds_tirs = xr.Dataset(coords=ds_tirs.coords).groupby("time.year").mean()
+    annual_ds_tirs = xr.Dataset()
 
     # Average the temperatures up to years - min, max and mean
-    annual_ds_tirs["tirs_st_ann_med"] = (
-        ds_tirs["tirs_st"].groupby("time.year").median(dim="time")
-    )
-    annual_ds_tirs["tirs_st_ann_min"] = (
-        ds_tirs["tirs_st"].groupby("time.year").quantile(0.1, dim="time")
-    )
-    annual_ds_tirs["tirs_st_ann_max"] = (
-        ds_tirs["tirs_st"].groupby("time.year").quantile(0.9, dim="time")
-    )
+    group = ds_tirs["tirs_st"].groupby("time.year")
+    annual_ds_tirs["tirs_st_ann_med"] = group.median(dim="time")
+    annual_ds_tirs["tirs_st_ann_min"] = group.quantile(0.1, dim="time")
+    annual_ds_tirs["tirs_st_ann_max"] = group.quantile(0.9, dim="time")
 
     # Replace the year coordinate with datetime64[ns] time coordinate
     annual_ds_tirs = annual_ds_tirs.rename({"year": "time"})
     time_values = np.array(
-        [year_to_datetime(i) for i in annual_ds_tirs.time.values],
+        [year_to_dc_datetime(i) for i in annual_ds_tirs.time.values],
         dtype="datetime64[ns]",
     )
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
     # Restrict values to areas of water
     water_frequency_threshold = 0.5
-    annual_ds_tirs["tirs_st_ann_med"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_med"],
-        np.nan,
+    water_mask = (
+        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
+        > water_frequency_threshold
     )
-    annual_ds_tirs["tirs_st_ann_min"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_min"],
-        np.nan,
-    )
-    annual_ds_tirs["tirs_st_ann_max"] = xr.where(
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values) > water_frequency_threshold,
-        annual_ds_tirs["tirs_st_ann_max"],
-        np.nan,
-    )
+
+    for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
+        annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
+
+    # Clean up
+    # annual_ds_tirs = annual_ds_tirs.compute()
+    # annual_ds_tirs = annual_ds_tirs.drop_vars("quantile")
     return annual_ds_tirs
 
 
-def build_wq_dataset(
-    dc_queries: dict[str, dict[str, Any]], dc: Datacube = None
+def fix_wofs_all_time(ds: xr.Dataset) -> xr.Dataset:
+    """
+    This is a work around to get data for the `wofs_all` instrument,
+    i.e. data loaded from the DE Africa `wofs_ls_summary_alltime`
+    product, to have the same time dimension (year) as data loaded from
+    all other instruments in a dataset.
+    > This only works if data loaded for all other instruments apart from
+    `wofs_all` was loaded for **one specific year only** using
+    `build_wq_agm_dataset`.
+
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset built using `build_wq_agm_dataset`.
+
+    Returns
+    -------
+    xr.Dataset
+        Input dataset with updated time dimension.
+    """
+    time_values = list(ds.time.values)
+    count = len(time_values)
+    if count < 1 or count > 2:
+        raise ValueError(
+            f"Expecting data for a single year. Found data for {time_values}"
+        )
+    else:
+        if count == 2:
+            wofs_all_vars = list(
+                get_measurements_name_dict("wofs_all").values()
+            )
+            # Recombine datasets with the correct time dimensions
+            ds_list = []
+            for var in list(ds.data_vars):
+                da = ds[var]
+                all_nan = da.isnull().all(dim=["y", "x"])
+                # Remove empty time steps.
+                da = da.sel(time=~all_nan)
+                if var in wofs_all_vars:
+                    new_wofs_all_time = [
+                        i for i in time_values if i != da.time.values
+                    ][0]
+                    da = da.assign_coords(time=[new_wofs_all_time])
+                ds_list.append(da)
+            ds = xr.merge(ds_list)
+        return ds
+
+
+def build_wq_agm_dataset(
+    dc_queries: dict[str, dict[str, Any]],
+    dc: Datacube = None,
+    single_year: bool = False,
 ) -> xr.Dataset:
-    """Build a combined dataset from loading data
+    """Build a combined annual dataset from loading data
     for each instrument using the datacube queries provided.
 
     Parameters
     ----------
     dc_queries : dict[str, dict[str, Any]]
         Datacube query to use to load data for each instrument.
+
+    single_year : bool
+        Specify if data is being loaded for **one specific year only**.
+        If it is and data for the `wofs_all` instrument is loaded, the
+        `wofs_all` DataArrays will be assigned the time value matching
+        other annual datasets.
 
     Returns
     -------
@@ -300,15 +339,9 @@ def build_wq_dataset(
     if dc is None:
         dc = Datacube()
 
-    loaded_data = {}
+    loaded_data: dict[str, xr.Dataset] = {}
     for instrument_name, dc_query in dc_queries.items():
         ds = dc.load(**dc_query)
-        # Skipping squeeze for wofs_all
-        # until further notice.
-        """
-        if instrument_name == "wofs_all":
-            ds = ds.squeeze(dim="time", drop=True)
-        """
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
 
@@ -316,16 +349,23 @@ def build_wq_dataset(
     if "tirs" in loaded_data.keys():
         if "wofs_ann" not in loaded_data.keys():
             raise ValueError(
-                "Data for the wofs_ann instrument is required to process daily surface temperature "
-                "data for the tirs instrument into an annual timeseries."
+                "Data for the wofs_ann instrument is required to process "
+                "daily surface temperature data for the tirs instrument into "
+                "an annual timeseries."
             )
         else:
             loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"], ds_wofs_ann=loaded_data["wofs_ann"]
+                ds_tirs=loaded_data["tirs"],
+                ds_wofs_ann=loaded_data["wofs_ann"],
             )
 
-    combined = xr.Dataset()
-    for instrument_name, ds in loaded_data.items():
-        combined = combined.combine_first(ds)
+    # All datasets expect those for the instrument wofs_all
+    # are expected to have the same time dimensions.
+    results = dask.compute(*list(loaded_data.values()))
+    combined = xr.merge(results)
+    combined = combined.drop_vars("quantile", errors="ignore")
+
+    if single_year:
+        combined = fix_wofs_all_time(combined)
 
     return combined
