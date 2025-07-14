@@ -1,9 +1,12 @@
 import json
+import os
 import sys
 
 import click
 import numpy as np
 import pandas as pd
+from datacube import Datacube
+from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 
@@ -11,11 +14,13 @@ from water_quality.dates import (
     validate_end_date,
     validate_start_date,
 )
-from water_quality.grid import get_waterbodies_grid
+from water_quality.grid import check_resolution, get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
     get_filesystem,
+    get_wq_cog_url,
+    get_wq_csv_url,
     join_url,
 )
 from water_quality.logs import setup_logging
@@ -38,7 +43,6 @@ from water_quality.mapping.optical_water_type import OWT_pixel
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.tasks import parse_task_id
-from water_quality.tiling import get_region_code
 
 
 @click.command(
@@ -154,14 +158,15 @@ def cli(
     # ------------------------------------------------ #
     analysis_config = check_config(analysis_config)
 
-    resolution_m = int(analysis_config["resolution"])
+    resolution_m = check_resolution(int(analysis_config["resolution"]))
     instruments_to_use = analysis_config["instruments_to_use"]
     WFTH = analysis_config["water_frequency_threshold_high"]
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
-    gridspec = get_waterbodies_grid(resolution_m)
 
+    gridspec = get_waterbodies_grid(resolution_m)
+    dc = Datacube(app="Process_WQ_variables")
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
@@ -187,19 +192,25 @@ def cli(
 
             log.info("Building the multivariate/multi-sensor dataset")
             # build the multivariate/multi-sensor dataset.
-            xy_chunk_size = int(tile_geobox.shape.x / 5)
-            dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
             dc_queries = build_dc_queries(
                 instruments_to_use=instruments_to_use,
-                tile_geobox=tile_geobox,
                 start_date=start_date,
                 end_date=end_date,
-                dask_chunks=dask_chunks,
             )
-            # Since only one year worth of data is loaded at a time
-            # assign data for the wofs_all instrument with the same
-            # time value as data from all other instruments.
-            ds = build_wq_agm_dataset(dc_queries, single_year=True)
+            # Set up a dask client if on the sandbox.
+            if bool(os.environ.get("JUPYTERHUB_USER", None)):
+                client = create_local_dask_cluster(
+                    display_client=False, return_client=True
+                )
+            else:
+                client = None
+
+            ds = build_wq_agm_dataset(
+                dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
+            )
+
+            if client is not None:
+                client.close()
 
             log.info("Determining the pixels that are water")
             # Determine pixels that are water (sometimes, usually, permanent)
@@ -282,21 +293,16 @@ def cli(
                 if varname in ds.data_vars:
                     ds = ds.drop_vars(varname)
 
-            # output_dir/x/y/year/file
-            parent_dir = join_url(
-                output_directory, get_region_code(tile_id, sep="/"), str(year)
-            )
-            fs = get_filesystem(parent_dir, anon=False)
-            if not check_directory_exists(parent_dir):
-                fs.makedirs(parent_dir, exist_ok=True)
-
             # Save each band into a COG file.
+            fs = get_filesystem(output_directory, anon=False)
             bands = list(ds.data_vars)
             for band in bands:
-                file_name = (
-                    f"{band}_{get_region_code(tile_id, sep='')}_{year}.tif"
+                output_cog_url = get_wq_cog_url(
+                    output_directory=output_directory,
+                    tile_id=tile_id,
+                    year=year,
+                    band_name=band,
                 )
-                output_cog_url = join_url(parent_dir, file_name)
 
                 da = ds[band]
                 cog_bytes = write_cog(
@@ -312,9 +318,8 @@ def cli(
             chla_df = pd.DataFrame(data=dict(chla_measure=chla_vlist))
             tss_df = pd.DataFrame(data=dict(tss_measure=tsm_vlist))
             wq_parameters_df = pd.concat([tss_df, chla_df], axis=1)
-            output_csv_url = join_url(
-                parent_dir,
-                f"water_quality_measures_{get_region_code(tile_id, sep='')}_{year}.csv",
+            output_csv_url = get_wq_csv_url(
+                output_directory=output_directory, tile_id=tile_id, year=year
             )
             with fs.open(output_csv_url, mode="w") as f:
                 wq_parameters_df.to_csv(f, index=False)
