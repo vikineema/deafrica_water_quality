@@ -1,4 +1,6 @@
+import gc
 import logging
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
@@ -6,6 +8,69 @@ import scipy as sp
 import xarray as xr
 
 log = logging.getLogger(__name__)
+
+
+@contextmanager
+def memory_cleanup():
+    """Context manager for explicit memory cleanup."""
+    try:
+        yield
+    finally:
+        gc.collect()
+
+
+def optimize_xarray_dataset(
+    ds: xr.Dataset, chunk_size: dict = None
+) -> xr.Dataset:
+    """
+    Optimize xarray dataset for memory efficiency.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset to optimize.
+    chunk_size : dict, optional
+        Chunk sizes for dask arrays. Default uses auto chunking.
+
+    Returns
+    -------
+    xr.Dataset
+        Optimized dataset with chunking applied.
+    """
+    if chunk_size is None:
+        chunk_size = {"time": "auto", "x": "auto", "y": "auto"}
+
+    # Apply chunking for memory-efficient operations
+    if not any(
+        isinstance(var.data, type(ds.chunks)) for var in ds.data_vars.values()
+    ):
+        ds = ds.chunk(chunk_size)
+
+    return ds
+
+
+def process_data_in_batches(data: xr.DataArray, batch_size: int = 10):
+    """
+    Process large datasets in batches to reduce memory usage.
+
+    Parameters
+    ----------
+    data : xr.DataArray
+        Input data array.
+    batch_size : int
+        Number of time steps to process at once.
+
+    Yields
+    ------
+    xr.DataArray
+        Batched data slices.
+    """
+    time_dim = data.dims[0] if "time" in data.dims else data.dims[0]
+    total_size = data.sizes[time_dim]
+
+    for i in range(0, total_size, batch_size):
+        end_idx = min(i + batch_size, total_size)
+        yield data.isel({time_dim: slice(i, end_idx)})
 
 
 def robust_regression(
@@ -53,98 +118,102 @@ def robust_regression(
         * increasing: "True" or "False" on whether the conditions are \
             improving.
     """
-    baseline_period_times = ds.sel(
-        time=slice(min(baseline_period), max(baseline_period))
-    ).time.values
-    target_years_times = ds.sel(
-        time=slice(min(target_years), max(target_years))
-    ).time.values
-    times = np.hstack((baseline_period_times, target_years_times))
+    baseline_slice = slice(min(baseline_period), max(baseline_period))
+    baseline_times = ds.sel(time=baseline_slice).time.values
 
-    baseline_period_da = ds[var_name].sel(time=baseline_period_times)
-    target_years_da = ds[var_name].sel(time=target_years_times)
+    target_slice = slice(min(target_years), max(target_years))
+    target_times = ds.sel(time=target_slice).time.values
 
-    if option == "median":
-        baseline_period_series = baseline_period_da.median(
-            dim=("x", "y")
-        ).values
-        target_years_series = target_years_da.median(dim=("x", "y")).values
-    elif option == "mean":
-        baseline_period_series = baseline_period_da.mean(dim=("x", "y")).values
-        target_years_series = target_years_da.mean(dim=("x", "y")).values
-    elif option == "sum":
-        baseline_period_series = baseline_period_da.sum(dim=("x", "y")).values
-        target_years_series = target_years_da.sum(dim=("x", "y")).values
-    elif option == "count":
-        baseline_period_series = baseline_period_da.count(
-            dim=("x", "y")
-        ).values
-        target_years_series = target_years_da.count(dim=("x", "y")).values
-    else:
+    da = ds[var_name]
+    baseline_da = da.sel(time=baseline_times)
+    target_da = da.sel(time=target_times)
+
+    aggregation_funcs = {
+        "median": lambda x: x.median(dim=("x", "y")),
+        "mean": lambda x: x.mean(dim=("x", "y")),
+        "sum": lambda x: x.sum(dim=("x", "y")),
+        "count": lambda x: x.count(dim=("x", "y")),
+    }
+
+    if option not in aggregation_funcs:
         raise ValueError(f"Unsupported option '{option}'.")
+
+    agg_func = aggregation_funcs[option]
+
+    baseline_series = agg_func(baseline_da).values
+    target_series = agg_func(target_da).values
+
+    series = np.hstack([baseline_series, target_series])
 
     # Replace infinite values with nans and nans with the mean of
     # the series
-    series = np.hstack((baseline_period_series, target_years_series))
-    series = np.where(np.isinf(series), np.nan, series)
-    series = np.where(np.isnan(series), np.nanmean(series), series)
+    mask_inf = np.isinf(series)
+    if np.any(mask_inf):
+        series[mask_inf] = np.nan
 
+    mask_nan = np.isnan(series)
+    if np.any(mask_nan):
+        series_mean = np.nanmean(series)
+        series[mask_nan] = series_mean
+
+    times = np.concatenate([baseline_times, target_times])
+
+    # Perform regression
     slope, intercept, slope_low, slope_high = sp.stats.theilslopes(
         series, times, method="separate"
     )
+
+    # Calculate significance flags
     significant = np.sign(slope_low) == np.sign(slope_high)
     declining = significant and slope_high < 0
     increasing = significant and slope_low > 0
 
-    # The slope is the important parameter, but a better estimate of the
-    # intercept is useful for graphing purposes.
     if option in ["mean", "median"]:
-        y_mean = np.mean(
-            [
-                baseline_period_da.mean(dim=("x", "y"))
-                .mean(dim="time")
-                .item(),
-                target_years_da.mean(dim=("x", "y")).mean(dim="time").item(),
-            ]
-        )
+        agg_func = aggregation_funcs["mean"]
+        baseline_agg = agg_func(baseline_da).mean(dim="time").item()
+        target_agg = agg_func(target_da).mean(dim="time").item()
     elif option in ["count", "sum"]:
-        y_mean = np.mean(
-            [
-                baseline_period_da.sum(dim=("x", "y")).mean(dim="time").item(),
-                target_years_da.sum(dim=("x", "y")).mean(dim="time").item(),
-            ]
-        )
+        agg_func = aggregation_funcs["sum"]
+        baseline_agg = agg_func(baseline_da).mean(dim="time").item()
+        target_agg = agg_func(target_da).mean(dim="time").item()
     else:
         raise ValueError(f"Unsupported option '{option}'.")
 
-    model_mean = (
-        np.mean(
-            [
-                baseline_period_times.min().astype("float"),
-                target_years_times.max().astype("float"),
-            ]
-        )
-        * slope
+    y_mean = np.mean([baseline_agg, target_agg])
+
+    # Calculate model mean efficiently
+    time_mean = np.mean(
+        [
+            baseline_times.min().astype("float"),
+            target_times.max().astype("float"),
+        ]
     )
+    model_mean = time_mean * slope
 
     if not np.isnan(y_mean - model_mean):
         intercept = y_mean - model_mean
     else:
-        raise NotImplementedError()
+        raise NotImplementedError("Cannot calculate intercept with NaN values")
 
     log.info(f"Affected = {significant}")
     log.info(f"Declining = {declining}")
 
-    parameters = dict(
-        slope=slope,
-        intercept=intercept,
-        slope_low=slope_low,
-        slope_high=slope_high,
-        significant=significant,
-        declining=declining,
-        increasing=increasing,
-    )
-    return parameters
+    # Memory optimization: use explicit cleanup
+    del baseline_da, target_da, series, times
+    if "series_mean" in locals():
+        del series_mean
+
+    gc.collect()
+
+    return {
+        "slope": slope,
+        "intercept": intercept,
+        "slope_low": slope_low,
+        "slope_high": slope_high,
+        "significant": significant,
+        "declining": declining,
+        "increasing": increasing,
+    }
 
 
 # Lakes and rivers permanent water area change (%)
@@ -155,14 +224,37 @@ def permanent_water_area_change(
     target_years: str,
     water_frequency_thresholds: list[float] = [0, 0.15, 0.875],
 ):
+    """
+    Calculate permanent water area change using robust regression.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing water observation frequency data.
+    baseline_period : tuple[str]
+        The baseline period start and end years.
+    target_years : str
+        The target years for comparison.
+    water_frequency_thresholds : list[float], optional
+        Water frequency thresholds, by default [0, 0.15, 0.875].
+
+    Returns
+    -------
+    dict
+        Results from robust regression analysis.
+    """
+
     pwater_threshold = water_frequency_thresholds[0]
     water_threshold = water_frequency_thresholds[1]
     ephemeral_water_threshold = water_frequency_thresholds[2]
 
+    # Create non-zero permanent water mask for analysis
     ds["wofs_ann_pwater_nonzero"] = ds["wofs_ann_pwater"].where(
         (ds["wofs_ann_pwater"] != 0) & ~np.isnan(ds["wofs_ann_pwater"])
     )
-    regression = robust_regression(
+
+    # Perform robust regression analysis
+    return robust_regression(
         ds=ds,
         var_name="wofs_ann_pwater_nonzero",
         baseline_period=baseline_period,
