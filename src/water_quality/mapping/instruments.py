@@ -11,7 +11,6 @@ INSTRUMENTS_DATES = {
     "msi_agm": [2017, 2024],
     "msi": [2017, 2025],
     "wofs_ann": [1990, 2024],
-    "wofs_all": [1990, 2024],
     "tm_agm": [1990, 2012],
     "tm": [1990, 2023],
     "tirs": [2000, 2025],
@@ -29,17 +28,6 @@ INSTRUMENTS_MEASUREMENTS = {
             "parameters": (True,),
         },
         "count_wet": {"varname": ("wofs_ann_wetcount"), "parameters": (True,)},
-    },
-    "wofs_all": {
-        "frequency": {
-            "varname": ("wofs_all_freq"),
-            "parameters": (True, "other"),
-        },
-        "count_clear": {
-            "varname": ("wofs_all_clearcount"),
-            "parameters": (True,),
-        },
-        "count_wet": {"varname": ("wofs_all_wetcount"), "parameters": (True,)},
     },
     "oli_agm": {
         "SR_B2": {"varname": ("oli02_agm"), "parameters": (True, "450-510")},

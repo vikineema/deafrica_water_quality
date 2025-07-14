@@ -41,20 +41,16 @@ def cli(place_name: str, output_file: str):
     if place_name:
         if place_name not in place_name_list:
             raise ValueError(
-                f"{place_name} not in found in test areas file. Expected names include {' ,'.join(place_name_list)}"
+                f"'{place_name}' not found in test areas file; expected names include {', '.join(place_name_list)}"
             )
         else:
             log.info(f"Getting tiles for test area {place_name}")
             place = places_gdf[places_gdf["name"].isin([place_name])]
             aoi_geom = Geometry(geom=place.iloc[0].geometry, crs=place.crs)
-            # Any resolution can be used here as
-            # the tile extents will be the same.
-            tiles = get_aoi_tiles(aoi_geom, resolution_m=30)
+            tiles = get_aoi_tiles(aoi_geom)
     else:
         log.info("Getting tiles for all of Africa for continental run")
-        # Any resolution can be used here as
-        # the tile extents will be the same.
-        tiles = get_africa_tiles(resolution_m=30, save_to_disk=False)
+        tiles = get_africa_tiles(save_to_disk=False)
 
     tiles = list(tiles)
     tile_ids = get_tile_region_codes(tiles, sep="/")
