@@ -29,6 +29,7 @@ dependencies = [
     "odc-cloud[ASYNC]",
     "odc-dscache",
     "odc-stats",
+    "pyarrow>=20.0.0",
     "requests",
     "s3fs",
     "tqdm"
