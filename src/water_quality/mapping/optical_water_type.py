@@ -196,7 +196,15 @@ def get_owt_reference_data(instrument: str) -> xr.DataArray:
     # Make a DataArray containing the OWT reference data
     # OWT types are stored in their own dimension to support vector multiplication
     if "msi" in instrument:
-        msi_bands = ["msi01", "msi02", "msi03", "msi04", "msi05", "msi06", "msi07"]
+        msi_bands = [
+            "msi01",
+            "msi02",
+            "msi03",
+            "msi04",
+            "msi05",
+            "msi06",
+            "msi07",
+        ]
         owt_msi = xr.DataArray(
             OWT_DATA_MSI,
             dims=("owt", "msi_band"),
@@ -204,7 +212,9 @@ def get_owt_reference_data(instrument: str) -> xr.DataArray:
                 "owt": OWT_LIST,
                 "msi_band": msi_bands,
             },
-            attrs={"desc": "optical water types - characteristic reflectances for msi"},
+            attrs={
+                "desc": "optical water types - characteristic reflectances for msi"
+            },
         )
         return owt_msi
     elif "oli" in instrument:
@@ -216,7 +226,9 @@ def get_owt_reference_data(instrument: str) -> xr.DataArray:
                 "owt": OWT_LIST,
                 "oli_band": oli_bands,
             },
-            attrs={"desc": "optical water types - characteristic reflectances for oli"},
+            attrs={
+                "desc": "optical water types - characteristic reflectances for oli"
+            },
         )
         return owt_oli
     else:
@@ -275,7 +287,8 @@ def OWT_pixel(
     # Resample the dataset if rate provided.
     if resample_rate is not None:
         resampled_ds = resampled_ds.isel(
-            y=slice(None, None, resample_rate), x=slice(None, None, resample_rate)
+            y=slice(None, None, resample_rate),
+            x=slice(None, None, resample_rate),
         )
 
     # Create a dimension for the surface reflectance data
@@ -291,7 +304,9 @@ def OWT_pixel(
     data_stack = np.dstack(
         [
             # Select to cater for resampling
-            ds[band].sel(x=resampled_ds.coords["x"], y=resampled_ds.coords["y"])
+            ds[band].sel(
+                x=resampled_ds.coords["x"], y=resampled_ds.coords["y"]
+            )
             for band in data_stack_bands
         ]
     ).reshape(data_stack_shape)
@@ -304,7 +319,9 @@ def OWT_pixel(
     resampled_ds = resampled_ds.assign_coords(owt=OWT.owt.values)
 
     # Calculate the dot product between each pixel vector and each owt type vector
-    resampled_ds[shortname + "_x_owt"] = resampled_ds[var_name].dot(OWT.T, dim=dim_name)
+    resampled_ds[shortname + "_x_owt"] = resampled_ds[var_name].dot(
+        OWT.T, dim=dim_name
+    )
     # The result now has for every pixel, the dot product with the
     # spectral reference vector.
 
@@ -330,7 +347,9 @@ def OWT_pixel(
 
     # replace zeros (where the scale of the pixel vector is zero) with nodata
     resampled_ds[shortname + "_owt"] = xr.where(
-        resampled_ds[shortname + "_scale"] > 0, resampled_ds[shortname + "_owt"], np.nan
+        resampled_ds[shortname + "_scale"] > 0,
+        resampled_ds[shortname + "_owt"],
+        np.nan,
     )
 
     da = resampled_ds[shortname + "_owt"].copy(deep=True)

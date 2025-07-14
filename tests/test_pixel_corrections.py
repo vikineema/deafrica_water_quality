@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 
-from water_quality.pixel_corrections import R_correction
+from water_quality.mapping.pixel_correction import R_correction
 
 TEST_DP_ADJUST = {
     "msi_agm": {
@@ -88,7 +88,9 @@ def test_r_correction_valid(
         ds, dp_adjust, instruments_to_use, water_frequency_threshold=0.1
     )
 
-    expected_added_vars = [f"{i}r" for k, v in dp_adjust.items() for i in v["var_list"]]
+    expected_added_vars = [
+        f"{i}r" for k, v in dp_adjust.items() for i in v["var_list"]
+    ]
     assert all(item in list(results.data_vars) for item in expected_added_vars)
 
     xr.testing.assert_allclose(results, pixel_corrections_validation_ds)
