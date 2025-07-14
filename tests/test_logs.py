@@ -30,7 +30,7 @@ def test_logging_level_behavior_level_2(caplog):
 
 def test_logging_level_behavior_level_3(caplog):
     logger = setup_logging(verbose=3)
-   
+
     logger.critical("This is a Critical message")
     logger.error("This is an Error message")
     logger.warning("This is a Warning message")
