@@ -181,7 +181,7 @@ def classify_permanent_water_using_threshold(
     ds = xr.Dataset()
     ds["wofs_wetcount"] = input_ds["wofs_ann_wetcount"].sum(dim="time")
     ds["wofs_clearcount"] = input_ds["wofs_ann_clearcount"].sum(dim="time")
-    ds["wofs_freq_median"] = (input_ds["wofs_ann_freq"].median(dim="time"),)
+    ds["wofs_freq_median"] = input_ds["wofs_ann_freq"].median(dim="time")
     ds["wofs_freq"] = ds["wofs_wetcount"] / ds["wofs_clearcount"]
     ds["wofs_freq_sdv"] = np.sqrt(
         (ds["wofs_freq"] * (1.0 - ds["wofs_freq"]))
