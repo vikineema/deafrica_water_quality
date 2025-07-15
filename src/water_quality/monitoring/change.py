@@ -445,8 +445,8 @@ def permanent_surface_water_dynamics_simple(
         (target_years_water_area / baseline_period_water_area - 1.0) * 100, 2
     )
     results = {
-        "baseline_permanent_water_area_km2": baseline_period_water_area,
-        "target_permanent_water_area_km2": target_years_water_area,
+        "baseline_period_permanent_water_area_km2": baseline_period_water_area,
+        "target_years_permanent_water_area_km2": target_years_water_area,
         "permanent_water_area_change_km2": change_in_water_area,
         "permanent_water_area_change_%": pc_change_in_water_area,
     }
@@ -497,8 +497,8 @@ def seasonal_surface_water_dynamics_simple(
         (target_years_water_area / baseline_period_water_area - 1.0) * 100, 2
     )
     results = {
-        "baseline_seasonal_water_area_km2": baseline_period_water_area,
-        "target_seasonal_water_area_km2": target_years_water_area,
+        "baseline_period_seasonal_water_area_km2": baseline_period_water_area,
+        "target_years_seasonal_water_area_km2": target_years_water_area,
         "seasonal_water_area_change_km2": change_in_water_area,
         "seasonal_water_area_change_%": pc_change_in_water_area,
     }
