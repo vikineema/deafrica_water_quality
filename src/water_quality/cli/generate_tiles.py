@@ -41,7 +41,7 @@ def cli(place_name: str, output_file: str):
     if place_name:
         if place_name not in place_name_list:
             raise ValueError(
-                f"{place_name} not in found in test areas file. Expected names include {' ,'.join(place_name_list)}"
+                f"'{place_name}' not found in test areas file; expected names include {', '.join(place_name_list)}"
             )
         else:
             log.info(f"Getting tiles for test area {place_name}")
