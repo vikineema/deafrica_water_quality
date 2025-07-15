@@ -268,8 +268,243 @@ def classify_water(
     return ds
 
 
-# Lakes and rivers permanent water area change (%)
-# EN_LKRV_PWAC
+def permanent_surface_water_dynamics_sdg(
+    baseline_period_water: xr.DataArray, target_years_water: xr.DataArray
+) -> dict[str, float]:
+    """
+    Compute the percent change in spatial extent for permanent surface
+    water using the SDG Indicator 6.6.1 default methodology (i.e. the
+    currently documented method that can be used globally).
+
+    Parameters
+    ----------
+    baseline_period_water : xr.DataArray
+        Array covering the baseline period where pixels are classified
+        as no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+    target_years_water : xr.DataArray
+        Array covering the target years where pixels are classified as
+        no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+
+    Returns
+    -------
+    dict[str, float]
+        Percent change in spatial extent for permanent surface water.
+    """
+    pixel_area = (
+        abs(
+            baseline_period_water.odc.geobox.resolution.x
+            * baseline_period_water.odc.geobox.resolution.y
+        )
+        / 1000000
+    )
+
+    def _area(mask: xr.DataArray) -> float:
+        return mask.sum().item() * pixel_area
+
+    # conversion of a no water place into a permanent water place
+    new_permanent_water = (baseline_period_water == 0) & (
+        target_years_water == 3
+    )
+    alpha = _area(new_permanent_water)
+    # conversion of a permanent water place into a no water place
+    lost_permanent_water = (baseline_period_water == 3) & (
+        target_years_water == 0
+    )
+    beta = _area(lost_permanent_water)
+    # Conversion of seasonal water to permanent water
+    seasonal_to_permanent_water = (baseline_period_water == 2) & (
+        target_years_water == 3
+    )
+    phi = _area(seasonal_to_permanent_water)
+    # Conversion of permanent water place into seasonal water
+    permanent_to_seasonal_water = (baseline_period_water == 3) & (
+        target_years_water == 2
+    )
+    sigma = _area(permanent_to_seasonal_water)
+    # Area where water is always observerd
+    permanent_water_surfaces = (baseline_period_water == 3) & (
+        target_years_water == 3
+    )
+    epsilon = _area(permanent_water_surfaces)
+
+    # Percentage change in spatial extent for permanent surface
+    # water dynamics
+    delta = (((alpha - beta) + (phi - sigma)) / (epsilon + beta + sigma)) * 100
+
+    return {"permanent_water_area_change_%": delta}
+
+
+def seasonal_surface_water_dynamics_sdg(
+    baseline_period_water: xr.DataArray, target_years_water: xr.DataArray
+) -> dict[str, float]:
+    """
+    Compute the percent change in spatial extent for seasonal surface
+    water using the SDG Indicator 6.6.1 default methodology (i.e. the
+    currently documented method that can be used globally).
+
+    Parameters
+    ----------
+    baseline_period_water : xr.DataArray
+        Array covering the baseline period where pixels are classified
+        as no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+    target_years_water : xr.DataArray
+        Array covering the target years where pixels are classified as
+        no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+
+    Returns
+    -------
+    dict[str, float]
+        Percent change in spatial extent for seasonal surface water.
+    """
+    pixel_area = (
+        abs(
+            baseline_period_water.odc.geobox.resolution.x
+            * baseline_period_water.odc.geobox.resolution.y
+        )
+        / 1000000
+    )
+
+    def _area(mask: xr.DataArray) -> float:
+        return mask.sum().item() * pixel_area
+
+    # conversion of a no water place into a seasonal water place
+    new_seasonal_water = (baseline_period_water == 0) & (
+        target_years_water == 2
+    )
+    alpha = _area(new_seasonal_water)
+    # conversion of a seasonal water place into a no water place
+    lost_seasonal_water = (baseline_period_water == 2) & (
+        target_years_water == 0
+    )
+    beta = _area(lost_seasonal_water)
+    # conversion of permanent water into seasonal water
+    permanent_to_seasonal = (baseline_period_water == 3) & (
+        target_years_water == 2
+    )
+    phi = _area(permanent_to_seasonal)
+    # Conversion of seasonal water into permanent water
+    seasonal_to_permanent_water = (baseline_period_water == 2) & (
+        target_years_water == 3
+    )
+    sigma = _area(seasonal_to_permanent_water)
+    # area where seasonal water is always observed
+    seasonal_water_surfaces = (baseline_period_water == 2) & (
+        target_years_water == 2
+    )
+    epsilon = _area(seasonal_water_surfaces)
+
+    # Percentage change in spatial extent for seasonal surface
+    # water dynamics
+    delta = (((alpha - beta) + (phi - sigma)) / (epsilon + beta + sigma)) * 100
+
+    return {"seasonal_water_area_change_%": delta}
+
+
+def permanent_surface_water_dynamics_simple(
+    baseline_period_water: xr.DataArray, target_years_water: xr.DataArray
+) -> dict[str, float]:
+    """
+    Compute the change in spatial extent for permanent surface water.
+
+    Parameters
+    ----------
+    baseline_period_water : xr.DataArray
+        Array covering the baseline period where pixels are classified
+        as no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+    target_years_water : xr.DataArray
+        Array covering the target years where pixels are classified as
+        no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+
+    Returns
+    -------
+    dict[str, float]
+        Change in spatial extent for permanent surface water.
+    """
+    pixel_area = (
+        abs(
+            baseline_period_water.odc.geobox.resolution.x
+            * baseline_period_water.odc.geobox.resolution.y
+        )
+        / 1_000_000
+    )
+
+    def _area(mask: xr.DataArray) -> float:
+        return mask.sum().item() * pixel_area
+
+    baseline_period_water_area = _area(baseline_period_water == 2)
+    target_years_water_area = _area(target_years_water == 2)
+
+    change_in_water_area = target_years_water_area - baseline_period_water_area
+    pc_change_in_water_area = np.round(
+        (target_years_water_area / baseline_period_water_area - 1.0) * 100, 2
+    )
+    results = {
+        "baseline_permanent_water_area_km2": baseline_period_water_area,
+        "target_permanent_water_area_km2": target_years_water_area,
+        "permanent_water_area_change_km2": change_in_water_area,
+        "permanent_water_area_change_%": pc_change_in_water_area,
+    }
+    return results
+
+
+def seasonal_surface_water_dynamics_simple(
+    baseline_period_water: xr.DataArray, target_years_water: xr.DataArray
+) -> dict[str, float]:
+    """
+    Compute the change in spatial extent for seasonal surface water.
+
+    Parameters
+    ----------
+    baseline_period_water : xr.DataArray
+        Array covering the baseline period where pixels are classified
+        as no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+    target_years_water : xr.DataArray
+        Array covering the target years where pixels are classified as
+        no water (0), ephemeral water(1), seasonal water(2) and
+        permanent water(3).
+
+    Returns
+    -------
+    dict[str, float]
+        Change in spatial extent for seasonal surface water.
+    """
+    pixel_area = (
+        abs(
+            baseline_period_water.odc.geobox.resolution.x
+            * baseline_period_water.odc.geobox.resolution.y
+        )
+        / 1000000
+    )
+
+    def _area(mask: xr.DataArray) -> float:
+        return mask.sum().item() * pixel_area
+
+    baseline_period_water_area = _area(
+        (baseline_period_water > 0) & (baseline_period_water < 3)
+    )
+    target_years_water_area = _area(
+        (target_years_water > 0) & (target_years_water < 3)
+    )
+    change_in_water_area = target_years_water_area - baseline_period_water_area
+    pc_change_in_water_area = np.round(
+        (target_years_water_area / baseline_period_water_area - 1.0) * 100, 2
+    )
+    results = {
+        "baseline_seasonal_water_area_km2": baseline_period_water_area,
+        "target_seasonal_water_area_km2": target_years_water_area,
+        "seasonal_water_area_change_km2": change_in_water_area,
+        "seasonal_water_area_change_%": pc_change_in_water_area,
+    }
+    return results
+
+
 def permanent_water_area_change(
     ds: xr.Dataset,
     baseline_period: tuple[str],
@@ -293,7 +528,7 @@ def permanent_water_area_change(
     Returns
     -------
     dict
-        Results from robust regression analysis.
+        Changes in permanent water area.
     """
     pwater_threshold = water_frequency_thresholds[0]
     water_threshold = water_frequency_thresholds[1]
@@ -309,6 +544,15 @@ def permanent_water_area_change(
         target_years=target_years,
         option="count",
     )
+    regression_results = {
+        "permanent_water_regression_slope": regression["slope"],
+        "permanent_water_regression_intercept": regression["intercept"],
+        "permanent_water_regression_slope_low": regression["slope_low"],
+        "permanent_water_regression_slope_high": regression["slope_high"],
+        "permanent_water_regression_significant": regression["significant"],
+        "permenent_water_declining": regression["declining"],
+        "permenent_water_increasing": regression["increasing"],
+    }
     # Baseine period data processing
     baseline_slice = slice(min(baseline_period), max(baseline_period))
     baseline_ds = classify_water(
@@ -326,19 +570,23 @@ def permanent_water_area_change(
         ephemeral_water_threshold=ephemeral_water_threshold,
     )
 
-    # conversion of a no water place into a permanent water place
-    new_permanent_water = None
-    # conversion of a permanent water place into a no water place
-    lost_permanent_water = None
-    # Conversion of a no water place into a seasonal water place
-    new_seasonal_water = None
-    # Conversion of a season water place into a no water place
-    lost_seasonal_water = None
-    # Conversion of  a permanent water place into seasonal water
-    permanent_to_seasonal_water = None
-    # Conversion of seaonal water to permanent water
-    seasonal_to_permanent_water = None
-    # Area where water is always observerd
-    permanent_water_surfaces = None
-    # Area where seasonal water is always observerd
-    seasonal_water_surfaces = None
+    permanent_water_statistics = permanent_surface_water_dynamics_simple(
+        baseline_period_water=baseline_ds["water"],
+        target_years_water=target_ds["water"],
+    )
+    seasonal_water_statistics = seasonal_surface_water_dynamics_simple(
+        baseline_period_water=baseline_ds["water"],
+        target_years_water=target_ds["water"],
+    )
+
+    # TODO: switch keys to sdg symbols
+    # EN_LKRV_PWAN: Lakes and rivers permanent water area (square kilometres)
+    # EN_LKRV_SWAN: Lakes and rivers seasonal water area (square kilometres)
+    # EN_LKRV_PWAC: Lakes and rivers permanent water area change (%)
+    # EN_LKRV_SWAC: Lakes and rivers seasonal water area change (%)
+    lkrv_pwac = {
+        **permanent_water_statistics,
+        **seasonal_water_statistics,
+        **regression_results,
+    }
+    return lkrv_pwac
