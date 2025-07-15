@@ -778,7 +778,7 @@ def change_in_trophic_state(
     }
 
     # Trophic State Index (TSI)
-    var_name = "TSI_median"
+    var_name = "TSI"
     regression = robust_regression(
         ds=ds,
         var_name=var_name,
