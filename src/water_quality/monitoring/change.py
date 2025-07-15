@@ -510,7 +510,7 @@ def permanent_water_area_change(
     baseline_period: tuple[str],
     target_years: str,
     water_frequency_thresholds: list[float] = [0, 0.15, 0.875],
-):
+) -> dict[str, float]:
     """
     Calculate permanent water area change using robust regression.
 
@@ -527,7 +527,7 @@ def permanent_water_area_change(
 
     Returns
     -------
-    dict
+    dict[str, float]
         Changes in permanent water area.
     """
     pwater_threshold = water_frequency_thresholds[0]
@@ -590,3 +590,254 @@ def permanent_water_area_change(
         **regression_results,
     }
     return lkrv_pwac
+
+
+def classify_deviation(deviation_da: xr.DataArray) -> xr.DataArray:
+    """
+    Classify pixels in a monthly or annual deviation synthesis into
+    deviation levels.
+
+    Pixels are classified into 4 classes based the range of values the
+    pixel value falls into.
+    - 1: Low (0-25%)
+    - 2: Medium (25–50%)
+    - 3: High (50–75%)
+    - 4: Extreme (75-100%)
+
+    Parameters
+    ----------
+    deviation_da : xr.DataArray
+        Monthly or annual deviation synthesis for a waterbody.
+
+    Returns
+    -------
+    xr.DataArray
+        Array of classified pixel values, where each pixel is assigned:
+        1 (low), 2 (medium), 3 (high), or 4 (extreme).
+    """
+    conditions = [
+        (deviation_da < 25),
+        ((deviation_da >= 25) & (deviation_da < 50)),
+        ((deviation_da >= 50) & (deviation_da < 75)),
+        (deviation_da >= 75),
+    ]
+    classes = [1, 2, 3, 4]
+    classified_deviation = xr.DataArray(
+        data=np.select(conditions, classes, default=np.nan),
+        coords=deviation_da.coords,
+        dims=deviation_da.dims,
+    )
+    return classified_deviation
+
+
+def waterbody_is_affected(
+    deviation_classes: xr.DataArray,
+) -> dict[str, float | bool]:
+    """
+    Determine whether a waterbody is affected.
+
+    Compares the number of 'high' (3) and 'extreme' (4) deviation pixels
+    to the number of 'low' (1) and 'medium' (2) deviation pixels.
+    A waterbody is considered affected if the number of high and extreme
+    pixels exceeds the number of low and medium pixels.
+
+    Parameters
+    ----------
+    deviation_classes : xr.DataArray
+        Dataset containing classified annual deviation or monthly
+        deviation values.
+
+    Returns
+    -------
+    dict[str, float | bool]:
+        A dictionary containing the area of high and extreme pixels in
+        km2, area of low and medium pixels in km2 and a boolean indicating
+        whether a waterbody is affected (True) or not.
+    """
+
+    pixel_area = (
+        abs(
+            deviation_classes.odc.geobox.resolution.x
+            * deviation_classes.odc.geobox.resolution.y
+        )
+        / 1000000
+    )
+
+    def _area(mask: xr.DataArray) -> float:
+        return mask.sum().item() * pixel_area
+
+    high_and_extreme = _area(deviation_classes.where(deviation_classes >= 3))
+    low_and_medium = _area(deviation_classes.where(deviation_classes <= 2))
+    affected = high_and_extreme > low_and_medium
+    results = {
+        "HE_km2": high_and_extreme,
+        "LM_km2": low_and_medium,
+        "affected": affected,
+    }
+    return results
+
+
+def change_in_turbidity(
+    ds: xr.Dataset,
+    baseline_period: tuple[str],
+    target_years: str,
+) -> dict[str, Any]:
+    """
+    Compute the change in turbidity for a waterbody
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing Total Suspended Solids (TSS) data.
+    baseline_period : tuple[str]
+        The baseline period start and end years.
+    target_years : str
+        The target years for comparison.
+    Returns
+    -------
+    dict[str, Any]
+        Change in turbidity computed using a robust regression and
+        classification on whether a waterbody is affected.
+    """
+    # Total Suspended Solids (TSS)
+    var_name = "tss_agm_med"
+    regression = robust_regression(
+        ds=ds,
+        var_name=var_name,
+        baseline_period=baseline_period,
+        target_years=target_years,
+        option="median",
+    )
+    tss_regression = {
+        "tss_regression_slope": regression["slope"],
+        "tss_regression_intercept": regression["intercept"],
+        "tss_regression_slope_low": regression["slope_low"],
+        "tss_regression_slope_high": regression["slope_high"],
+        "tss_regression_significant": regression["significant"],
+        "tss_declining": regression["declining"],
+        "tss_increasing": regression["increasing"],
+    }
+
+    da = ds[var_name]
+    baseline_slice = slice(min(baseline_period), max(baseline_period))
+    baseline_da = da.sel(time=baseline_slice).median(dim="time")
+
+    target_slice = slice(min(target_years), max(target_years))
+    target_da = da.sel(time=target_slice).median(dim="time")
+
+    # Annual deviation synthesis
+    tss_percent_change = ((target_da - baseline_da) / baseline_da) * 100
+    tss_percent_change = tss_percent_change.clip(min=0, max=100)
+    tss_classified_deviation = classify_deviation(tss_percent_change)
+    affected_results = waterbody_is_affected(tss_classified_deviation)
+
+    lkw_qltrb = {**tss_regression, **affected_results}
+    return lkw_qltrb
+
+
+def change_in_trophic_state(
+    ds: xr.Dataset,
+    baseline_period: tuple[str],
+    target_years: str,
+):
+    """
+    Compute the change in trophic state for a waterbody
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing Trophic State Index (TSI) data and
+        chlorophyll-a concentration data.
+    baseline_period : tuple[str]
+        The baseline period start and end years.
+    target_years : str
+        The target years for comparison.
+    Returns
+    -------
+    dict[str, Any]
+        Change in trophic state computed using a robust regression and
+        classification on whether a waterbody is affected.
+    """
+    # chlorophyll-a concentration
+    var_name = "chla_agm_med"
+    regression = robust_regression(
+        ds=ds,
+        var_name=var_name,
+        baseline_period=baseline_period,
+        target_years=target_years,
+        option="median",
+    )
+    chla_regression = {
+        "chla_regression_slope": regression["slope"],
+        "chla_regression_intercept": regression["intercept"],
+        "chla_regression_slope_low": regression["slope_low"],
+        "chla_regression_slope_high": regression["slope_high"],
+        "chla_regression_significant": regression["significant"],
+        "chla_declining": regression["declining"],
+        "chla_increasing": regression["increasing"],
+    }
+
+    # Trophic State Index (TSI)
+    var_name = "TSI_median"
+    regression = robust_regression(
+        ds=ds,
+        var_name=var_name,
+        baseline_period=baseline_period,
+        target_years=target_years,
+        option="mean",
+    )
+    tsi_regression = {
+        "TSI_regression_slope": regression["slope"],
+        "TSI_regression_intercept": regression["intercept"],
+        "TSI_regression_slope_low": regression["slope_low"],
+        "TSI_regression_slope_high": regression["slope_high"],
+        "TSI_regression_significant": regression["significant"],
+        "TSI_declining": regression["declining"],
+        "TSI_increasing": regression["increasing"],
+    }
+
+    da = ds[var_name]
+    baseline_slice = slice(min(baseline_period), max(baseline_period))
+    baseline_da = da.sel(time=baseline_slice).median(dim="time")
+
+    target_slice = slice(min(target_years), max(target_years))
+    target_da = da.sel(time=target_slice).median(dim="time")
+
+    # Annual deviation synthesis
+    TSI_percent_change = ((target_da - baseline_da) / baseline_da) * 100
+    TSI_percent_change = TSI_percent_change.clip(min=0, max=100)
+    TSI_classified_deviation = classify_deviation(TSI_percent_change)
+    affected_results = waterbody_is_affected(TSI_classified_deviation)
+
+    lkw_qltrst = {**chla_regression, **tsi_regression, **affected_results}
+    return lkw_qltrst
+
+
+def water_quality_change(
+    ds: xr.Dataset,
+    baseline_period: tuple[str],
+    target_years: str,
+) -> tuple[dict]:
+    """
+    Compute the change in water quality of a waterbody.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing Total Suspended Solids (TSS), Trophic State
+        Index (TSI) and chlorophyll-a concentration data.
+    baseline_period : tuple[str]
+        The baseline period start and end years.
+    target_years : str
+        The target years for comparison.
+
+    Returns
+    -------
+    tuple[dict]
+        Change in turbidity and trophic state computed using a robust
+        regression and classification on whether a waterbody is affected.
+
+    """
+    lkw_qltrb = change_in_turbidity(ds, baseline_period, target_years)
+    lkw_qltrst = change_in_trophic_state(ds, baseline_period, target_years)
+    return lkw_qltrb, lkw_qltrst
