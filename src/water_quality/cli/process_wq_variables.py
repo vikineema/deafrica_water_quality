@@ -10,10 +10,7 @@ from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 
-from water_quality.dates import (
-    validate_end_date,
-    validate_start_date,
-)
+from water_quality.dates import validate_end_date, validate_start_date
 from water_quality.grid import check_resolution, get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
@@ -229,12 +226,20 @@ def cli(
             ds["hue"] = hue_calculation(ds, instrument="msi_agm")
 
             log.info("Determining the open water type for each pixel.")
-            ds["owt_msi"] = OWT_pixel(
-                ds,
-                instrument="msi_agm",
-                water_frequency_threshold=0.8,
-                resample_rate=3,
-            )
+            if int(year) < 2017:
+                ds["owt_oli"] = OWT_pixel(
+                    ds,
+                    instrument="oli_agm",
+                    water_frequency_threshold=0.8,
+                    resample_rate=3,
+                )
+            else:
+                ds["owt_msi"] = OWT_pixel(
+                    ds,
+                    instrument="msi_agm",
+                    water_frequency_threshold=0.8,
+                    resample_rate=3,
+                )
 
             log.info("Applying the WQ algorithms to water areas.")
             # Apply the WQ algorithms to water areas, adding variables
@@ -274,6 +279,7 @@ def cli(
                 "watermask",
                 # optical water type
                 "owt_msi",
+                "owt_oli",
                 # wq variables
                 "tss",
                 "chla",
