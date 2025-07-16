@@ -99,23 +99,16 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
         raise NotImplementedError(
             f"Hue calculation for the instrument {instrument} is not available"
         )
-
     else:
         missing_bands = [
             i for i in band_list if i not in list(dataset.data_vars)
         ]
         if missing_bands:
-            log.error(
+            raise KeyError(
                 f"Bands {', '.join(missing_bands)} missing in dataset for "
                 "hue calculation."
             )
-            sel_var = list(dataset.data_vars)[0]
-            return xr.DataArray(
-                data=np.full(dataset[sel_var].shape, np.nan),
-                dims=dataset.dims,
-                coords=dataset.coords,
-                name="hue",
-            )
+
     # Hue calculation
 
     # Initiate two Datasets with no variables:
