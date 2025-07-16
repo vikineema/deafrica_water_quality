@@ -1,5 +1,4 @@
 import logging
-from collections import Counter
 from typing import Any
 
 import dask
@@ -301,8 +300,8 @@ def build_wq_agm_dataset(
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
 
-    log.info("Processing surface temperature data to annual composite ...")
     if "tirs" in loaded_data.keys():
+        log.info("Processing surface temperature data to annual composite ...")
         if "wofs_ann" not in loaded_data.keys():
             raise ValueError(
                 "Data for the wofs_ann instrument is required to process "
