@@ -1046,6 +1046,7 @@ def plot_change_in_permanent_water_area(
         f"\n Decline in water area = {lkrv_pwac['permenent_water_declining']}"
     )
 
+    plt.figure(figsize=[12, 6])
     plt.plot(
         da.time,
         da,
