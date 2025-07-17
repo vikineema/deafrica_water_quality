@@ -386,7 +386,10 @@ def normalise_water_quality_measures(
 
 
 def load_water_quality_measures(
-    waterbody_uid: str, wq_measures_dir: str, water_frequency_threshold: float
+    waterbody_uid: str,
+    wq_measures_dir: str,
+    water_frequency_threshold: float,
+    years: list[int],
 ) -> xr.Dataset:
     """Load the water quality measures for a waterbody.
 
@@ -399,7 +402,8 @@ def load_water_quality_measures(
     water_frequency_threshold : float
         Threshold to use when classifying water and non-water pixels
         in the normalization process.
-
+    years: list[int]:
+        List of years to load data for.
     Returns
     -------
     xr.Dataset
@@ -411,31 +415,34 @@ def load_water_quality_measures(
     )
     per_year_ds = []
     for year, grouped_by_tile in grouped_by_year_and_tile.items():
-        log.info(f"Loading data for year {year}")
-        per_tile_ds = []
-        for tile_id, cog_urls in grouped_by_tile.items():
-            log.info(f"Loading data for tile {get_region_code(tile_id)}")
-            wq_parameters_csv_url = get_wq_csv_url(
-                output_directory=wq_measures_dir, tile_id=tile_id, year=year
-            )
-            bands_to_load = get_bands_to_load(
-                wq_parameters_csv_url=wq_parameters_csv_url
-            )
+        if int(year) in years:
+            log.info(f"Loading data for year {year}")
+            per_tile_ds = []
+            for tile_id, cog_urls in grouped_by_tile.items():
+                log.info(f"Loading data for tile {get_region_code(tile_id)}")
+                wq_parameters_csv_url = get_wq_csv_url(
+                    output_directory=wq_measures_dir,
+                    tile_id=tile_id,
+                    year=year,
+                )
+                bands_to_load = get_bands_to_load(
+                    wq_parameters_csv_url=wq_parameters_csv_url
+                )
 
-            ds = create_ds_from_cogs(
-                cog_urls=cog_urls,
-                bands_to_load=bands_to_load,
-                waterbody_uid=waterbody_uid,
-            )
-            ds = ds.compute()
-            ds = normalise_water_quality_measures(
-                ds=ds,
-                wq_parameters_csv_url=wq_parameters_csv_url,
-                water_frequency_threshold=water_frequency_threshold,
-            )
-            per_tile_ds.append(ds)
-        ds = xr.merge(per_tile_ds)
-        per_year_ds.append(ds)
+                ds = create_ds_from_cogs(
+                    cog_urls=cog_urls,
+                    bands_to_load=bands_to_load,
+                    waterbody_uid=waterbody_uid,
+                )
+                ds = ds.compute()
+                ds = normalise_water_quality_measures(
+                    ds=ds,
+                    wq_parameters_csv_url=wq_parameters_csv_url,
+                    water_frequency_threshold=water_frequency_threshold,
+                )
+                per_tile_ds.append(ds)
+            ds = xr.merge(per_tile_ds)
+            per_year_ds.append(ds)
 
     ds = xr.concat(per_year_ds, dim="time")
     return ds
