@@ -841,3 +841,117 @@ def water_quality_change(
     lkw_qltrb = change_in_turbidity(ds, baseline_period, target_years)
     lkw_qltrst = change_in_trophic_state(ds, baseline_period, target_years)
     return lkw_qltrb, lkw_qltrst
+
+
+def piecewise_linreg(
+    x: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """
+    From two series, representing paired x,y values, estimate the value
+    of each y point with a linear regression of itself and its
+    immediate neighbors (a sliding window of 3 points).
+
+    This function fits a trend line to the series that approximates the
+    data points, rather than strictly going through them, allowing for
+    noise in the data.
+
+    > **Note**: This function might not work as expected if x_series
+        contains datetime64 objects directly, as np.vstack might not
+        handle them consistently with numerical operations.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        The independent variable series (1D array)
+    y : np.ndarray
+        The dependent variable series (1D array).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, float, float]
+        A tuple containing:
+        * the original x_series
+        * the calculated fitted y_values.
+        * the total bias (sum of residuals)
+        * the standard deviation of the residuals \
+            (sqrt of sum of squared errors)
+    """
+    # Creates a 2D array where each column represents
+    # a data point (paired  x,y values)
+    data_points = np.vstack((x, y))
+
+    valid_columns_mask = np.all(~np.isnan(data_points), axis=0)
+    cleaned_data_points = data_points[:, valid_columns_mask]
+
+    num_cleaned_points = cleaned_data_points.shape[1]
+    if num_cleaned_points < 3:
+        raise ValueError(
+            "Warning: Not enough valid data points (less than 3) for "
+            "piecewise linear regression."
+        )
+
+    # Add a place holder for the fitted y values
+    cleaned_data_points = np.vstack(
+        [cleaned_data_points, np.full_like(cleaned_data_points[1], np.nan)]
+    )
+
+    centre_weighted = True
+
+    # Ensure each window is made up of 3 data points
+    # (current, next, next-next).
+    for col in range(0, num_cleaned_points - 2):
+        window_x_values = cleaned_data_points[0, col : col + 3]
+        window_y_values = cleaned_data_points[1, col : col + 3]
+
+        if centre_weighted:
+            # Append the center point of the current window (col+1)
+            # again to give it more weight.
+            y_for_regression = np.append(
+                window_y_values, cleaned_data_points[1, col + 1]
+            )
+            x_for_regression = np.append(
+                window_x_values, cleaned_data_points[0, col + 1]
+            )
+        else:
+            y_for_regression = window_y_values
+            x_for_regression = window_x_values
+
+        # Design matrix for y = mx + c.
+        # Needs a column of ones for the intercept.
+        design_matrix = np.vstack(
+            (np.ones(x_for_regression.shape), x_for_regression)
+        ).T
+
+        intercept, slope = sp.linalg.lstsq(design_matrix, y_for_regression)[0]
+
+        def linear_model(x_val):
+            return (x_val * slope + intercept).round(3)
+
+        # Store the fitted y value for the center point of the current window
+        cleaned_data_points[2, col + 1] = linear_model(
+            cleaned_data_points[0, col + 1]
+        )
+
+        # Edge case 1: First point
+        if col == 0:
+            # Fit using the first window's model
+            cleaned_data_points[2, col] = linear_model(
+                cleaned_data_points[0, col]
+            )
+
+        # Edge case 2: Last point
+        if col == num_cleaned_points - 3:
+            # Fit using the using the last relevant window's model
+            cleaned_data_points[2, col + 2] = linear_model(
+                cleaned_data_points[0, col + 2]
+            )
+
+    clean_fitted_y = cleaned_data_points[2]
+    fitted_y = np.full_like(data_points[1], np.nan)
+    fitted_y[valid_columns_mask] = clean_fitted_y
+
+    residuals = fitted_y - data_points[1]
+    bias = np.nansum(residuals)
+    sd_of_residuals = np.sqrt(np.nansum(residuals**2))
+
+    return data_points[0], fitted_y, bias, sd_of_residuals
