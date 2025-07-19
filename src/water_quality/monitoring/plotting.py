@@ -341,15 +341,13 @@ def plot_change(
     baseline_slice = slice(min(baseline_period), max(baseline_period))
     baseline_times = tss_da.sel(time=baseline_slice).time.values
     baseline_period_mean = (
-        tss_da.sel(time=baseline_times).mean(dim=["x", "y"]).item()
+        tss_da.sel(time=baseline_times).mean(dim="time").item()
     )
     baseline_period_mean = np.round(baseline_period_mean, 1)
 
     target_slice = slice(min(target_years), max(target_years))
     target_times = tss_da.sel(time=target_slice).time.values
-    target_years_mean = (
-        tss_da.sel(time=target_times).mean(dim=["x", "y"]).item()
-    )
+    target_years_mean = tss_da.sel(time=target_times).mean(dim="time").item()
     target_years_mean = np.round(target_years_mean, 1)
 
     clip_max = np.max((100, baseline_period_mean, target_years_mean))
