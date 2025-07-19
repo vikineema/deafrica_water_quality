@@ -291,3 +291,154 @@ def plot_change_in_permanent_water_area(
         f"{waterbody_uid}_lkrv_pwac.png"
     )
     plot_figure(permenent_water_area_figure)
+
+
+def plot_change(
+    waterbody_uid: str,
+    ds: xr.Dataset,
+    baseline_period: tuple[str],
+    target_years: str,
+    lkw_qltrb={},
+):
+    tss_figure = get_figure_template()
+
+    tss_da = ds.tss_agm_med.mean(dim=("x", "y"))
+    tss_da = tss_da.where(~np.isinf(tss_da), np.nan)
+
+    # Data points plot
+    label_prefix = "TSS values"
+    data_points_plot = tss_figure["data_points_plot"]
+    data_points_plot.update(
+        {
+            "x": tss_da.time.values,
+            "y": tss_da.values,
+            "label": data_points_plot["label"].format(
+                label_prefix=label_prefix
+            ),
+        },
+    )
+
+    # Trend curve plot
+    # Create a two step interpolation function: a piecewise linear
+    # regression followed by a quadratic interpolator
+    _, fitted_y, *_ = piecewise_linreg(
+        x=np.arange(0, tss_da.time.size),
+        y=tss_da.values,
+    )
+    interp_func = sp.interpolate.interp1d(
+        x=tss_da.time,
+        y=fitted_y,
+        kind="quadratic",
+        fill_value="extrapolate",
+    )
+    # Generate a new, denser time range for interpolation
+    time_new = pd.date_range(
+        tss_da.time.min().values,
+        tss_da.time.max().values,
+        freq="2M",
+    )
+    # Fit a trend curve to the data
+    baseline_slice = slice(min(baseline_period), max(baseline_period))
+    baseline_times = tss_da.sel(time=baseline_slice).time.values
+    baseline_period_mean = (
+        tss_da.sel(time=baseline_times).mean(dim=["x", "y"]).item()
+    )
+    baseline_period_mean = np.round(baseline_period_mean, 1)
+
+    target_slice = slice(min(target_years), max(target_years))
+    target_times = tss_da.sel(time=target_slice).time.values
+    target_years_mean = (
+        tss_da.sel(time=target_times).mean(dim=["x", "y"]).item()
+    )
+    target_years_mean = np.round(target_years_mean, 1)
+
+    clip_max = np.max((100, baseline_period_mean, target_years_mean))
+    trend_curve = np.clip(
+        interp_func(time_new),
+        0,
+        clip_max,
+    )
+
+    trend_curve_plot = tss_figure["trend_curve_plot"]
+    trend_curve_plot.update(
+        {
+            "x": time_new,
+            "y": trend_curve,
+            "label": trend_curve_plot["label"].format(
+                label_prefix=label_prefix
+            ),
+        },
+    )
+
+    # SDG method baseline plot
+    baseline_period_mean_values = np.full(
+        baseline_times.shape,
+        baseline_period_mean,
+    )
+    sdg_baseline_period_plot = tss_figure["sdg_baseline_period_plot"]
+    sdg_baseline_period_plot.update(
+        {
+            "x": baseline_times,
+            "y": baseline_period_mean_values,
+            "label": sdg_baseline_period_plot["label"].format(
+                label_prefix=label_prefix
+            ),
+        },
+    )
+
+    # SDG method target years plot
+    target_years_mean_values = np.full(target_times.shape, target_years_mean)
+    sdg_target_years_plot = tss_figure["sdg_target_years_plot"]
+    sdg_target_years_plot.update(
+        {
+            "x": target_times,
+            "y": target_years_mean_values,
+            "label": sdg_target_years_plot["label"].format(
+                label_prefix=label_prefix
+            ),
+        },
+    )
+
+    # Robust regression line comparing baseline period and target years
+    regression_span = tss_da.sel(
+        time=slice(min(baseline_times), max(target_times))
+    ).time.values
+    regression_line_x = regression_span.astype("float")
+    regression_line_slope = lkw_qltrb["tss_regression_slope"]
+    regression_line_intercept = lkw_qltrb["tss_regression_intercept"]
+    regression_line_scale = 1
+    regression_line_y = (
+        (regression_line_slope * regression_line_x) + regression_line_intercept
+    ) * regression_line_scale
+
+    regression_line_plot = tss_figure["regression_line_plot"]
+    regression_line_plot.update(
+        {
+            "x": regression_span,
+            "y": regression_line_y,
+            "label": regression_line_plot["label"].format(
+                label_prefix=label_prefix
+            ),
+        },
+    )
+
+    # Title
+    change_percent = ((target_years_mean / baseline_period_mean) - 1.0) * 100
+    change_percent = np.round(change_percent, 2)
+
+    tss_figure["figure_title"] = (
+        f"Waterbody {waterbody_uid} - SDG : LKW_QLTRB (Turbidity)"
+        "\n Annual TSS for areas of permanent water"
+        f"\n Baseline period: {min(baseline_period)} to {max(baseline_period)} "
+        f"Target years: {min(target_years)} to {max(target_years)}"
+        f"\n TSS level change ({target_years_mean} - {baseline_period_mean}) / "
+        f"{baseline_period_mean} = {change_percent} %"
+        f"\nSDG 'Affected' : {lkw_qltrb['affected']}"
+        "Significant trend based on robust regression over baseline period and "
+        f"target years = {lkw_qltrb['tss_regression_significant']}"
+        f"Decline in TSS (improvement) = {lkw_qltrb['tss_declining']}"
+    )
+
+    tss_figure["y_label"] = "TSS (mg/l)"
+    tss_figure["output_file_name"] = f"{waterbody_uid}_lkw_qltrb.png"
+    plot_figure(tss_figure)
