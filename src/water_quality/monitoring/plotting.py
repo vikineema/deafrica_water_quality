@@ -134,16 +134,13 @@ def plot_figure(figure_components: dict[str, Any]):
     plt.show()
 
 
-def plot_change(
+def plot_change_in_permanent_water_area(
     waterbody_uid: str,
     ds: xr.Dataset,
     baseline_period: tuple[str],
     target_years: str,
-    lkrv_pwac={},
-    lkw_qltrb={},
-    lkw_qltrst={},
+    lkrv_pwac: dict[str, Any],
 ):
-    ## Change in permanent water area
     permenent_water_area_figure = get_figure_template()
 
     permenent_water_area_figure["figure_title"] = (
@@ -292,3 +289,15 @@ def plot_change(
         f"{waterbody_uid}_lkrv_pwac.png"
     )
     plot_figure(permenent_water_area_figure)
+
+
+def plot_change(
+    waterbody_uid: str,
+    ds: xr.Dataset,
+    baseline_period: tuple[str],
+    target_years: str,
+    lkrv_pwac={},
+    lkw_qltrb={},
+    lkw_qltrst={},
+):
+    pass
