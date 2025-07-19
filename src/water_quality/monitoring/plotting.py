@@ -208,7 +208,7 @@ def plot_change_in_permanent_water_area(
     # Fit a trend curve to the data
     trend_curve = np.clip(
         interp_func(time_new),
-        permanent_water_area.min().item(),
+        0,
         permanent_water_area.max().item(),
     )
 
@@ -223,9 +223,10 @@ def plot_change_in_permanent_water_area(
         },
     )
 
+    # SDG method baseline period plot
     baseline_slice = slice(min(baseline_period), max(baseline_period))
     baseline_times = permanent_water_area.sel(time=baseline_slice).time.values
-    baseline_period_mean = np.full(
+    baseline_period_mean_values = np.full(
         baseline_times.shape,
         lkrv_pwac["baseline_period_permanent_water_area_km2"],
     )
@@ -236,16 +237,17 @@ def plot_change_in_permanent_water_area(
     sdg_baseline_period_plot.update(
         {
             "x": baseline_times,
-            "y": baseline_period_mean,
+            "y": baseline_period_mean_values,
             "label": sdg_baseline_period_plot["label"].format(
                 label_prefix=label_prefix
             ),
         },
     )
 
+    # SDG method target years plot
     target_slice = slice(min(target_years), max(target_years))
     target_times = permanent_water_area.sel(time=target_slice).time.values
-    target_years_mean = np.full(
+    target_years_mean_values = np.full(
         target_times.shape, lkrv_pwac["target_years_permanent_water_area_km2"]
     )
     sdg_target_years_plot = permenent_water_area_figure[
@@ -254,7 +256,7 @@ def plot_change_in_permanent_water_area(
     sdg_target_years_plot.update(
         {
             "x": target_times,
-            "y": target_years_mean,
+            "y": target_years_mean_values,
             "label": sdg_target_years_plot["label"].format(
                 label_prefix=label_prefix
             ),
@@ -289,15 +291,3 @@ def plot_change_in_permanent_water_area(
         f"{waterbody_uid}_lkrv_pwac.png"
     )
     plot_figure(permenent_water_area_figure)
-
-
-def plot_change(
-    waterbody_uid: str,
-    ds: xr.Dataset,
-    baseline_period: tuple[str],
-    target_years: str,
-    lkrv_pwac={},
-    lkw_qltrb={},
-    lkw_qltrst={},
-):
-    pass
