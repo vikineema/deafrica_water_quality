@@ -130,8 +130,8 @@ def plot_figure(figure_components: dict[str, Any]):
     plt.ylabel(y_label)
     plt.xlabel(x_label)
     plt.legend()
-    plt.show()
     plt.savefig(output_file_name, dpi=150)
+    plt.show()
 
 
 def plot_change(
