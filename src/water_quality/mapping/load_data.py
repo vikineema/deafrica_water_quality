@@ -223,8 +223,11 @@ def process_st_data_to_annnual(
 
     group = ds_tirs["tirs_st"].groupby("time.year")
     annual_ds_tirs["tirs_st_ann_med"] = group.median(dim="time")
-    annual_ds_tirs["tirs_st_ann_min"] = group.quantile(0.1, dim="time")
-    annual_ds_tirs["tirs_st_ann_max"] = group.quantile(0.9, dim="time")
+
+    quantiles = [0.1, 0.9]
+    quantile_results = group.quantile(quantiles, dim="time")
+    annual_ds_tirs["tirs_st_ann_min"] = quantile_results.sel(quantile=0.1)
+    annual_ds_tirs["tirs_st_ann_max"] = quantile_results.sel(quantile=0.9)
 
     # Replace the year coordinate with datetime64[ns] time coordinate
     annual_ds_tirs = annual_ds_tirs.rename({"year": "time"})
