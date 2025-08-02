@@ -238,7 +238,6 @@ def process_st_data_to_annnual(
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
     # Restrict values to areas of water
-    """
     water_frequency_threshold = 0.5
     water_mask = (
         ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
@@ -247,7 +246,7 @@ def process_st_data_to_annnual(
 
     for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
         annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
-    """
+
     return annual_ds_tirs
 
 
