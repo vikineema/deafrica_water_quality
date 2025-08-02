@@ -227,19 +227,24 @@ def cli(
                 ds["hue"] = hue_calculation(ds, instrument="msi_agm")
 
             if "msi_agm" in instruments_list.keys():
-                log.info("Determining the open water type for each pixel.")
+                log.info(
+                    "Determining the open water type for each pixel "
+                    "using the instrument msi_agm"
+                )
                 ds["owt_msi"] = OWT_pixel(
                     ds,
                     instrument="msi_agm",
-                    water_frequency_threshold=0.8,
                     resample_rate=3,
                 )
-            elif "oli_agm" in instruments_list.keys():
-                log.info("Determining the open water type for each pixel.")
+
+            if "oli_agm" in instruments_list.keys():
+                log.info(
+                    "Determining the open water type for each pixel "
+                    "using the instrument oli_agm"
+                )
                 ds["owt_oli"] = OWT_pixel(
                     ds,
                     instrument="oli_agm",
-                    water_frequency_threshold=0.8,
                     resample_rate=3,
                 )
 
