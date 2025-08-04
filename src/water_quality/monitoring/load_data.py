@@ -176,17 +176,22 @@ def _get_cog_year(cog_url: str) -> str:
 
 
 def get_wq_measures_cogs(
-    waterbody_uid: str, wq_measures_dir: str
+    wq_measures_dir: str,
+    waterbody_uid: str = None,
+    aoi_geopolygon: Geometry = None,
 ) -> dict[str, dict[tuple[int, int], list[str]]]:
     """
     Find all the COGs in the water quality measures directory that
-    overlap with the extent of a waterbody and group them by year and
-    tile.
+    overlap with either the extent of a waterbody, or other area of
+    interest and group them by year and tile.
 
     Parameters
     ----------
     waterbody_uid : str
-        Geohash / UID for the waterbody to search for.
+        Geohash / UID for the waterbody to find COGs for.
+    aoi_geopolygon : Geometry
+        Geometry defining the area of interest to find COGs for. This
+        is mutually exclusive to the `waterboduy_uid` parameter.
     wq_measures_dir : str
         Directory containing the water quality measures COGs.
 
@@ -194,15 +199,37 @@ def get_wq_measures_cogs(
     -------
     dict[str, dict[tuple[int, int], list]]
         All the COGs in the water quality measures directory that
-        overlap with the extent of a waterbody, grouped by year and
-        tile.
+        overlap with the either the extent of a waterbody, or an area of
+        interest polygon grouped by year and tile.
     """
-    tiles = get_waterbody_tiles(waterbody_uid)
-    region_codes = get_tile_region_codes(tiles, sep="")
-    log.info(
-        f"Found {len(tiles)} tiles covering "
-        f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
-    )
+    if waterbody_uid is None and aoi_geopolygon is None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or 'aoi_geopolygon'."
+        )
+
+    if waterbody_uid is not None and aoi_geopolygon is not None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or "
+            "'aoi_geopolygon', but not both."
+        )
+
+    if waterbody_uid:
+        tiles = get_waterbody_tiles(waterbody_uid)
+        region_codes = get_tile_region_codes(tiles, sep="")
+        log.info(
+            f"Found {len(tiles)} tiles covering the "
+            f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
+        )
+
+    if aoi_geopolygon:
+        tiles = get_aoi_tiles(aoi_geopolygon)
+        tiles = list(tiles)
+        region_codes = get_tile_region_codes(tiles, sep="")
+        log.info(
+            f"Found {len(tiles)} tiles covering "
+            f"the area of interest: {', '.join(region_codes)}"
+        )
+
     grouped_by_year_and_tile = defaultdict(lambda: defaultdict(list))
     for tile_id, _ in tiles:
         region_code = get_region_code(tile_id, "/")
@@ -272,12 +299,15 @@ def get_bands_to_load(wq_parameters_csv_url: str) -> list[str]:
 
 
 def create_ds_from_cogs(
-    cog_urls: str, bands_to_load: list[str], waterbody_uid: str
+    cog_urls: str,
+    bands_to_load: list[str],
+    waterbody_uid: str = None,
+    aoi_geopolygon: Geometry = None,
 ) -> xr.Dataset:
     """
     Given a list of all the COGs for a tile for a specific year, load
     the water quality measures (bands) specified and crop the Dataset to
-    the extent of the selected waterbody.
+    the extent of the selected waterbody or area of interest.
 
     Parameters
     ----------
@@ -287,14 +317,32 @@ def create_ds_from_cogs(
         Water quality measures (bands) to load from the list of COGs.
     waterbody_uid : str
         The UID/geohash of the waterbody to crop the data to.
-
+    aoi_geopolygon : Geometry
+        Geometry defining the area of interest to crop the data to. This
+        is mutually exclusive to the `waterboduy_uid` parameter.
     Returns
     -------
     xr.Dataset
         Dataset containing all the water quality measures required,
-        cropped to the extent of the selected waterbody.
+        cropped to the extent of the selected waterbody or area of
+        interest.
     """
-    waterbody_geom = get_waterbody_geom(waterbody_uid)
+    if waterbody_uid is None and aoi_geopolygon is None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or 'aoi_geopolygon'."
+        )
+
+    if waterbody_uid is not None and aoi_geopolygon is not None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or "
+            "'aoi_geopolygon', but not both."
+        )
+
+    if waterbody_uid:
+        geom = get_waterbody_geom(waterbody_uid)
+    elif aoi_geopolygon:
+        gridspec = get_waterbodies_grid()
+        geom = aoi_geopolygon.to_crs(gridspec.crs)
 
     data_vars = {}
     for cog_url in cog_urls:
@@ -306,7 +354,7 @@ def create_ds_from_cogs(
             if "band" in da.coords:
                 da = da.drop_vars("band")
             da = assign_crs(da, da.rio.crs)
-            da = da.odc.crop(waterbody_geom)
+            da = da.odc.crop(geom)
             time_coords = np.array(
                 [year_to_dc_datetime(int(year))], dtype="datetime64[ns]"
             )
@@ -386,17 +434,22 @@ def normalise_water_quality_measures(
 
 
 def load_water_quality_measures(
-    waterbody_uid: str,
     wq_measures_dir: str,
     water_frequency_threshold: float,
+    waterbody_uid: str = None,
+    aoi_geopolygon: Geometry = None,
     years: list[int] = None,
 ) -> xr.Dataset:
-    """Load the water quality measures for a waterbody.
+    """Load the water quality measures for a waterbody or defined area
+    of interest.
 
     Parameters
     ----------
     waterbody_uid : str
         The UID/geohash of the waterbody to load data for.
+    aoi_geopolygon : Geometry
+        Geometry defining the area of interest to load data for. This
+        is mutually exclusive to the `waterboduy_uid` parameter.
     wq_measures_dir : str
         Directory containing the water quality measures COGs.
     water_frequency_threshold : float
@@ -409,9 +462,24 @@ def load_water_quality_measures(
     xr.Dataset
         Chl-A and TSS water quality measures for a waterbody.
     """
-    log.info(f"Loading data for waterbody {waterbody_uid}")
+    if waterbody_uid is None and aoi_geopolygon is None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or 'aoi_geopolygon'."
+        )
+
+    if waterbody_uid is not None and aoi_geopolygon is not None:
+        raise TypeError(
+            "You must provide either 'waterbody_uid' or "
+            "'aoi_geopolygon', but not both."
+        )
+
+    if waterbody_uid:
+        log.info(f"Loading data for waterbody {waterbody_uid}")
+
     grouped_by_year_and_tile = get_wq_measures_cogs(
-        waterbody_uid=waterbody_uid, wq_measures_dir=wq_measures_dir
+        waterbody_uid=waterbody_uid,
+        aoi_geopolygon=aoi_geopolygon,
+        wq_measures_dir=wq_measures_dir,
     )
 
     if years is not None:
@@ -438,6 +506,7 @@ def load_water_quality_measures(
                 cog_urls=cog_urls,
                 bands_to_load=bands_to_load,
                 waterbody_uid=waterbody_uid,
+                aoi_geopolygon=aoi_geopolygon,
             )
             ds = ds.compute()
             ds = normalise_water_quality_measures(
