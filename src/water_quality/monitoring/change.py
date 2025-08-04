@@ -434,8 +434,8 @@ def permanent_surface_water_dynamics_simple(
     def _area(mask: xr.DataArray) -> float:
         return mask.sum().item() * pixel_area
 
-    baseline_period_water_area = _area(baseline_period_water == 2)
-    target_years_water_area = _area(target_years_water == 2)
+    baseline_period_water_area = _area(baseline_period_water == 3)
+    target_years_water_area = _area(target_years_water == 3)
 
     change_in_water_area = target_years_water_area - baseline_period_water_area
     pc_change_in_water_area = np.round(
