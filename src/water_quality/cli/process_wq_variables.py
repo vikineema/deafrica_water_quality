@@ -156,7 +156,6 @@ def cli(
     analysis_config = check_config(analysis_config)
 
     resolution_m = check_resolution(int(analysis_config["resolution"]))
-    instruments_to_use = analysis_config["instruments_to_use"]
     WFTH = analysis_config["water_frequency_threshold_high"]
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
@@ -181,6 +180,9 @@ def cli(
 
             tile_geobox = gridspec.tile_geobox(tile_index=tile_id)
 
+            # Reset instruments to use to instruments from the config
+            # file.
+            instruments_to_use = analysis_config["instruments_to_use"]
             # don't try to use instruments for which there are no data
             instruments_to_use = check_instrument_dates(
                 instruments_to_use, start_date, end_date
