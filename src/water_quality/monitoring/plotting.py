@@ -707,7 +707,7 @@ def plot_change_in_trophic_state_tsi(
         (regression_line_slope * regression_line_x) + regression_line_intercept
     ) * regression_line_scale
 
-    regression_line_plot = tsi_da["regression_line_plot"]
+    regression_line_plot = tsi_figure["regression_line_plot"]
     regression_line_plot.update(
         {
             "x": regression_span,
