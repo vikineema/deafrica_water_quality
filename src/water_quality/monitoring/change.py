@@ -197,6 +197,31 @@ def classify_permanent_water_using_threshold(
 def classify_permanent_water_using_sdg_method(
     input_ds: xr.Dataset,
 ) -> xr.DataArray:
+    """
+    Classifies permanent water bodies within an xarray Dataset using the
+    SDG 6.6.1 method.
+
+    This function identifies permanent water by applying a majority rule
+    to time-series observations of water presence/absence.
+    For each pixel, if the number of 'wet' observations (water present)
+    is greater than the number of 'dry' observations (no water),
+    it is classified as permanent water.
+
+    Parameters
+    ----------
+    input_ds : xr.Dataset
+        An xarray Dataset expected to contain a variable named
+        'wofs_ann_pwater'. This variable should represent annual water
+        observations, where values greater than 0 typically indicate
+        water presence and values less than or equal to 0 indicate no water.
+
+    Returns
+    -------
+    xr.DataArray
+        A DataArray representing the permanent water classification.
+        Pixels classified as permanent water will have a value of 1,
+        otherwise 0.
+    """
     var_name = "wofs_ann_pwater"
     da = input_ds[var_name]
 
