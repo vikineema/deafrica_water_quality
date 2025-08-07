@@ -23,16 +23,27 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "datacube[performance,distributed,s3]",
+    "dask[complete]", 
     "deafrica-tools",
     "fsspec",
     "gcsfs",
+    "geopandas",
+    "matplotlib",
+    "numpy",
     "odc-cloud[ASYNC]",
     "odc-dscache",
+    "odc-geo",
     "odc-stats",
+    "pandas",
     "pyarrow>=20.0.0",
     "requests",
+    "rioxarray",
+    "scipy",
+    "shapely",
     "s3fs",
-    "tqdm"
+    "toolz",
+    "tqdm",
+    "xarray",
 ]
 
 [project.optional-dependencies]
