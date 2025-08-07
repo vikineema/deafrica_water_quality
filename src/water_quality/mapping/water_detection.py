@@ -6,13 +6,12 @@ Africa Water Observations from Space (WOfS) products.
 import logging
 
 import xarray as xr
-from xarray import Dataset
 
 log = logging.getLogger(__name__)
 
 
 def water_analysis(
-    ds: Dataset,
+    ds: xr.Dataset,
     water_frequency_threshold: float = 0.5,
     wofs_varname: str = "wofs_ann_freq",
     permanent_water_threshold: float = 0.875,
