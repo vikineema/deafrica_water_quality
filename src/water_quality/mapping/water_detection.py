@@ -18,6 +18,42 @@ def water_analysis(
     permanent_water_threshold: float = 0.875,
     sigma_coefficient: float = 1.2,
 ):
+    """Performs water detection analysis on DE Africa WOfS Annual
+    Summary data.
+
+    Parameters
+    ----------
+    ds : Dataset
+        An xarray Dataset containing WOfS annual frequency data.
+    water_frequency_threshold : float, optional
+        The frequency threshold above which a pixel is classified as
+        general water, by default 0.5
+    wofs_varname : str, optional
+        The name of the WOfS variable to use for analysis,
+        by default "wofs_ann_freq"
+    permanent_water_threshold : float, optional
+        The base frequency threshold for identifying permanent water,
+        by default 0.875
+    sigma_coefficient : float, optional
+        A coefficient used to adjust the permanent water threshold
+        based on the standard deviation of the annual frequency,
+        by default 1.2
+
+    Returns
+    -------
+    xarray.Dataset
+        The input Dataset with the following new data variables added:
+        - `wofs_ann_freq_sigma` (float): Standard deviation of the
+            annual water frequency.
+        - `wofs_ann_confidence` (int16): Confidence percentage of the
+            annual water frequency.
+        - `wofs_pw_threshold` (float): Dynamic threshold for permanent
+            water.
+        - `wofs_ann_pwater` (float): Annual permanent water classification.
+        - `wofs_ann_water` (float): Annual general water classification.
+        - `watermask` (float): A mask showing where general water is detected.
+
+    """
     VALID_VARIABLES = ["wofs_ann_freq"]
     if wofs_varname not in VALID_VARIABLES:
         log.error(
