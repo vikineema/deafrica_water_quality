@@ -2,26 +2,16 @@
 Utilities for interacting with local, cloud (S3, GCS), and HTTP filesystems
 """
 
-import json
 import logging
 import os
 import posixpath
 import re
-from email.utils import parsedate_to_datetime
-from urllib.parse import urlparse
 
 import fsspec
-import pyarrow as pa
-import pyarrow.parquet as pq
-import requests
-import xarray as xr
 from fsspec.implementations.http import HTTPFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from gcsfs import GCSFileSystem
-from odc.aws import s3_url_parse
-from odc.geo.xr import assign_crs
 from s3fs.core import S3FileSystem
-from tqdm import tqdm
 
 from water_quality.tiling import get_region_code
 
@@ -109,9 +99,7 @@ def check_directory_exists(path: str) -> bool:
         return False
 
 
-def check_file_extension(
-    path: str, accepted_file_extensions: list[str]
-) -> bool:
+def check_file_extension(path: str, accepted_file_extensions: list[str]) -> bool:
     _, file_extension = os.path.splitext(path)
     if file_extension.lower() in accepted_file_extensions:
         return True
@@ -126,9 +114,7 @@ def is_geotiff(path: str) -> bool:
     )
 
 
-def find_geotiff_files(
-    directory_path: str, file_name_pattern: str = ".*"
-) -> list[str]:
+def find_geotiff_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -159,9 +145,7 @@ def is_json(path: str) -> bool:
     )
 
 
-def find_json_files(
-    directory_path: str, file_name_pattern: str = ".*"
-) -> list[str]:
+def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
