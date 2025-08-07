@@ -127,6 +127,23 @@ def validate_end_date(date_str: str) -> date:
 
 
 def middle_of_year(year: int) -> date:
+    """
+    Returns the date of the day in the middle of the year.
+
+    This function calculates the midpoint of a given year by finding
+    the total number of days and dividing by two. It accounts for leap
+    years automatically.
+
+    Parameters
+    ----------
+    year : int
+        The year for which to find the middle day.
+
+    Returns
+    -------
+    datetime.date
+        A date object representing the middle day of the year.
+    """
     start = date(year, 1, 1)
     end = date(year, 12, 31)
     delta = (end - start).days // 2

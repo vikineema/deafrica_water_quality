@@ -99,7 +99,9 @@ def check_directory_exists(path: str) -> bool:
         return False
 
 
-def check_file_extension(path: str, accepted_file_extensions: list[str]) -> bool:
+def check_file_extension(
+    path: str, accepted_file_extensions: list[str]
+) -> bool:
     _, file_extension = os.path.splitext(path)
     if file_extension.lower() in accepted_file_extensions:
         return True
@@ -114,7 +116,9 @@ def is_geotiff(path: str) -> bool:
     )
 
 
-def find_geotiff_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_geotiff_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -145,7 +149,9 @@ def is_json(path: str) -> bool:
     )
 
 
-def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_json_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
