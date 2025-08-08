@@ -8,7 +8,7 @@ export ENV_FILE
 
 BBOX := 19.235895457610976,-34.027444770665454,19.567548827569784,-33.72657357504392
 INDEX_LIMIT := 200
-INDEX_DATE_START := 2023-01-01
+INDEX_DATE_START := 2024-01-01
 INDEX_DATE_END := 2024-12-31
 
 build:
@@ -28,7 +28,7 @@ init: ## Prepare the database, initialise the database schema.
 products:
 	docker compose exec -T jupyter dc-sync-products products.csv --update-if-exists
 
-index: index-gm_s2_annual index-gm_ls8_ls9_annual index-wofs_ls_summary_annual index-wofs_ls_summary_alltime
+index: index-gm_s2_annual index-gm_ls8_ls9_annual index-wofs_ls_summary_annual index-wofs_ls_summary_alltime index-landsat-st
 
 index-gm_s2_annual:
 	@echo "$$(date) Start with gm_s2_annual"
@@ -69,6 +69,14 @@ index-wofs_ls_summary_alltime:
 		--bbox=$(BBOX) \
 		--limit=$(INDEX_LIMIT)
 	@echo "$$(date) Done with wofs_ls_summary_alltime"
+
+index-landsat-st:
+	@echo "$$(date) Start with landsat surface temp"
+	docker compose exec -T jupyter stac-to-dc \
+		--catalog-href=https://explorer.digitalearth.africa/stac/ \
+		--collections=ls5_st,ls7_st,ls8_st,ls9_st \
+		--bbox=$(BBOX) 
+	@echo "$$(date) Done with landsat surface temp"
 
 install-pkg: ## Editable install of package for development
 	docker compose exec jupyter bash -c "cd /home/jovyan && pip install -e ."

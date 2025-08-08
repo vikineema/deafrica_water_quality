@@ -2,26 +2,18 @@
 Utilities for interacting with local, cloud (S3, GCS), and HTTP filesystems
 """
 
-import json
 import logging
 import os
 import posixpath
 import re
-from email.utils import parsedate_to_datetime
-from urllib.parse import urlparse
 
 import fsspec
-import pyarrow as pa
-import pyarrow.parquet as pq
-import requests
-import xarray as xr
 from fsspec.implementations.http import HTTPFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from gcsfs import GCSFileSystem
-from odc.aws import s3_url_parse
-from odc.geo.xr import assign_crs
 from s3fs.core import S3FileSystem
-from tqdm import tqdm
+
+from water_quality.tiling import get_region_code
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +44,20 @@ def join_url(base, *paths) -> str:
     else:
         # Ensure urls join correctly
         return posixpath.join(base, *paths)
+
+
+def split_path(path: str):
+    if is_local_path(path):
+        return os.path.split(path)
+    else:
+        return posixpath.split(path)
+
+
+def get_basename(path: str):
+    if is_local_path(path):
+        return os.path.basename(path)
+    else:
+        return posixpath.basename(path)
 
 
 def get_filesystem(
@@ -93,7 +99,9 @@ def check_directory_exists(path: str) -> bool:
         return False
 
 
-def check_file_extension(path: str, accepted_file_extensions: list[str]) -> bool:
+def check_file_extension(
+    path: str, accepted_file_extensions: list[str]
+) -> bool:
     _, file_extension = os.path.splitext(path)
     if file_extension.lower() in accepted_file_extensions:
         return True
@@ -108,7 +116,9 @@ def is_geotiff(path: str) -> bool:
     )
 
 
-def find_geotiff_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_geotiff_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -139,7 +149,9 @@ def is_json(path: str) -> bool:
     )
 
 
-def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[str]:
+def find_json_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
     file_name_pattern = re.compile(file_name_pattern)
 
     fs = get_filesystem(path=directory_path, anon=True)
@@ -163,151 +175,51 @@ def find_json_files(directory_path: str, file_name_pattern: str = ".*") -> list[
     return json_file_paths
 
 
-def download_file_from_url(url: str, output_file_path: str, chunks: int = 100) -> str:
-    """Download a file from a URL
-
-    Parameters
-    ----------
-    url : str
-        URL to download file from.
-    output_file_path : str
-        File path to download to.
-    chunks : int, optional
-        Chunk size in MB, by default 100
-
-    Returns
-    -------
-    str
-        The file path the file has been downloaded to.
-    """
-    fs = get_filesystem(output_file_path, anon=False)
-
-    # Create the parent directories if they do not exist
-    parent_dir = fs._parent(output_file_path)
+def _get_wq_parent_dir(
+    output_directory: str,
+    tile_id: tuple[int, int],
+    year: int,
+) -> str:
+    # output_dir/x/y/year/file_name
+    region_code = get_region_code(tile_id, sep="/")
+    year = str(year)
+    parent_dir = join_url(output_directory, region_code, str(year))
     if not check_directory_exists(parent_dir):
+        fs = get_filesystem(parent_dir, anon=False)
         fs.makedirs(parent_dir, exist_ok=True)
-
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        total = int(r.headers.get("content-length", 0))
-        with fs.open(output_file_path, "wb") as f:
-            with tqdm(
-                desc=output_file_path,
-                total=total,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as bar:
-                for chunk in r.iter_content(chunk_size=chunks * 1024**2):
-                    size = f.write(chunk)
-                    bar.update(size)
-
-    return output_file_path
+    return parent_dir
 
 
-def get_gdal_vsi_prefix(file_path) -> str:
-    # Based on file extension
-    _, file_extension = os.path.splitext(file_path)
-    if file_extension in [".zip"]:
-        vsi_prefix_1 = "vsizip"
-    elif file_extension in [".gz"]:
-        vsi_prefix_1 = "vsigzip"
-    elif file_extension in [".tar", ".tgz"]:
-        vsi_prefix_1 = "vsitar"
-    elif file_extension in [".7z"]:
-        vsi_prefix_1 = "vsi7z"
-    elif file_extension in [".rar"]:
-        vsi_prefix_1 = "vsirar"
-    else:
-        vsi_prefix_1 = ""
+def get_wq_cog_url(
+    output_directory: str, tile_id: tuple[int, int], year: int, band_name: str
+):
+    parent_dir = _get_wq_parent_dir(output_directory, tile_id, year)
 
-    if vsi_prefix_1:
-        vsi_prefix_1_file_path = f"/{vsi_prefix_1}/{file_path}"
-    else:
-        vsi_prefix_1_file_path = file_path
-
-    # Network based
-    if is_local_path(file_path):
-        return vsi_prefix_1_file_path
-    elif is_http_url(file_path):
-        return f"/vsicurl/{vsi_prefix_1_file_path}"
-    elif is_s3_path(file_path):
-        return f"/vsis3/{vsi_prefix_1_file_path}"
-    elif is_gcsfs_path(file_path):
-        return f"/vsigs/{vsi_prefix_1_file_path}"
-    else:
-        NotImplementedError()
+    # f"{band}_{region_code}_{year}.tif"
+    region_code = get_region_code(tile_id, sep="")
+    file_name = f"{band_name}_{region_code}_{year}.tif"
+    cog_url = join_url(parent_dir, file_name)
+    return cog_url
 
 
-def gsutil_uri_to_public_url(uri: str) -> str:
-    """Convert gsutil URI to a public URL"""
-    loc = urlparse(uri)
-    if loc.scheme not in ("gs", "gcs"):
-        raise ValueError(f"{uri} is not a gsutil URI")
-    else:
-        bucket = loc.hostname
-        key = re.sub("^[/]", "", loc.path)
-        public_url = join_url("https://storage.googleapis.com/", bucket, key)
-        return public_url
+def parse_wq_cog_url(cog_url: str):
+    # f"{band}_{region_code}_{year}.tif"
+    base = get_basename(cog_url)
+    base = os.path.splitext(base)[0]
+    parts = base.split("_")
+    if len(parts) < 3:
+        raise ValueError("Filename does not contain enough parts")
+
+    band = "_".join(parts[:-2])
+    region_code = parts[-2]
+    year = parts[-1]
+    return band, region_code, year
 
 
-def s3_uri_to_public_url(s3_uri, region="af-south-1"):
-    """Convert S3 URI to a public HTTPS URL"""
-    bucket, key = s3_url_parse(s3_uri)
-    return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+def get_wq_csv_url(output_directory: str, tile_id: tuple[int, int], year: int):
+    parent_dir = _get_wq_parent_dir(output_directory, tile_id, year)
 
-
-def get_last_modified(uri: str, aws_region="af-south-1"):
-    """Returns the Last-Modified timestamp
-    of a given URL or URI if available."""
-    if is_gcsfs_path(uri):
-        url = gsutil_uri_to_public_url(uri)
-    elif is_s3_path(uri):
-        url = s3_uri_to_public_url(uri, aws_region)
-    else:
-        url = uri
-
-    assert is_http_url(url)
-
-    response = requests.head(url, allow_redirects=True)
-    last_modified = response.headers.get("Last-Modified")
-    if last_modified:
-        return parsedate_to_datetime(last_modified)
-    else:
-        return None
-
-
-def write_xr_to_parquet(ds: xr.Dataset | xr.DataArray, output_file_path: str):
-    df = ds.to_dataframe().drop(columns="spatial_ref")
-    table = pa.Table.from_pandas(df)
-    existing_meta = table.schema.metadata
-
-    if ds.attrs:
-        attrs = ds.attrs
-        attrs_json = json.dumps(attrs)
-        key = "xr_attrs"
-        combined_meta = {
-            key.encode(): attrs_json.encode(),
-            **existing_meta,
-        }
-        table = table.replace_schema_metadata(combined_meta)
-    else:
-        raise ValueError("Dataset is missing CRS and grid mapping info in attributes")
-    pq.write_table(table, output_file_path, compression="GZIP")
-
-
-def load_parquet_to_xr(pq_file_path: str):
-    table = pq.read_table(pq_file_path)
-    df = table.to_pandas()
-    ds = df.to_xarray()
-
-    custom_meta_key = "xr_attrs"
-    meta_json = table.schema.metadata[custom_meta_key.encode()]
-    meta = json.loads(meta_json)
-
-    ds.attrs = meta
-
-    crs = meta["crs"]
-    crs_coord_name = meta["grid_mapping"]
-    ds = assign_crs(ds, crs, crs_coord_name)
-    return ds
+    region_code = get_region_code(tile_id, sep="")
+    file_name = f"water_quality_measures_{region_code}_{year}.csv"
+    csv_url = join_url(parent_dir, file_name)
+    return csv_url
