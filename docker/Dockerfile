@@ -14,7 +14,10 @@ RUN  micromamba install --yes --name base  --file /tmp/environment_prod.yaml --v
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # Clear pip cache 
-RUN micromamba run --name base pip cache purge && rm -rf /tmp/* /root/.cache
+RUN micromamba run --name base pip cache purge \
+    && rm -rf /tmp/* /root/.cache
+
+FROM ubuntu:jammy
 
 ARG NB_USER="jovyan"
 ARG NB_UID="1000"
@@ -48,15 +51,14 @@ RUN useradd --no-log-init --create-home --shell /bin/bash --no-user-group --gid 
 COPY --chown=$NB_UID:$NB_GID --from=micromamba /opt/conda $PYTHON_ENV
 
 # Copy only python package files
-USER $NB_USER
 WORKDIR $HOME
 COPY --chown=$NB_UID:$NB_GID  src src/
 COPY --chown=$NB_UID:$NB_GID  pyproject.toml .
+USER $NB_USER
 RUN pip install . \
     && pip cache purge  \
     && rm -rf ~/.cache
 
-USER $NB_USER
 WORKDIR $HOME
 # Make sure it's working
 RUN wq-version
