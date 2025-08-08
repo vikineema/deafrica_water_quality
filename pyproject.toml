@@ -23,15 +23,27 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "datacube[performance,distributed,s3]",
+    "dask[array,distributed]", 
     "deafrica-tools",
     "fsspec",
     "gcsfs",
+    "geopandas",
+    "matplotlib",
+    "numpy",
     "odc-cloud[ASYNC]",
     "odc-dscache",
+    "odc-geo",
     "odc-stats",
+    "pandas",
+    "pyarrow>=20.0.0",
     "requests",
+    "rioxarray",
+    "scipy",
+    "shapely",
     "s3fs",
-    "tqdm"
+    "toolz",
+    "tqdm",
+    "xarray[accel,io]",
 ]
 
 [project.optional-dependencies]
@@ -49,8 +61,10 @@ Repository = "https://github.com/digitalearthafrica/deafrica_water_quality.git"
 "Bug Tracker" = "https://github.com/digitalearthafrica/deafrica_water_quality/issues"
 
 [project.scripts]
-wq-generate-tasks = "water_quality.cli.generate_tasks:cli"
+wq-version = "water_quality.cli.get_version:cli"
 wq-list-test-areas = "water_quality.cli.list_test_areas:cli"
+wq-generate-tiles = "water_quality.cli.generate_tiles:cli"
+wq-generate-tasks = "water_quality.cli.generate_tasks:cli"
 wq-process-tasks = "water_quality.cli.process_wq_variables:cli"
 
 [tool.setuptools]
@@ -63,11 +77,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 water_quality = ["data/*.parquet"]
 
-[tool.isort]
-profile = "black"
-
-[tool.black]
-line-length = 100
+[tool.ruff]
+line-length = 79
 
 [tool.pytest.ini_options]
 addopts = "-s"

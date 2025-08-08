@@ -14,7 +14,7 @@ def cli():
     """
     places_fp = files("water_quality.data").joinpath("places.parquet")
     places_gdf = gpd.read_parquet(places_fp)
-    columns = ["name", "desc"]
+    columns = ["name", "description"]
     with pd.option_context("display.max_rows", None):
         print(places_gdf[columns])
 

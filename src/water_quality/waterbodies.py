@@ -1,3 +1,8 @@
+"""
+This module provides functions to get DE Africa Waterbodies
+Historical Extent data for SDG Indicator 6.6.1 water quality reporting.
+"""
+
 import io
 import zipfile
 
@@ -5,10 +10,11 @@ import geopandas as gpd
 import pandas as pd
 import requests
 import shapely
-from deafrica_tools.waterbodies import get_waterbodies as get_deafrica_waterbodies
-from shapely.geometry import box
+from deafrica_tools.waterbodies import (
+    get_waterbodies as get_deafrica_waterbodies,
+)
 
-from water_quality.utils import AFRICA_EXTENT_URL
+from water_quality.africa_extent import AFRICA_EXTENT_URL
 
 
 def get_processed_lakes() -> gpd.GeoDataFrame:
@@ -52,9 +58,9 @@ def get_africa_processed_lakes() -> gpd.GeoDataFrame:
     """
     all_lakes = get_processed_lakes()
     africa_extent = gpd.read_file(AFRICA_EXTENT_URL).to_crs("EPSG:4326")
-    sel_id_str = all_lakes.sjoin(africa_extent, how="inner", predicate="intersects")[
-        "id_str"
-    ].unique()
+    sel_id_str = all_lakes.sjoin(
+        africa_extent, how="inner", predicate="intersects"
+    )["id_str"].unique()
     africa_lakes = all_lakes[all_lakes["id_str"].isin(sel_id_str)]
     africa_lakes = africa_lakes.reset_index(drop=True)
     return africa_lakes
@@ -91,22 +97,28 @@ def get_waterbodies_geoms(
     )
     # Filter the waterbodies further to get only waterbodies that intersect with the country's boundary
     intersecting_waterbodies_ids = (
-        waterbodies.sjoin(country_gdf, how="inner", predicate="intersects")["uid"]
-        .unique()
-        .tolist()
-    )
-    waterbodies = waterbodies[waterbodies["uid"].isin(intersecting_waterbodies_ids)]
-
-    # Filter the waterbodies further to get only waterbodies that were processed for the Lake Surface Water Quality
-    cgls_processed_lakes = get_africa_processed_lakes()
-    intersecting_waterbodies_ids = (
-        waterbodies.sjoin(cgls_processed_lakes, how="inner", predicate="intersects")[
+        waterbodies.sjoin(country_gdf, how="inner", predicate="intersects")[
             "uid"
         ]
         .unique()
         .tolist()
     )
-    waterbodies = waterbodies[waterbodies["uid"].isin(intersecting_waterbodies_ids)]
+    waterbodies = waterbodies[
+        waterbodies["uid"].isin(intersecting_waterbodies_ids)
+    ]
+
+    # Filter the waterbodies further to get only waterbodies that were processed for the Lake Surface Water Quality
+    cgls_processed_lakes = get_africa_processed_lakes()
+    intersecting_waterbodies_ids = (
+        waterbodies.sjoin(
+            cgls_processed_lakes, how="inner", predicate="intersects"
+        )["uid"]
+        .unique()
+        .tolist()
+    )
+    waterbodies = waterbodies[
+        waterbodies["uid"].isin(intersecting_waterbodies_ids)
+    ]
 
     # Filter columns
     waterbodies = waterbodies[["wb_id", "uid", "geometry"]]
