@@ -23,7 +23,7 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "datacube[performance,distributed,s3]",
-    "dask[complete]", 
+    "dask[array,distributed]", 
     "deafrica-tools",
     "fsspec",
     "gcsfs",
@@ -43,7 +43,7 @@ dependencies = [
     "s3fs",
     "toolz",
     "tqdm",
-    "xarray",
+    "xarray[accel,io]",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +61,7 @@ Repository = "https://github.com/digitalearthafrica/deafrica_water_quality.git"
 "Bug Tracker" = "https://github.com/digitalearthafrica/deafrica_water_quality/issues"
 
 [project.scripts]
+wq-version = "water_quality.cli.get_version:cli"
 wq-list-test-areas = "water_quality.cli.list_test_areas:cli"
 wq-generate-tiles = "water_quality.cli.generate_tiles:cli"
 wq-generate-tasks = "water_quality.cli.generate_tasks:cli"
