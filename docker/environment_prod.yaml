@@ -19,6 +19,8 @@ dependencies:
   - aiobotocore[boto3]
   - odc-dscache
   - odc-geo
+  # required for odc-stats==1.0.60
+  - odc-algo==0.2.3
   # dask + extras
   - dask
   - distributed
