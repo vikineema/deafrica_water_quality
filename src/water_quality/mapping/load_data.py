@@ -16,8 +16,11 @@ log = logging.getLogger(__name__)
 
 INSTRUMENTS_PRODUCTS = {
     "tm_agm": ["gm_ls5_ls7_annual"],
+    "tm": ["ls5_sr", "ls7_sr"],
     "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
+    "oli": ["ls8_sr", "ls9_sr"],
     "msi_agm": ["gm_s2_annual"],
+    "msi": ["s2_l2a"],
     "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
     "wofs_ann": ["wofs_ls_summary_annual"],
 }
