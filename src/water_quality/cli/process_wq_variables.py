@@ -9,8 +9,8 @@ from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
+from odc.stats.model import DateTimeRange
 
-from water_quality.dates import validate_end_date, validate_start_date
 from water_quality.grid import check_resolution, get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
@@ -49,8 +49,8 @@ from water_quality.tasks import parse_task_id
 @click.option(
     "--tasks",
     help="List of comma separated tasks in the format"
-    "year/x{x:02d}/y{y:02d} to generate water quality variables for. "
-    "For example `2015/x200/y34,x178/y095,x199y/100`",
+    "period/x{x:02d}/y{y:02d} to generate water quality variables for. "
+    "For example `2015--P1Y/x200/y34,2015--P1Y/x178/y095, 2015--P1Y/x199y/100`",
 )
 @click.option(
     "--tasks-file",
@@ -168,15 +168,11 @@ def cli(
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
 
         try:
-            year, tile_id = parse_task_id(task_id)
+            temporal_id, tile_id = parse_task_id(task_id)
+            temporal_range = DateTimeRange(temporal_id)
 
-            # Start date of the year
-            year_start = validate_start_date(str(year))
-            start_date = year_start.strftime("%Y-%m-%d")
-
-            # End date of the year
-            year_end = validate_end_date(str(year))
-            end_date = year_end.strftime("%Y-%m-%d")
+            start_date = temporal_range.start.strftime("%Y-%m-%d")
+            end_date = temporal_range.end.strftime("%Y-%m-%d")
 
             tile_geobox = gridspec.tile_geobox(tile_index=tile_id)
 
@@ -315,7 +311,7 @@ def cli(
                 output_cog_url = get_wq_cog_url(
                     output_directory=output_directory,
                     tile_id=tile_id,
-                    year=year,
+                    temporal_id=temporal_id,
                     band_name=band,
                 )
 
@@ -334,7 +330,9 @@ def cli(
             tss_df = pd.DataFrame(data=dict(tss_measure=tsm_vlist))
             wq_parameters_df = pd.concat([tss_df, chla_df], axis=1)
             output_csv_url = get_wq_csv_url(
-                output_directory=output_directory, tile_id=tile_id, year=year
+                output_directory=output_directory,
+                tile_id=tile_id,
+                temporal_id=temporal_id,
             )
             with fs.open(output_csv_url, mode="w") as f:
                 wq_parameters_df.to_csv(f, index=False)
