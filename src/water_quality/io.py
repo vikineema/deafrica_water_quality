@@ -178,12 +178,11 @@ def find_json_files(
 def _get_wq_parent_dir(
     output_directory: str,
     tile_id: tuple[int, int],
-    year: int,
+    temporal_id: str,
 ) -> str:
-    # output_dir/x/y/year/file_name
+    # output_dir/x/y/temporal_id/file_name
     region_code = get_region_code(tile_id, sep="/")
-    year = str(year)
-    parent_dir = join_url(output_directory, region_code, str(year))
+    parent_dir = join_url(output_directory, region_code, temporal_id)
     if not check_directory_exists(parent_dir):
         fs = get_filesystem(parent_dir, anon=False)
         fs.makedirs(parent_dir, exist_ok=True)
@@ -191,19 +190,22 @@ def _get_wq_parent_dir(
 
 
 def get_wq_cog_url(
-    output_directory: str, tile_id: tuple[int, int], year: int, band_name: str
+    output_directory: str,
+    tile_id: tuple[int, int],
+    temporal_id: str,
+    band_name: str,
 ):
-    parent_dir = _get_wq_parent_dir(output_directory, tile_id, year)
+    parent_dir = _get_wq_parent_dir(output_directory, tile_id, temporal_id)
 
-    # f"{band}_{region_code}_{year}.tif"
+    # f"{band}_{region_code}_{temporal_id}.tif"
     region_code = get_region_code(tile_id, sep="")
-    file_name = f"{band_name}_{region_code}_{year}.tif"
+    file_name = f"{band_name}_{region_code}_{temporal_id}.tif"
     cog_url = join_url(parent_dir, file_name)
     return cog_url
 
 
 def parse_wq_cog_url(cog_url: str):
-    # f"{band}_{region_code}_{year}.tif"
+    # f"{band}_{region_code}_{temporal_id}.tif"
     base = get_basename(cog_url)
     base = os.path.splitext(base)[0]
     parts = base.split("_")
@@ -212,14 +214,16 @@ def parse_wq_cog_url(cog_url: str):
 
     band = "_".join(parts[:-2])
     region_code = parts[-2]
-    year = parts[-1]
-    return band, region_code, year
+    temporal_id = parts[-1]
+    return band, region_code, temporal_id
 
 
-def get_wq_csv_url(output_directory: str, tile_id: tuple[int, int], year: int):
-    parent_dir = _get_wq_parent_dir(output_directory, tile_id, year)
+def get_wq_csv_url(
+    output_directory: str, tile_id: tuple[int, int], temporal_id: str
+):
+    parent_dir = _get_wq_parent_dir(output_directory, tile_id, temporal_id)
 
     region_code = get_region_code(tile_id, sep="")
-    file_name = f"water_quality_measures_{region_code}_{year}.csv"
+    file_name = f"water_quality_measures_{region_code}_{temporal_id}.csv"
     csv_url = join_url(parent_dir, file_name)
     return csv_url
