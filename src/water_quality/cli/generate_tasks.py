@@ -1,10 +1,11 @@
 from importlib.resources import files
-from itertools import chain
 
 import click
 import geopandas as gpd
 from odc.geo.geom import Geometry
+from odc.stats.model import DateTimeRange
 
+from water_quality.dates import get_temporal_ids
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
@@ -17,6 +18,14 @@ from water_quality.tiling import (
     get_aoi_tiles,
     parse_region_code,
 )
+
+SUPPORTED_FREQUENCY = [
+    "annual",
+    "semiannual",
+    "monthly",
+    "fortnightly",
+    "weekly",
+]
 
 
 @click.command(
@@ -43,12 +52,11 @@ from water_quality.tiling import (
     "the command `wq-list-test-areas`.",
 )
 @click.argument(
-    "start-year",
-    type=int,
+    "temporal-range",
+    type=str,
 )
 @click.argument(
-    "end-year",
-    type=int,
+    "frequency",
 )
 @click.argument(
     "output-file",
@@ -58,24 +66,53 @@ def cli(
     tile_ids: str,
     tile_ids_file: str,
     place_name: str,
-    start_year: int,
-    end_year: int,
+    temporal_range: str,
+    frequency: str,
     output_file: str,
 ):
     """
-    Prepare tasks for the time range START_YEAR to END_YEAR for
-    running the DE Africa Water Quality continental workflow on. If no
-    tile IDs are specified, the tasks will be generated for all the
-    tiles across Africa. The tasks will be written to the file
+    Prepare tasks for the time range TEMPORAL_RANGE,
+    for example '2020-05--P1M' for the month of May 2020, and temporal
+    binning FREQUENCY for running the DE Africa Water Quality continental
+    workflow on. If no tile IDs are specified, the tasks will be generated
+    for all the tiles across Africa. The tasks will be written to the file
     OUTPUT_FILE.
+
+    **Note**: If the temporal range does not completely cover a temporal
+    bin that it falls in, all data available for the complete temporal
+    bin it falls into would be loaded. For example the temporal range
+    '2025-08-13--P3D' with the frequency 'weekly', all data available for
+    the temporal bin '2025-08-13--P1W' will be loaded. For the temporal
+    range '2025-08-13--P1M' with the frequency monthly, data will be
+    loaded for the following temporal bins '2025-08--P1M' and
+    '2025-09--P1M'.
     """
     log = setup_logging()
+
+    if frequency not in SUPPORTED_FREQUENCY:
+        e = ValueError(
+            f"Frequency must be one of {'|'.join(SUPPORTED_FREQUENCY)} and not "
+            f"{frequency}"
+        )
+        log.error(e)
+        raise e
+
+    try:
+        temporal_range = DateTimeRange(temporal_range)
+    except ValueError:
+        e = ValueError(
+            f"Failed to parse supplied temporal_range: '{temporal_range}'",
+        )
+        log.error(e)
+        raise e
 
     if tile_ids and tile_ids_file and place_name:
         raise click.UsageError(
             "Specify exactly one of --tile-ids or --tile-ids-file "
             "or --place-name."
         )
+
+    temporal_ids = get_temporal_ids(temporal_range, frequency)
 
     if tile_ids:
         region_codes = tile_ids.split(",")
@@ -113,17 +150,12 @@ def cli(
         tiles = list(tiles)
         tile_ids_list = [tile[0] for tile in tiles]
 
-    years = list(range(start_year, end_year + 1))
-
     tasks = []
-    for year in years:
-        yearly_tasks = [
-            create_task_id(year=year, tile_id=tile_id)
-            for tile_id in tile_ids_list
-        ]
-        tasks.append(yearly_tasks)
+    for temporal_id in temporal_ids:
+        for tile_id in tile_ids_list:
+            task_id = create_task_id(temporal_id, tile_id)
+            tasks.append(task_id)
 
-    tasks = list(chain.from_iterable(tasks))
     tasks.sort()
 
     log.info(f"Total tasks: {len(tasks)}")
