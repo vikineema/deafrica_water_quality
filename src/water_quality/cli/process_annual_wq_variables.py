@@ -163,7 +163,7 @@ def cli(
     SC = analysis_config["sigma_coefficient"]
 
     gridspec = get_waterbodies_grid(resolution_m)
-    dc = Datacube(app="Process_WQ_variables")
+    dc = Datacube(app="ProcessAnnualWQvariables")
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
