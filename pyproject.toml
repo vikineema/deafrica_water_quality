@@ -65,7 +65,7 @@ wq-version = "water_quality.cli.get_version:cli"
 wq-list-test-areas = "water_quality.cli.list_test_areas:cli"
 wq-generate-tiles = "water_quality.cli.generate_tiles:cli"
 wq-generate-tasks = "water_quality.cli.generate_tasks:cli"
-wq-process-tasks = "water_quality.cli.process_wq_variables:cli"
+wq-process-annual-wq-variables = "water_quality.cli.process_annual_wq_variables:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

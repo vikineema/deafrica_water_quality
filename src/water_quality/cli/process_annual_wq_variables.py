@@ -9,6 +9,7 @@ from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
+from odc.stats._text import split_and_check
 from odc.stats.model import DateTimeRange
 
 from water_quality.grid import check_resolution, get_waterbodies_grid
@@ -43,7 +44,7 @@ from water_quality.tasks import parse_task_id
 
 
 @click.command(
-    name="process-tasks",
+    name="process-annual-wq-variables",
     no_args_is_help=True,
 )
 @click.option(
@@ -94,8 +95,8 @@ def cli(
     overwrite: bool,
 ):
     """
-    Get the Water Quality variables for the input tasks and write the
-    resulting water quality variables to COG files.
+    Get the annual Water Quality variables for the input tasks and write
+    the resulting water quality variables to COG files.
 
     OUTPUT_DIRECTORY: The directory to write the water quality variables
     COG files to for each task.
@@ -169,6 +170,15 @@ def cli(
 
         try:
             temporal_id, tile_id = parse_task_id(task_id)
+
+            # Enforce this command line tool only works for
+            # annual tasks.
+            _, freq = split_and_check(temporal_id, "--P", 2)
+            if freq != "1Y":
+                raise ValueError(
+                    f"Expecting tasks with an annual frequency '1Y' not {freq}"
+                )
+
             temporal_range = DateTimeRange(temporal_id)
 
             start_date = temporal_range.start.strftime("%Y-%m-%d")
