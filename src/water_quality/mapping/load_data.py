@@ -284,8 +284,7 @@ def process_oli_data(ds_oli: xr.Dataset) -> xr.Dataset:
 
             # Rescale and multiply by 10,000 to match range of data
             # for the msi instrument.
-            # ds_oli[band] = (2.75e-5 * ds_oli[band] - 0.2) * 10000
-            ds_oli[band] = 2.75e-5 * ds_oli[band] - 0.2
+            ds_oli[band] = (2.75e-5 * ds_oli[band] - 0.2) * 10000
 
     return ds_oli
 
@@ -339,8 +338,7 @@ def process_tm_data(ds_tm: xr.Dataset) -> xr.Dataset:
         if band != "tm_pq":
             # Rescale and multiply by 10,000 to match range of data
             # for the msi instrument.
-            # ds_tm[band] = (2.75e-5 * ds_tm[band] - 0.2) * 10000
-            ds_tm[band] = 2.75e-5 * ds_tm[band] - 0.2
+            ds_tm[band] = (2.75e-5 * ds_tm[band] - 0.2) * 10000
 
     return ds_tm
 
@@ -388,43 +386,6 @@ def process_tirs_data(ds_tirs: xr.Dataset) -> xr.Dataset:
     ds_tirs["tirs_st"] = ds_tirs["tirs_st"] - 273.15
 
     return ds_tirs
-
-
-def _process_single_day_instrument_data(
-    loaded_data: dict[str, xr.Dataset],
-) -> dict[str, xr.Dataset]:
-    """Processes single-day satellite instrument data for oli, msi, and
-    tm instruments."""
-    if "oli" in loaded_data.keys():
-        loaded_data["oli"] = process_oli_data(ds_oli=loaded_data["oli"])
-
-    if "msi" in loaded_data.keys():
-        loaded_data["msi"] = process_msi_data(ds_msi=loaded_data["msi"])
-
-    if "tm" in loaded_data.keys():
-        loaded_data["tm"] = process_tm_data(ds_tm=loaded_data["tm"])
-
-    return loaded_data
-
-
-def _process_composite_instrument_data(
-    loaded_data: dict[str, xr.Dataset],
-) -> dict[str, xr.Dataset]:
-    """Process composite sallelite instrument data."""
-    if "tirs" in loaded_data.keys():
-        log.info("Processing surface temperature data to annual composite ...")
-        if "wofs_ann" not in loaded_data.keys():
-            raise ValueError(
-                "Data for the wofs_ann instrument is required to process "
-                "daily surface temperature data for the tirs instrument into "
-                "an annual timeseries."
-            )
-        else:
-            loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"],
-                ds_wofs_ann=loaded_data["wofs_ann"],
-            )
-    return loaded_data
 
 
 def _load_and_reproject_instrument_data(
@@ -542,6 +503,22 @@ def load_single_day_instruments_data(
     if dc is None:
         dc = Datacube(app="LoadSingleDayInstruments")
 
+    def _process_single_day_instrument_data(
+        loaded_data: dict[str, xr.Dataset],
+    ) -> dict[str, xr.Dataset]:
+        """Processes single-day satellite instrument data for oli, msi, and
+        tm instruments."""
+        if "oli" in loaded_data.keys():
+            loaded_data["oli"] = process_oli_data(ds_oli=loaded_data["oli"])
+
+        if "msi" in loaded_data.keys():
+            loaded_data["msi"] = process_msi_data(ds_msi=loaded_data["msi"])
+
+        if "tm" in loaded_data.keys():
+            loaded_data["tm"] = process_tm_data(ds_tm=loaded_data["tm"])
+
+        return loaded_data
+
     loaded_data = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
         tile_geobox=tile_geobox,
@@ -582,6 +559,27 @@ def load_composite_instruments_data(
     """
     if dc is None:
         dc = Datacube(app="LoadCompositeInstruments")
+
+    def _process_composite_instrument_data(
+        loaded_data: dict[str, xr.Dataset],
+    ) -> dict[str, xr.Dataset]:
+        """Process composite sallelite instrument data."""
+        if "tirs" in loaded_data.keys():
+            log.info(
+                "Processing surface temperature data to annual composite ..."
+            )
+            if "wofs_ann" not in loaded_data.keys():
+                raise ValueError(
+                    "Data for the wofs_ann instrument is required to process "
+                    "daily surface temperature data for the tirs instrument into "
+                    "an annual timeseries."
+                )
+            else:
+                loaded_data["tirs"] = process_st_data_to_annnual(
+                    ds_tirs=loaded_data["tirs"],
+                    ds_wofs_ann=loaded_data["wofs_ann"],
+                )
+        return loaded_data
 
     loaded_data = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
