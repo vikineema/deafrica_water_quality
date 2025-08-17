@@ -541,14 +541,13 @@ def load_single_day_instruments_data(
     """
     if dc is None:
         dc = Datacube(app="LoadSingleDayInstruments")
-    instruments_to_filter = list(SINGLE_DAY_INSTRUMENTS.keys())
 
     loaded_data = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
         tile_geobox=tile_geobox,
-        instruments_to_filter=instruments_to_filter,
+        instruments_to_filter=list(SINGLE_DAY_INSTRUMENTS.keys()),
         dc=dc,
-        proccess_loaded_data_func=_process_composite_instrument_data,
+        proccess_loaded_data_func=_process_single_day_instrument_data,
     )
 
     return loaded_data
@@ -584,12 +583,10 @@ def load_composite_instruments_data(
     if dc is None:
         dc = Datacube(app="LoadCompositeInstruments")
 
-    instruments_to_filter = list(COMPOSITE_INSTRUMENTS.keys())
-
     loaded_data = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
         tile_geobox=tile_geobox,
-        instruments_to_filter=instruments_to_filter,
+        instruments_to_filter=list(COMPOSITE_INSTRUMENTS.keys()),
         dc=dc,
         proccess_loaded_data_func=_process_composite_instrument_data,
     )
