@@ -129,7 +129,7 @@ def per_pixel_relative_albedo_deviation(
 
     if comparison_type_name not in COMPARISON_TO_AGM_TYPES:
         raise ValueError(
-            f"Select comparison type from {','.join(list(COMPARISON_TO_AGM_TYPES.keys))}"
+            f"Select comparison type from {','.join(list(COMPARISON_TO_AGM_TYPES.keys()))}"
         )
     log.info(
         "Calculating relative albedo deviations (ralb) from the geomedian ... "
