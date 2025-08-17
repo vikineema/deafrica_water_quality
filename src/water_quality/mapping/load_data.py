@@ -14,19 +14,19 @@ from water_quality.tiling import reproject_tile_geobox
 
 log = logging.getLogger(__name__)
 
-COMPOSITES_PRODUCTS = {
+COMPOSITE_INSTRUMENTS = {
     "tm_agm": ["gm_ls5_ls7_annual"],
     "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
     "msi_agm": ["gm_s2_annual"],
     "wofs_ann": ["wofs_ls_summary_annual"],
     "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
 }
-SINGLE_DAY_PRODUCTS = {
+SINGLE_DAY_INSTRUMENTS = {
     "tm": ["ls5_sr", "ls7_sr"],
     "oli": ["ls8_sr", "ls9_sr"],
     "msi": ["s2_l2a"],
 }
-INSTRUMENTS_PRODUCTS = {**COMPOSITES_PRODUCTS, **SINGLE_DAY_PRODUCTS}
+INSTRUMENTS_PRODUCTS = {**COMPOSITE_INSTRUMENTS, **SINGLE_DAY_INSTRUMENTS}
 
 
 def get_dc_products(instrument_name: str) -> list[str]:
@@ -161,7 +161,7 @@ def build_dc_queries(
                 resampling=resampling,
                 # align=(0, 0), not supported when using like
             )
-            if instrument_name in SINGLE_DAY_PRODUCTS:
+            if instrument_name in SINGLE_DAY_INSTRUMENTS:
                 dc_query.update({"group_by": "solar_day"})
             dc_queries[instrument_name] = dc_query
     return dc_queries
@@ -388,13 +388,14 @@ def process_tirs_data(ds_tirs: xr.Dataset) -> xr.Dataset:
     return ds_tirs
 
 
-def build_wq_single_day_dataset(
+def load_single_day_instruments_data(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
-) -> xr.Dataset:
-    """Build a combined dataset from loading data
-    for each single day instrument using the datacube queries provided.
+) -> dict[str, xr.Dataset]:
+    """
+    Load data for each single day instrument using the datacube queries
+    provided.
 
     Parameters
     ----------
@@ -410,19 +411,21 @@ def build_wq_single_day_dataset(
 
     Returns
     -------
-    xr.Dataset
-        A single dataset containing all the data found for each
-        instrument in the datacube.
+    dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to the a Dataset containing
+        data found for the instrument in the datacube.
     """
     if dc is None:
-        dc = Datacube(app="Build_wq_agm_dataset")
+        dc = Datacube(app="LoadSingleDayInstruments")
 
     # Get default resolution to load data in from the tile Geobox
     # should be 10m.
     default_res = int(abs(tile_geobox.resolution.x))
 
     # Filter datacube queries to queries for single day products
-    queries = {k: v for k, v in dc_queries.items() if k in SINGLE_DAY_PRODUCTS}
+    queries = {
+        k: v for k, v in dc_queries.items() if k in SINGLE_DAY_INSTRUMENTS
+    }
 
     # Load Landsat surface temperature, surface reflectance, and
     # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
@@ -467,19 +470,16 @@ def build_wq_single_day_dataset(
                 resampling=dc_queries[instrument_name]["resampling"],
             )
 
-    combined = xr.merge(list(loaded_data.values()))
-    combined = combined.drop_vars("quantile", errors="ignore")
-
-    return combined
+    return loaded_data
 
 
-def build_wq_agm_dataset(
+def load_composite_instruments_data(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
-) -> xr.Dataset:
-    """Build a combined annual dataset from loading data
-    for each composite products instrument using the datacube queries
+) -> dict[str, xr.Dataset]:
+    """
+    Load data for each composite instrument using the datacube queries
     provided.
 
     Parameters
@@ -496,19 +496,21 @@ def build_wq_agm_dataset(
 
     Returns
     -------
-    xr.Dataset
-        A single dataset containing all the data found for each
-        instrument in the datacube.
+    dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to the a Dataset containing
+        data found for the instrument in the datacube.
     """
     if dc is None:
-        dc = Datacube(app="Build_wq_agm_dataset")
+        dc = Datacube(app="LoadCompositeInstruments")
 
     # Get default resolution to load data in from the tile Geobox
     # should be 10m.
     default_res = int(abs(tile_geobox.resolution.x))
 
     # Filter datacube queries to queries for composite products
-    queries = {k: v for k, v in dc_queries.items() if k in COMPOSITES_PRODUCTS}
+    queries = {
+        k: v for k, v in dc_queries.items() if k in COMPOSITE_INSTRUMENTS
+    }
 
     # Load Landsat surface temperature, surface reflectance, and
     # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
@@ -557,7 +559,41 @@ def build_wq_agm_dataset(
                 how=tile_geobox,
                 resampling=dc_queries[instrument_name]["resampling"],
             )
+    return loaded_data
 
+
+def build_wq_agm_dataset(
+    dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
+    dc: Datacube = None,
+) -> xr.Dataset:
+    """Build a combined annual dataset from loading data
+    for each composite products instrument using the datacube queries
+    provided.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including it’s crs.
+
+    dc: Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    xr.Dataset
+        A single dataset containing all the data found for each
+        instrument in the datacube.
+    """
+    if dc is None:
+        dc = Datacube(app="Build_wq_agm_dataset")
+    loaded_data = load_composite_instruments_data(
+        dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
+    )
     combined = xr.merge(list(loaded_data.values()))
     combined = combined.drop_vars("quantile", errors="ignore")
 
