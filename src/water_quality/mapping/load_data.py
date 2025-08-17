@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import dask
 import numpy as np
@@ -388,6 +388,128 @@ def process_tirs_data(ds_tirs: xr.Dataset) -> xr.Dataset:
     return ds_tirs
 
 
+def _process_single_day_instrument_data(
+    loaded_data: dict[str, xr.Dataset],
+) -> dict[str, xr.Dataset]:
+    """Processes single-day satellite instrument data for oli, msi, and
+    tm instruments."""
+    if "oli" in loaded_data.keys():
+        loaded_data["oli"] = process_oli_data(ds_oli=loaded_data["oli"])
+
+    if "msi" in loaded_data.keys():
+        loaded_data["msi"] = process_msi_data(ds_msi=loaded_data["msi"])
+
+    if "tm" in loaded_data.keys():
+        loaded_data["tm"] = process_tm_data(ds_tm=loaded_data["tm"])
+
+    return loaded_data
+
+
+def _process_composite_instrument_data(
+    loaded_data: dict[str, xr.Dataset],
+) -> dict[str, xr.Dataset]:
+    """Process composite sallelite instrument data."""
+    if "tirs" in loaded_data.keys():
+        log.info("Processing surface temperature data to annual composite ...")
+        if "wofs_ann" not in loaded_data.keys():
+            raise ValueError(
+                "Data for the wofs_ann instrument is required to process "
+                "daily surface temperature data for the tirs instrument into "
+                "an annual timeseries."
+            )
+        else:
+            loaded_data["tirs"] = process_st_data_to_annnual(
+                ds_tirs=loaded_data["tirs"],
+                ds_wofs_ann=loaded_data["wofs_ann"],
+            )
+    return loaded_data
+
+
+def _load_and_reproject_instrument_data(
+    dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
+    instruments_to_filter: list[str],
+    dc: Datacube,
+    proccess_loaded_data_func: Callable[
+        [dict[str, xr.Dataset]], dict[str, xr.Dataset]
+    ],
+) -> dict[str, xr.Dataset]:
+    """
+    Helper function to load, compute, and reproject instrument data from
+    the datacube.
+
+    This function encapsulates the common logic for filtering queries,
+    determining the appropriate loading resolution, loading data,
+    triggering Dask computation, and reprojecting the datasets to the
+    target geobox.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, Dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including its crs.
+    instruments_to_filter : set[str]
+        A set of instrument names (e.g., {"oli", "msi"}) to filter
+        the `dc_queries` by, ensuring only relevant instruments are loaded.
+    dc : Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    Dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to a **computed and
+        reprojected** xarray Dataset containing data found for the
+        instrument in the datacube.
+    """
+    # Determine the default resolution from the tile GeoBox (e.g., 10m, 30m)
+    default_res = int(abs(tile_geobox.resolution.x))
+
+    # Filter the provided datacube queries based on the specified instruments
+    queries = {
+        k: v for k, v in dc_queries.items() if k in instruments_to_filter
+    }
+
+    log.info("Loading data using datacube queries...")
+
+    loaded_data: dict[str, xr.Dataset] = {}
+    for instrument_name, dc_query in queries.items():
+        # Load Landsat products and derivatives at their native 30m resolution
+        # if the default output resolution is not already 30m.
+        if "msi" not in instrument_name and default_res != 30:
+            like = reproject_tile_geobox(
+                tile_geobox=tile_geobox, resolution_m=30
+            )
+        else:
+            like = tile_geobox
+
+        xy_chunk_size = int(like.shape.x / 5)
+        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
+
+        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
+        ds = ds.rename(get_measurements_name_dict(instrument_name))
+        loaded_data[instrument_name] = ds
+
+    loaded_data = proccess_loaded_data_func(loaded_data)
+
+    log.info("Computing instrument datasets ...")
+    loaded_data = dict(
+        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    )
+
+    log.info("Reprojecting instrument datasets ...")
+    for instrument_name, ds in loaded_data.items():
+        if ds.odc.geobox.resolution != tile_geobox.resolution:
+            loaded_data[instrument_name] = xr_reproject(
+                loaded_data[instrument_name],
+                how=tile_geobox,
+                resampling=dc_queries[instrument_name]["resampling"],
+            )
+
+    return loaded_data
+
+
 def load_single_day_instruments_data(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
@@ -417,58 +539,15 @@ def load_single_day_instruments_data(
     """
     if dc is None:
         dc = Datacube(app="LoadSingleDayInstruments")
+    instruments_to_filter = list(SINGLE_DAY_INSTRUMENTS.keys())
 
-    # Get default resolution to load data in from the tile Geobox
-    # should be 10m.
-    default_res = int(abs(tile_geobox.resolution.x))
-
-    # Filter datacube queries to queries for single day products
-    queries = {
-        k: v for k, v in dc_queries.items() if k in SINGLE_DAY_INSTRUMENTS
-    }
-
-    # Load Landsat surface temperature, surface reflectance, and
-    # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
-    # of 30m .
-    log.info("Loading data using datacube queries ...")
-    loaded_data: dict[str, xr.Dataset] = {}
-    for instrument_name, dc_query in queries.items():
-        if "msi" not in instrument_name and default_res != 30:
-            like = reproject_tile_geobox(
-                tile_geobox=tile_geobox, resolution_m=30
-            )
-        else:
-            like = tile_geobox
-
-        xy_chunk_size = int(like.shape.x / 5)
-        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
-
-        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
-        ds = ds.rename(get_measurements_name_dict(instrument_name))
-        loaded_data[instrument_name] = ds
-
-    if "oli" in loaded_data.keys():
-        loaded_data["oli"] = process_oli_data(ds_oli=loaded_data["oli"])
-
-    if "msi" in loaded_data.keys():
-        loaded_data["msi"] = process_msi_data(ds_msi=loaded_data["msi"])
-
-    if "tm" in loaded_data.keys():
-        loaded_data["tm"] = process_tm_data(ds_tm=loaded_data["tm"])
-
-    log.info("Computing instrument datasets ...")
-    loaded_data = dict(
-        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    loaded_data = _load_and_reproject_instrument_data(
+        dc_queries=dc_queries,
+        tile_geobox=tile_geobox,
+        instruments_to_filter=instruments_to_filter,
+        dc=dc,
+        proccess_loaded_data_func=_process_composite_instrument_data,
     )
-
-    log.info("Reprojecting instrument datasets ...")
-    for instrument_name, ds in loaded_data.items():
-        if ds.odc.geobox.resolution != tile_geobox.resolution:
-            loaded_data[instrument_name] = xr_reproject(
-                loaded_data[instrument_name],
-                how=tile_geobox,
-                resampling=dc_queries[instrument_name]["resampling"],
-            )
 
     return loaded_data
 
@@ -503,62 +582,16 @@ def load_composite_instruments_data(
     if dc is None:
         dc = Datacube(app="LoadCompositeInstruments")
 
-    # Get default resolution to load data in from the tile Geobox
-    # should be 10m.
-    default_res = int(abs(tile_geobox.resolution.x))
+    instruments_to_filter = list(COMPOSITE_INSTRUMENTS.keys())
 
-    # Filter datacube queries to queries for composite products
-    queries = {
-        k: v for k, v in dc_queries.items() if k in COMPOSITE_INSTRUMENTS
-    }
-
-    # Load Landsat surface temperature, surface reflectance, and
-    # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
-    # of 30m .
-    log.info("Loading data using datacube queries ...")
-    loaded_data: dict[str, xr.Dataset] = {}
-    for instrument_name, dc_query in queries.items():
-        if "msi" not in instrument_name and default_res != 30:
-            like = reproject_tile_geobox(
-                tile_geobox=tile_geobox, resolution_m=30
-            )
-        else:
-            like = tile_geobox
-
-        xy_chunk_size = int(like.shape.x / 5)
-        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
-
-        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
-        ds = ds.rename(get_measurements_name_dict(instrument_name))
-        loaded_data[instrument_name] = ds
-
-    if "tirs" in loaded_data.keys():
-        log.info("Processing surface temperature data to annual composite ...")
-        if "wofs_ann" not in loaded_data.keys():
-            raise ValueError(
-                "Data for the wofs_ann instrument is required to process "
-                "daily surface temperature data for the tirs instrument into "
-                "an annual timeseries."
-            )
-        else:
-            loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"],
-                ds_wofs_ann=loaded_data["wofs_ann"],
-            )
-
-    log.info("Computing instrument datasets ...")
-    loaded_data = dict(
-        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    loaded_data = _load_and_reproject_instrument_data(
+        dc_queries=dc_queries,
+        tile_geobox=tile_geobox,
+        instruments_to_filter=instruments_to_filter,
+        dc=dc,
+        proccess_loaded_data_func=_process_composite_instrument_data,
     )
 
-    log.info("Reprojecting instrument datasets ...")
-    for instrument_name, ds in loaded_data.items():
-        if ds.odc.geobox.resolution != tile_geobox.resolution:
-            loaded_data[instrument_name] = xr_reproject(
-                loaded_data[instrument_name],
-                how=tile_geobox,
-                resampling=dc_queries[instrument_name]["resampling"],
-            )
     return loaded_data
 
 
