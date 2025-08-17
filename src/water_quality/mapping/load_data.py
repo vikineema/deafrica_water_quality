@@ -284,7 +284,8 @@ def process_oli_data(ds_oli: xr.Dataset) -> xr.Dataset:
 
             # Rescale and multiply by 10,000 to match range of data
             # for the msi instrument.
-            ds_oli[band] = (2.75e-5 * ds_oli[band] - 0.2) * 10000
+            # ds_oli[band] = (2.75e-5 * ds_oli[band] - 0.2) * 10000
+            ds_oli[band] = 2.75e-5 * ds_oli[band] - 0.2
 
     return ds_oli
 
@@ -338,7 +339,8 @@ def process_tm_data(ds_tm: xr.Dataset) -> xr.Dataset:
         if band != "tm_pq":
             # Rescale and multiply by 10,000 to match range of data
             # for the msi instrument.
-            ds_tm[band] = (2.75e-5 * ds_tm[band] - 0.2) * 10000
+            # ds_tm[band] = (2.75e-5 * ds_tm[band] - 0.2) * 10000
+            ds_tm[band] = 2.75e-5 * ds_tm[band] - 0.2
 
     return ds_tm
 
