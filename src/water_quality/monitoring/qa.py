@@ -1,5 +1,6 @@
 import logging
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -241,8 +242,6 @@ def per_pixel_relative_spectral_angle_deviation(
     assert len(composite_instrument_bands) == len(single_day_instrument_bands)
 
     dot_product = 0
-    self_product = 0
-    gm_self_product = 0
     for idx in range(0, len(composite_instrument_bands)):
         band = single_day_instrument_bands[idx]
         agm_band = composite_instrument_bands[idx]
@@ -252,11 +251,9 @@ def per_pixel_relative_spectral_angle_deviation(
             .groupby("time")
             .map(_per_timestep_mulltiplication, annual_da=ds_agm[agm_band])
         )
-        self_product += ds[band] ** 2
-        gm_self_product += ds_agm[agm_band] ** 2
 
-    self_product = self_product**0.5
-    gm_self_product = gm_self_product**0.5
+    self_product = np.sqrt(np.square(ds).to_array().sum(dim="variable"))
+    gm_self_product = np.sqrt(np.square(ds_agm).to_array().sum(dim="variable"))
 
     # relative spectral angle deviation is the 1-cosine of the angle,
     # divided by the smad
