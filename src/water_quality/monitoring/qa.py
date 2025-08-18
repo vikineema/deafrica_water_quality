@@ -272,6 +272,6 @@ def per_pixel_relative_spectral_angle_deviation(
     ]
     gm_divisor = _convert_time_coord_to_year(gm_divisor)
     rsad = sad.groupby("time").map(
-        _per_timestep_division, annual_da=gm_self_product
+        _per_timestep_division, annual_da=gm_divisor
     )
     return rsad, sad
