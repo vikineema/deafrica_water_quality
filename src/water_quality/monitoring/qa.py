@@ -179,6 +179,22 @@ def per_pixel_relative_albedo_deviation(
     return relative_albedo, albedo
 
 
+def _per_timestep_mulltiplication(
+    x: xr.DataArray, annual_da: xr.DataArray
+) -> xr.DataArray:
+    year = pd.to_datetime(x.time.values.item()).year
+    result = x * annual_da.sel(year=year)
+    return result
+
+
+def _per_timestep_division(
+    x: xr.DataArray, annual_da: xr.DataArray
+) -> xr.DataArray:
+    year = pd.to_datetime(x.time.values.item()).year
+    result = x / annual_da.sel(year=year)
+    return result
+
+
 def per_pixel_relative_spectral_angle_deviation(
     single_day_instrument_ds: xr.Dataset,
     composite_instrument_ds: xr.Dataset,
@@ -196,13 +212,9 @@ def per_pixel_relative_spectral_angle_deviation(
         raise ValueError(
             f"Select comparison type from {','.join(list(COMPARISON_TO_AGM_TYPES.keys))}"
         )
-    log.info(
-        "Calculating relative albedo deviations (ralb) from the geomedian ... "
-    )
-    comparison_type = COMPARISON_TO_AGM_TYPES[comparison_type_name]
 
     log.info(
-        "Calculating relative albedo deviations (ralb) from the geomedian ... "
+        "Calculating relative spectral angle deviations (rsad) from the geomedian... "
     )
     comparison_type = COMPARISON_TO_AGM_TYPES[comparison_type_name]
 
@@ -234,9 +246,31 @@ def per_pixel_relative_spectral_angle_deviation(
         band = single_day_instrument_bands[idx]
         agm_band = composite_instrument_bands[idx]
 
-        dot_product = ds[band] * ds_agm[agm_band]
-        self_product = ds[band] ** 2
-        gm_self_product = ds_agm[agm_band] ** 2
+        dot_product += (
+            ds[band]
+            .groupby("time")
+            .map(_per_timestep_mulltiplication, annual_da=ds_agm[agm_band])
+        )
+        self_product += ds[band] ** 2
+        gm_self_product += ds_agm[agm_band] ** 2
 
     self_product = self_product**0.5
     gm_self_product = gm_self_product**0.5
+
+    # relative spectral angle deviation is the 1-cosine of the angle,
+    # divided by the smad
+    cosdist = (
+        (dot_product / self_product)
+        .groupby("time")
+        .map(_per_timestep_mulltiplication, annual_da=gm_self_product)
+    )
+    sad = 1 - cosdist
+
+    gm_divisor = composite_instrument_ds[composite_instrument][
+        composite_scaling_band
+    ]
+    gm_divisor = _convert_time_coord_to_year(gm_divisor)
+    rsad = sad.groupby("time").map(
+        _per_timestep_division, annual_da=gm_self_product
+    )
+    return rsad
