@@ -148,7 +148,7 @@ def per_pixel_relative_albedo_deviation(
     albedo_gm = ds_agm.groupby("time.year").apply(_sum_variables_per_year)
 
     albedo_divisor = (
-        composite_instrument_ds[composite_instrument][[composite_scaling_band]]
+        composite_instrument_ds[composite_instrument][composite_scaling_band]
         * 10000
     )  # this is the natural divisor to normalise the divergence
     albedo_divisor = albedo_divisor.fillna(0)
@@ -177,3 +177,66 @@ def per_pixel_relative_albedo_deviation(
         albedo_divisor_ds=albedo_divisor,
     )
     return relative_albedo, albedo
+
+
+def per_pixel_relative_spectral_angle_deviation(
+    single_day_instrument_ds: xr.Dataset,
+    composite_instrument_ds: xr.Dataset,
+    comparison_type_name: str,
+    composite_scaling_band: str,
+):
+    """
+    Per pixel relative spectral angle deviation  (RSAD) is calculated as
+    the spectral angle between the pixel and the geomedian and normalised
+    using the smad geomedian band.
+    RSAD < n is taken as the default range of normal/typical, where n = 1.4
+    """
+
+    if comparison_type_name not in COMPARISON_TO_AGM_TYPES:
+        raise ValueError(
+            f"Select comparison type from {','.join(list(COMPARISON_TO_AGM_TYPES.keys))}"
+        )
+    log.info(
+        "Calculating relative albedo deviations (ralb) from the geomedian ... "
+    )
+    comparison_type = COMPARISON_TO_AGM_TYPES[comparison_type_name]
+
+    log.info(
+        "Calculating relative albedo deviations (ralb) from the geomedian ... "
+    )
+    comparison_type = COMPARISON_TO_AGM_TYPES[comparison_type_name]
+
+    composite_instrument = [
+        i for i in list(comparison_type.keys()) if "_agm" in i
+    ][0]
+    composite_instrument_bands = comparison_type[composite_instrument]
+    ds_agm = composite_instrument_ds[composite_instrument][
+        composite_instrument_bands
+    ]
+    ds_agm = ds_agm.fillna(0)
+
+    single_day_instrument = [
+        i for i in list(comparison_type.keys()) if i != composite_instrument
+    ][0]
+    single_day_instrument_bands = comparison_type[single_day_instrument]
+    ds = single_day_instrument_ds[single_day_instrument][
+        single_day_instrument_bands
+    ]
+    ds = ds.fillna(0)
+
+    # Check
+    assert len(composite_instrument_bands) == len(single_day_instrument_bands)
+
+    dot_product = 0
+    self_product = 0
+    gm_self_product = 0
+    for idx in range(0, len(composite_instrument_bands)):
+        band = single_day_instrument_bands[idx]
+        agm_band = composite_instrument_bands[idx]
+
+        dot_product = ds[band] * ds_agm[agm_band]
+        self_product = ds[band] ** 2
+        gm_self_product = ds_agm[agm_band] ** 2
+
+    self_product = self_product**0.5
+    gm_self_product = gm_self_product**0.5
