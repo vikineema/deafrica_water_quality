@@ -226,6 +226,7 @@ def per_pixel_relative_spectral_angle_deviation(
         composite_instrument_bands
     ]
     ds_agm = ds_agm.fillna(0)
+    ds_agm = _convert_time_coord_to_year(ds_agm)
 
     single_day_instrument = [
         i for i in list(comparison_type.keys()) if i != composite_instrument
