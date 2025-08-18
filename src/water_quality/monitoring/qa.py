@@ -268,6 +268,7 @@ def per_pixel_relative_spectral_angle_deviation(
     gm_divisor = composite_instrument_ds[composite_instrument][
         composite_scaling_band
     ]
+    gm_divisor = gm_divisor.fillna(0)
     gm_divisor = _convert_time_coord_to_year(gm_divisor)
     rsad = sad.groupby("time").map(
         _per_timestep_division, annual_da=gm_divisor
