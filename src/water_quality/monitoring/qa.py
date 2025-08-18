@@ -260,10 +260,8 @@ def per_pixel_relative_spectral_angle_deviation(
 
     # relative spectral angle deviation is the 1-cosine of the angle,
     # divided by the smad
-    cosdist = (
-        (dot_product / self_product)
-        .groupby("time")
-        .map(_per_timestep_mulltiplication, annual_da=gm_self_product)
+    cosdist = dot_product / self_product.groupby("time").map(
+        _per_timestep_mulltiplication, annual_da=gm_self_product
     )
     sad = 1 - cosdist
 
