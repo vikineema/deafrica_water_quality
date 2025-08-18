@@ -273,4 +273,4 @@ def per_pixel_relative_spectral_angle_deviation(
     rsad = sad.groupby("time").map(
         _per_timestep_division, annual_da=gm_self_product
     )
-    return rsad
+    return rsad, sad
