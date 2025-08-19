@@ -228,6 +228,7 @@ def per_pixel_relative_spectral_angle_deviation(
     ]
     ds_agm = ds_agm.fillna(0)
     ds_agm = _convert_time_coord_to_year(ds_agm)
+    gm_self_product = np.sqrt(np.square(ds_agm).to_array().sum(dim="variable"))
 
     single_day_instrument = [
         i for i in list(comparison_type.keys()) if i != composite_instrument
@@ -237,6 +238,7 @@ def per_pixel_relative_spectral_angle_deviation(
         single_day_instrument_bands
     ]
     ds = ds.fillna(0)
+    self_product = np.sqrt(np.square(ds).to_array().sum(dim="variable"))
 
     # Check
     assert len(composite_instrument_bands) == len(single_day_instrument_bands)
@@ -251,9 +253,6 @@ def per_pixel_relative_spectral_angle_deviation(
             .groupby("time")
             .map(_per_timestep_mulltiplication, annual_da=ds_agm[agm_band])
         )
-
-    self_product = np.sqrt(np.square(ds).to_array().sum(dim="variable"))
-    gm_self_product = np.sqrt(np.square(ds_agm).to_array().sum(dim="variable"))
 
     # relative spectral angle deviation is the 1-cosine of the angle,
     # divided by the smad
