@@ -375,7 +375,7 @@ def _per_timestep_watermasking(
     return result
 
 
-def calculate_qa_scores_(
+def calculate_qa_scores_all_instruments(
     single_day_instruments_data: dict[str, xr.Dataset],
     composite_instruments_data: dict[str, xr.Dataset],
 ) -> xr.Dataset:
@@ -439,10 +439,72 @@ def calculate_qa_scores_(
     if "tm" in single_day_instruments_data.keys():
         # ralb, alb, rsad, sad, qa_score, ci_score
 
-        tm_data = single_day_instruments_data["tm"]
-        pre_2013 = tm_data.where(tm_data.time.dt.year < 2013, drop=True)
-        post_2012 = tm_data.where(tm_data.time.dt.year >= 2013, drop=True)
-        pass
+        original_tm_data = single_day_instruments_data["tm"]
+        pre_2013 = original_tm_data.where(
+            original_tm_data.time.dt.year < 2013, drop=True
+        )
+        post_2012 = original_tm_data.where(
+            original_tm_data.time.dt.year >= 2013, drop=True
+        )
+
+        collected = {
+            "tm_qa_ralb": [],
+            "tm_qa_alb": [],
+            "tm_qa_rsad": [],
+            "tm_qa_sad": [],
+            "tm_qa_score": [],
+            "tm_ci_score": [],
+        }
+
+        if pre_2013.to_array().size != 0:
+            single_day_instruments_data["tm"] = pre_2013
+            comparison_type_name = "tm-v-tm_agm-noIRband"
+            composite_scaling_band_alb = "tm_agm_bcmad"
+            composite_scaling_band_sad = "tm_agm_smad"
+            scaling_factor = 6 / 5
+            ralb, alb, rsad, sad, qa_score, ci_score = calculate_qa_scores(
+                single_day_instruments_data,
+                composite_instruments_data,
+                comparison_type_name,
+                composite_scaling_band_alb,
+                composite_scaling_band_sad,
+                scaling_factor,
+            )
+            collected["tm_qa_ralb"].append(ralb)
+            collected["tm_qa_alb"].append(alb)
+            collected["tm_qa_rsad"].append(rsad)
+            collected["tm_qa_sad"].append(sad)
+            collected["tm_qa_score"].append(qa_score)
+            collected["tm_ci_score"].append(ci_score)
+
+        if post_2012.to_array().size != 0:
+            single_day_instruments_data["tm"] = post_2012
+            comparison_type_name = "tm-v-oli_agm-noIRband"
+            composite_scaling_band_alb = "oli_agm_bcmad"
+            composite_scaling_band_sad = "oli_agm_smad"
+            scaling_factor = 6 / 5
+            ralb, alb, rsad, sad, qa_score, ci_score = calculate_qa_scores(
+                single_day_instruments_data,
+                composite_instruments_data,
+                comparison_type_name,
+                composite_scaling_band_alb,
+                composite_scaling_band_sad,
+                scaling_factor,
+            )
+            collected["tm_qa_ralb"].append(ralb)
+            collected["tm_qa_alb"].append(alb)
+            collected["tm_qa_rsad"].append(rsad)
+            collected["tm_qa_sad"].append(sad)
+            collected["tm_qa_score"].append(qa_score)
+            collected["tm_ci_score"].append(ci_score)
+
+        for key, da_list in collected.items():
+            if da_list:
+                collected[key] = xr.concat(da_list, dim="time")
+            else:
+                del collected[key]
+
+        single_day_instruments_data["tm"] = original_tm_data.update(collected)
 
     combined = xr.merge(list(single_day_instruments_data.values()))
 
