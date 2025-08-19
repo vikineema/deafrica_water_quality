@@ -113,12 +113,12 @@ def _sum_variables_per_year(x: xr.Dataset) -> xr.Dataset:
     return da
 
 
-def per_pixel_relative_albedo_deviation(
-    single_day_instrument_ds: xr.Dataset,
-    composite_instrument_ds: xr.Dataset,
+def relative_albedo_deviation(
+    single_day_instrument_data: dict[str, xr.Dataset],
+    composite_instrument_data: dict[str, xr.Dataset],
     comparison_type_name: str,
     composite_scaling_band: str,
-):
+) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Per pixel relative albdedo deviation (RALB) is calculated by summing
     the band values and comparing with a geomedian. The `bcmad` geomedian
@@ -141,7 +141,7 @@ def per_pixel_relative_albedo_deviation(
         i for i in list(comparison_type.keys()) if "_agm" in i
     ][0]
     composite_instrument_bands = comparison_type[composite_instrument]
-    ds_agm = composite_instrument_ds[composite_instrument][
+    ds_agm = composite_instrument_data[composite_instrument][
         composite_instrument_bands
     ]
     ds_agm = ds_agm.fillna(0)
@@ -149,7 +149,7 @@ def per_pixel_relative_albedo_deviation(
     albedo_gm = ds_agm.groupby("time.year").apply(_sum_variables_per_year)
 
     albedo_divisor = (
-        composite_instrument_ds[composite_instrument][composite_scaling_band]
+        composite_instrument_data[composite_instrument][composite_scaling_band]
         * 10000
     )  # this is the natural divisor to normalise the divergence
     albedo_divisor = albedo_divisor.fillna(0)
@@ -159,7 +159,7 @@ def per_pixel_relative_albedo_deviation(
         i for i in list(comparison_type.keys()) if i != composite_instrument
     ][0]
     single_day_instrument_bands = comparison_type[single_day_instrument]
-    ds = single_day_instrument_ds[single_day_instrument][
+    ds = single_day_instrument_data[single_day_instrument][
         single_day_instrument_bands
     ]
     ds = ds.fillna(0)
@@ -196,12 +196,12 @@ def _per_timestep_division(
     return result
 
 
-def per_pixel_relative_spectral_angle_deviation(
-    single_day_instrument_ds: xr.Dataset,
-    composite_instrument_ds: xr.Dataset,
+def relative_spectral_angle_deviation(
+    single_day_instrument_data: dict[str, xr.Dataset],
+    composite_instrument_data: dict[str, xr.Dataset],
     comparison_type_name: str,
     composite_scaling_band: str,
-):
+) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Per pixel relative spectral angle deviation  (RSAD) is calculated as
     the spectral angle between the pixel and the geomedian and normalised
@@ -223,7 +223,7 @@ def per_pixel_relative_spectral_angle_deviation(
         i for i in list(comparison_type.keys()) if "_agm" in i
     ][0]
     composite_instrument_bands = comparison_type[composite_instrument]
-    ds_agm = composite_instrument_ds[composite_instrument][
+    ds_agm = composite_instrument_data[composite_instrument][
         composite_instrument_bands
     ]
     ds_agm = ds_agm.fillna(0)
@@ -234,7 +234,7 @@ def per_pixel_relative_spectral_angle_deviation(
         i for i in list(comparison_type.keys()) if i != composite_instrument
     ][0]
     single_day_instrument_bands = comparison_type[single_day_instrument]
-    ds = single_day_instrument_ds[single_day_instrument][
+    ds = single_day_instrument_data[single_day_instrument][
         single_day_instrument_bands
     ]
     ds = ds.fillna(0)
@@ -261,7 +261,7 @@ def per_pixel_relative_spectral_angle_deviation(
     )
     sad = 1 - cosdist
 
-    gm_divisor = composite_instrument_ds[composite_instrument][
+    gm_divisor = composite_instrument_data[composite_instrument][
         composite_scaling_band
     ]
     gm_divisor = gm_divisor.fillna(0)
@@ -270,3 +270,90 @@ def per_pixel_relative_spectral_angle_deviation(
         _per_timestep_division, annual_da=gm_divisor
     )
     return rsad, sad
+
+
+def calculate_qa_scores(
+    single_day_instrument_data: dict[str, xr.Dataset],
+    composite_instrument_data: dict[str, xr.Dataset],
+) -> xr.Dataset:
+    oli_score_upper = 1.4 * 2
+    msi_score_upper = 1.4 * 2
+    # should need higher threshold for tm v oli ... not a nice step to take ..
+    tm_score_upper = 1.4 * 3
+    # --- used to flag areas where there is photosynthetic surface material
+    ndvi_threshold = 0.2
+    upper_albedo = 2.0
+    # this cuts out most cloud shadow, but can't go lower
+    lower_albedo = -1.9
+    # experimented with values, don't go lower than 5
+    upper_rsad = 5
+    # allow more variation in spectral angle than in brightness when
+    # calculating the combined QA measure
+    rsad_factor = 0.4
+
+    if "msi" in single_day_instrument_data.keys():
+        comparison_type_name = "msi-v-msi_agm-noIRband"
+        composite_scaling_band = "msi_agm_bcmad"
+        scaling_factor = 6 / 4
+
+        msi_qa_ralb, msi_qa_alb = relative_albedo_deviation(
+            single_day_instrument_data,
+            composite_instrument_data,
+            comparison_type_name,
+            composite_scaling_band,
+        )
+        # --- compensate for not including the IR bands ---
+        msi_qa_ralb = scaling_factor * msi_qa_ralb
+        msi_qa_alb = scaling_factor * msi_qa_alb
+
+        composite_scaling_band = "msi_agm_smad"
+        msi_qa_rsad, msi_qa_sad = relative_spectral_angle_deviation(
+            single_day_instrument_data,
+            composite_instrument_data,
+            comparison_type_name,
+            composite_scaling_band,
+        )
+        msi_qa_rsad = scaling_factor * msi_qa_rsad
+        msi_qa_sad = scaling_factor * msi_qa_sad
+
+        # Combine as the magnitude of the qa vector
+        msi_qa_score = np.square(msi_qa_ralb) + np.sqrt(
+            np.square(msi_qa_rsad * rsad_factor)
+        )
+        msi_ci_score = (msi_qa_rsad * rsad_factor) - np.square(msi_qa_ralb)
+        qa_score = msi_qa_score
+
+    if "oli" in single_day_instrument_data.keys():
+        comparison_type_name = "oli-v-oli_agm-noIRband"
+        composite_scaling_band = "oli_agm_bcmad"
+        scaling_factor = 6 / 5
+
+        oli_qa_ralb, oli_qa_alb = relative_albedo_deviation(
+            single_day_instrument_data,
+            composite_instrument_data,
+            comparison_type_name,
+            composite_scaling_band,
+        )
+        # --- compensate for not including the IR bands ---
+        oli_qa_ralb = scaling_factor * oli_qa_ralb
+        oli_qa_alb = scaling_factor * oli_qa_alb
+
+        composite_scaling_band = "oli_agm_smad"
+        oli_qa_rsad, oli_qa_sad = relative_spectral_angle_deviation(
+            single_day_instrument_data,
+            composite_instrument_data,
+            comparison_type_name,
+            composite_scaling_band,
+        )
+        oli_qa_rsad = scaling_factor * oli_qa_rsad
+        oli_qa_sad = scaling_factor * oli_qa_sad
+
+        # Combine as the magnitude of the qa vector
+        oli_qa_score = np.square(oli_qa_ralb) + np.sqrt(
+            np.square(oli_qa_rsad * rsad_factor)
+        )
+        oli_ci_score = (oli_qa_rsad * rsad_factor) - np.square(oli_qa_ralb)
+        qa_score = oli_qa_score
+
+    if "tm" in single_day_instrument_data.keys():
+        pass
