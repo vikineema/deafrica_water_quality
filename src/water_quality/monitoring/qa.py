@@ -197,8 +197,8 @@ def _per_timestep_division(
 
 
 def relative_spectral_angle_deviation(
-    single_day_instrument_data: dict[str, xr.Dataset],
-    composite_instrument_data: dict[str, xr.Dataset],
+    single_day_instruments_data: dict[str, xr.Dataset],
+    composite_instruments_data: dict[str, xr.Dataset],
     comparison_type_name: str,
     composite_scaling_band: str,
 ) -> tuple[xr.DataArray, xr.DataArray]:
@@ -223,7 +223,7 @@ def relative_spectral_angle_deviation(
         i for i in list(comparison_type.keys()) if "_agm" in i
     ][0]
     composite_instrument_bands = comparison_type[composite_instrument]
-    ds_agm = composite_instrument_data[composite_instrument][
+    ds_agm = composite_instruments_data[composite_instrument][
         composite_instrument_bands
     ]
     ds_agm = ds_agm.fillna(0)
@@ -234,7 +234,7 @@ def relative_spectral_angle_deviation(
         i for i in list(comparison_type.keys()) if i != composite_instrument
     ][0]
     single_day_instrument_bands = comparison_type[single_day_instrument]
-    ds = single_day_instrument_data[single_day_instrument][
+    ds = single_day_instruments_data[single_day_instrument][
         single_day_instrument_bands
     ]
     ds = ds.fillna(0)
@@ -261,7 +261,7 @@ def relative_spectral_angle_deviation(
     )
     sad = 1 - cosdist
 
-    gm_divisor = composite_instrument_data[composite_instrument][
+    gm_divisor = composite_instruments_data[composite_instrument][
         composite_scaling_band
     ]
     gm_divisor = gm_divisor.fillna(0)
@@ -273,8 +273,8 @@ def relative_spectral_angle_deviation(
 
 
 def calculate_qa_scores(
-    single_day_instrument_data: dict[str, xr.Dataset],
-    composite_instrument_data: dict[str, xr.Dataset],
+    single_day_instruments_data: dict[str, xr.Dataset],
+    composite_instruments_data: dict[str, xr.Dataset],
 ) -> xr.Dataset:
     oli_score_upper = 1.4 * 2
     msi_score_upper = 1.4 * 2
@@ -291,14 +291,14 @@ def calculate_qa_scores(
     # calculating the combined QA measure
     rsad_factor = 0.4
 
-    if "msi" in single_day_instrument_data.keys():
+    if "msi" in single_day_instruments_data.keys():
         comparison_type_name = "msi-v-msi_agm-noIRband"
         composite_scaling_band = "msi_agm_bcmad"
         scaling_factor = 6 / 4
 
         msi_qa_ralb, msi_qa_alb = relative_albedo_deviation(
-            single_day_instrument_data,
-            composite_instrument_data,
+            single_day_instruments_data,
+            composite_instruments_data,
             comparison_type_name,
             composite_scaling_band,
         )
@@ -308,8 +308,8 @@ def calculate_qa_scores(
 
         composite_scaling_band = "msi_agm_smad"
         msi_qa_rsad, msi_qa_sad = relative_spectral_angle_deviation(
-            single_day_instrument_data,
-            composite_instrument_data,
+            single_day_instruments_data,
+            composite_instruments_data,
             comparison_type_name,
             composite_scaling_band,
         )
@@ -323,14 +323,14 @@ def calculate_qa_scores(
         msi_ci_score = (msi_qa_rsad * rsad_factor) - np.square(msi_qa_ralb)
         qa_score = msi_qa_score
 
-    if "oli" in single_day_instrument_data.keys():
+    if "oli" in single_day_instruments_data.keys():
         comparison_type_name = "oli-v-oli_agm-noIRband"
         composite_scaling_band = "oli_agm_bcmad"
         scaling_factor = 6 / 5
 
         oli_qa_ralb, oli_qa_alb = relative_albedo_deviation(
-            single_day_instrument_data,
-            composite_instrument_data,
+            single_day_instruments_data,
+            composite_instruments_data,
             comparison_type_name,
             composite_scaling_band,
         )
@@ -340,8 +340,8 @@ def calculate_qa_scores(
 
         composite_scaling_band = "oli_agm_smad"
         oli_qa_rsad, oli_qa_sad = relative_spectral_angle_deviation(
-            single_day_instrument_data,
-            composite_instrument_data,
+            single_day_instruments_data,
+            composite_instruments_data,
             comparison_type_name,
             composite_scaling_band,
         )
@@ -355,5 +355,5 @@ def calculate_qa_scores(
         oli_ci_score = (oli_qa_rsad * rsad_factor) - np.square(oli_qa_ralb)
         qa_score = oli_qa_score
 
-    if "tm" in single_day_instrument_data.keys():
+    if "tm" in single_day_instruments_data.keys():
         pass
