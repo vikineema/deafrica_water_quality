@@ -126,6 +126,22 @@ def relative_albedo_deviation(
     RALB values can be negative.
     -n < |RALB| < n is taken as the default range of normal/typical,
     where n = 1.4
+
+    Parameters
+    ----------
+    single_day_instrument_data : dict[str, xr.Dataset]
+        _description_
+    composite_instrument_data : dict[str, xr.Dataset]
+        _description_
+    comparison_type_name : str
+        _description_
+    composite_scaling_band : str
+        _description_
+
+    Returns
+    -------
+    tuple[xr.DataArray, xr.DataArray]
+        Relative albedo deviation and albedo
     """
 
     if comparison_type_name not in COMPARISON_TO_AGM_TYPES:
@@ -207,6 +223,22 @@ def relative_spectral_angle_deviation(
     the spectral angle between the pixel and the geomedian and normalised
     using the smad geomedian band.
     RSAD < n is taken as the default range of normal/typical, where n = 1.4
+
+    Parameters
+    ----------
+    single_day_instruments_data : dict[str, xr.Dataset]
+        _description_
+    composite_instruments_data : dict[str, xr.Dataset]
+        _description_
+    comparison_type_name : str
+        _description_
+    composite_scaling_band : str
+        _description_
+
+    Returns
+    -------
+    tuple[xr.DataArray, xr.DataArray]
+        Relative spectral angle deviation and spectral angle deviation.
     """
 
     if comparison_type_name not in COMPARISON_TO_AGM_TYPES:
@@ -275,85 +307,148 @@ def relative_spectral_angle_deviation(
 def calculate_qa_scores(
     single_day_instruments_data: dict[str, xr.Dataset],
     composite_instruments_data: dict[str, xr.Dataset],
-) -> xr.Dataset:
-    oli_score_upper = 1.4 * 2
-    msi_score_upper = 1.4 * 2
-    # should need higher threshold for tm v oli ... not a nice step to take ..
-    tm_score_upper = 1.4 * 3
-    # --- used to flag areas where there is photosynthetic surface material
-    ndvi_threshold = 0.2
-    upper_albedo = 2.0
-    # this cuts out most cloud shadow, but can't go lower
-    lower_albedo = -1.9
-    # experimented with values, don't go lower than 5
-    upper_rsad = 5
+    comparison_type_name: str,
+    composite_scaling_band_alb: str,
+    composite_scaling_band_sad: str,
+    scaling_factor: float,
+) -> tuple[xr.DataArray, ...]:
+    """_summary_
+
+    Parameters
+    ----------
+    single_day_instruments_data : dict[str, xr.Dataset]
+        _description_
+    composite_instruments_data : dict[str, xr.Dataset]
+        _description_
+    comparison_type_name : str
+        _description_
+    composite_scaling_band_alb : str
+        _description_
+    composite_scaling_band_sad : str
+        _description_
+    scaling_factor : float
+        _description_
+
+    Returns
+    -------
+    tuple[xr.DataArray, ...]
+        The relative albedo, albedo, relative spectral deviation, spectral
+        deviation, QA score and dataset level deviation.
+    """
     # allow more variation in spectral angle than in brightness when
     # calculating the combined QA measure
     rsad_factor = 0.4
 
+    ralb, alb = relative_albedo_deviation(
+        single_day_instruments_data,
+        composite_instruments_data,
+        comparison_type_name,
+        composite_scaling_band_alb,
+    )
+    # --- compensate for not including the IR bands ---
+    ralb = scaling_factor * ralb
+    alb = scaling_factor * alb
+
+    rsad, sad = relative_spectral_angle_deviation(
+        single_day_instruments_data,
+        composite_instruments_data,
+        comparison_type_name,
+        composite_scaling_band_sad,
+    )
+    # --- compensate for not including the IR bands ---
+    rsad = scaling_factor * rsad
+    sad = scaling_factor * sad
+
+    # Combine as the magnitude of the qa vector
+    qa_score = np.square(ralb) + np.sqrt(np.square(rsad * rsad_factor))
+    ci_score = (rsad * rsad_factor) - np.square(ralb)
+
+    return ralb, alb, rsad, sad, qa_score, ci_score
+
+
+def _per_timestep_watermasking(
+    x: xr.DataArray, wofs_ann_freq: xr.DataArray
+) -> xr.DataArray:
+    year = pd.to_datetime(x.time.values.item()).year
+    water_mask = _convert_time_coord_to_year(wofs_ann_freq).sel(year=year)
+    result = x.where(water_mask > 0.5, np.nan)
+    return result
+
+
+def calculate_qa_scores_(
+    single_day_instruments_data: dict[str, xr.Dataset],
+    composite_instruments_data: dict[str, xr.Dataset],
+) -> xr.Dataset:
     if "msi" in single_day_instruments_data.keys():
         comparison_type_name = "msi-v-msi_agm-noIRband"
-        composite_scaling_band = "msi_agm_bcmad"
+        composite_scaling_band_alb = "msi_agm_bcmad"
+        composite_scaling_band_sad = "msi_agm_smad"
         scaling_factor = 6 / 4
 
-        msi_qa_ralb, msi_qa_alb = relative_albedo_deviation(
+        (
+            msi_qa_ralb,
+            msi_qa_alb,
+            msi_qa_rsad,
+            msi_qa_sad,
+            msi_qa_score,
+            msi_ci_score,
+        ) = calculate_qa_scores(
             single_day_instruments_data,
             composite_instruments_data,
             comparison_type_name,
-            composite_scaling_band,
+            composite_scaling_band_alb,
+            composite_scaling_band_sad,
+            scaling_factor,
         )
-        # --- compensate for not including the IR bands ---
-        msi_qa_ralb = scaling_factor * msi_qa_ralb
-        msi_qa_alb = scaling_factor * msi_qa_alb
-
-        composite_scaling_band = "msi_agm_smad"
-        msi_qa_rsad, msi_qa_sad = relative_spectral_angle_deviation(
-            single_day_instruments_data,
-            composite_instruments_data,
-            comparison_type_name,
-            composite_scaling_band,
-        )
-        msi_qa_rsad = scaling_factor * msi_qa_rsad
-        msi_qa_sad = scaling_factor * msi_qa_sad
-
-        # Combine as the magnitude of the qa vector
-        msi_qa_score = np.square(msi_qa_ralb) + np.sqrt(
-            np.square(msi_qa_rsad * rsad_factor)
-        )
-        msi_ci_score = (msi_qa_rsad * rsad_factor) - np.square(msi_qa_ralb)
-        qa_score = msi_qa_score
+        single_day_instruments_data["msi"]["msi_qa_ralb"] = msi_qa_ralb
+        single_day_instruments_data["msi"]["msi_qa_alb"] = msi_qa_alb
+        single_day_instruments_data["msi"]["msi_qa_rsad"] = msi_qa_rsad
+        single_day_instruments_data["msi"]["msi_qa_sad"] = msi_qa_sad
+        single_day_instruments_data["msi"]["msi_qa_score"] = msi_qa_score
+        single_day_instruments_data["msi"]["msi_ci_score"] = msi_ci_score
 
     if "oli" in single_day_instruments_data.keys():
         comparison_type_name = "oli-v-oli_agm-noIRband"
-        composite_scaling_band = "oli_agm_bcmad"
+        composite_scaling_band_alb = "oli_agm_bcmad"
+        composite_scaling_band_sad = "oli_agm_smad"
         scaling_factor = 6 / 5
 
-        oli_qa_ralb, oli_qa_alb = relative_albedo_deviation(
+        # ralb, alb, rsad, sad, qa_score, ci_score
+        (
+            oli_qa_ralb,
+            oli_qa_alb,
+            oli_qa_rsad,
+            oli_qa_sad,
+            oli_qa_score,
+            oli_ci_score,
+        ) = calculate_qa_scores(
             single_day_instruments_data,
             composite_instruments_data,
             comparison_type_name,
-            composite_scaling_band,
+            composite_scaling_band_alb,
+            composite_scaling_band_sad,
+            scaling_factor,
         )
-        # --- compensate for not including the IR bands ---
-        oli_qa_ralb = scaling_factor * oli_qa_ralb
-        oli_qa_alb = scaling_factor * oli_qa_alb
-
-        composite_scaling_band = "oli_agm_smad"
-        oli_qa_rsad, oli_qa_sad = relative_spectral_angle_deviation(
-            single_day_instruments_data,
-            composite_instruments_data,
-            comparison_type_name,
-            composite_scaling_band,
-        )
-        oli_qa_rsad = scaling_factor * oli_qa_rsad
-        oli_qa_sad = scaling_factor * oli_qa_sad
-
-        # Combine as the magnitude of the qa vector
-        oli_qa_score = np.square(oli_qa_ralb) + np.sqrt(
-            np.square(oli_qa_rsad * rsad_factor)
-        )
-        oli_ci_score = (oli_qa_rsad * rsad_factor) - np.square(oli_qa_ralb)
-        qa_score = oli_qa_score
+        single_day_instruments_data["oli"]["oli_qa_ralb"] = oli_qa_ralb
+        single_day_instruments_data["oli"]["oli_qa_alb"] = oli_qa_alb
+        single_day_instruments_data["oli"]["oli_qa_rsad"] = oli_qa_rsad
+        single_day_instruments_data["oli"]["oli_qa_sad"] = oli_qa_sad
+        single_day_instruments_data["oli"]["oli_qa_score"] = oli_qa_score
+        single_day_instruments_data["oli"]["oli_ci_score"] = oli_ci_score
 
     if "tm" in single_day_instruments_data.keys():
+        # ralb, alb, rsad, sad, qa_score, ci_score
+
+        tm_data = single_day_instruments_data["tm"]
+        pre_2013 = tm_data.where(tm_data.time.dt.year < 2013, drop=True)
+        post_2012 = tm_data.where(tm_data.time.dt.year >= 2013, drop=True)
         pass
+
+    combined = xr.merge(list(single_day_instruments_data.values()))
+
+    # Trim to water areas
+    combined = combined.groupby("time").map(
+        _per_timestep_watermasking,
+        wofs_ann_freq=composite_instruments_data["wofs_ann"]["wofs_ann_freq"],
+    )
+    return combined
