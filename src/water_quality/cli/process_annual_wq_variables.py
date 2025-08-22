@@ -326,6 +326,8 @@ def cli(
                     tile_id=tile_id,
                     temporal_id=temporal_id,
                     band_name=band,
+                    product_name=product_name,
+                    product_version=product_version,
                 )
 
                 da = ds[band]
@@ -346,6 +348,8 @@ def cli(
                 output_directory=output_directory,
                 tile_id=tile_id,
                 temporal_id=temporal_id,
+                product_name=product_name,
+                product_version=product_version,
             )
             with fs.open(output_csv_url, mode="w") as f:
                 wq_parameters_df.to_csv(f, index=False)
