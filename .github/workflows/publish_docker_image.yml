@@ -37,5 +37,6 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
+          build-args: BUILD_ENV=prod
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
