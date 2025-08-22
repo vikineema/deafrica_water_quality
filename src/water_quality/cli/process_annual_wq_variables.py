@@ -161,6 +161,9 @@ def cli(
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
+    product_info = analysis_config["product"]
+    product_name = product_info["name"]
+    product_version = product_info["version"]
 
     gridspec = get_waterbodies_grid(resolution_m)
     dc = Datacube(app="ProcessAnnualWQvariables")

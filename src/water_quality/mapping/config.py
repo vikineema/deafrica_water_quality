@@ -31,6 +31,7 @@ def check_config(analysis_config: dict) -> dict:
         "water_frequency_threshold_low",
         "permanent_water_threshold",
         "sigma_coefficient",
+        "product",
     ]
     missing_parameters = []
     for k in config_items:
