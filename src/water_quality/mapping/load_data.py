@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import dask
 import numpy as np
@@ -14,13 +14,19 @@ from water_quality.tiling import reproject_tile_geobox
 
 log = logging.getLogger(__name__)
 
-INSTRUMENTS_PRODUCTS = {
+COMPOSITE_INSTRUMENTS = {
     "tm_agm": ["gm_ls5_ls7_annual"],
     "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
     "msi_agm": ["gm_s2_annual"],
-    "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
     "wofs_ann": ["wofs_ls_summary_annual"],
+    "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
 }
+SINGLE_DAY_INSTRUMENTS = {
+    "tm": ["ls5_sr", "ls7_sr"],
+    "oli": ["ls8_sr", "ls9_sr"],
+    "msi": ["s2_l2a"],
+}
+INSTRUMENTS_PRODUCTS = {**COMPOSITE_INSTRUMENTS, **SINGLE_DAY_INSTRUMENTS}
 
 
 def get_dc_products(instrument_name: str) -> list[str]:
@@ -155,6 +161,8 @@ def build_dc_queries(
                 resampling=resampling,
                 # align=(0, 0), not supported when using like
             )
+            if instrument_name in SINGLE_DAY_INSTRUMENTS:
+                dc_query.update({"group_by": "solar_day"})
             dc_queries[instrument_name] = dc_query
     return dc_queries
 
@@ -201,18 +209,18 @@ def process_st_data_to_annnual(
         All layers are masked to include only pixels where the WOfS
         annual water frequency exceeds 0.5.
     """
-    # Rescale the daily timeseries to centigrade, remove outliers,
-    # apply quality filter and also filter on emissivity > 0.95.
-    tirs_st = (ds_tirs["tirs_st"] * 0.00341802 + 149.0) - 273.15
-    # -- uncertainty in kelvin
-    tirs_st_qa = ds_tirs["tirs_st_qa"] * 0.01
-    # -- emissivity fraction
-    tirs_emis = ds_tirs["tirs_emis"] * 0.0001
 
-    valid_mask = (tirs_st > 0) & (tirs_st_qa < 5) & (tirs_emis > 0.95)
-    ds_tirs["tirs_st"] = tirs_st.where(valid_mask)
+    ds_tirs = process_tirs_data(ds_tirs)
 
-    del tirs_st, tirs_st_qa, tirs_emis, valid_mask
+    # Remove outliers (no data value for surface temp is 0),
+    # apply quality filter
+    # and also filter on emissivity > 0.95
+    valid_mask = (
+        (ds_tirs["tirs_st"] > 0)
+        & (ds_tirs["tirs_st_qa"] < 5)
+        & (ds_tirs["tirs_emis"] > 0.95)
+    )
+    ds_tirs["tirs_st"] = ds_tirs["tirs_st"].where(valid_mask)
 
     if ds_tirs.chunks is not None:
         # Rechunk so the time dimension has only one chunk
@@ -250,13 +258,348 @@ def process_st_data_to_annnual(
     return annual_ds_tirs
 
 
+def process_oli_data(ds_oli: xr.Dataset) -> xr.Dataset:
+    """
+    Process data loaded for the instrument `oli` by:
+    * Setting no data values for each band to nan
+    * Rescaling the loaded surface reflectance data
+
+    Parameters
+    ----------
+    ds_oli : xr.Dataset
+        Data loaded for the instrument `oli`.
+
+    Returns
+    -------
+    Dataset
+        Data loaded for the instrument `oli` that has the zeros set to
+        nans and has been rescaled.
+    """
+
+    for band in list(ds_oli.data_vars):
+        if band != "oli_pq":
+            # Mask no data
+            # ? pq/pixel quality band no data value is 1
+            ds_oli[band] = ds_oli[band].where(ds_oli[band] > 0)
+
+            # Rescale and multiply by 10,000 to match range of data
+            # for the msi instrument.
+            ds_oli[band] = (2.75e-5 * ds_oli[band] - 0.2) * 10000
+
+    return ds_oli
+
+
+def process_msi_data(ds_msi: xr.Dataset) -> xr.Dataset:
+    """
+    Process data loaded for the instrument `msi`by:
+    * Setting no data values for each band to nan
+    * Rescaling the loaded surface reflectance data
+
+    Parameters
+    ----------
+    ds_msi : xr.Dataset
+        Data loaded for the instrument `msi`.
+
+    Returns
+    -------
+    Dataset
+        Data loaded for the instrument `msi` that has the zeros set to
+        nans and the has been rescaled.
+    """
+    for band in list(ds_msi.data_vars):
+        # Nodata value for all bands is 0
+        ds_msi[band] = ds_msi[band].where(ds_msi[band] > 0)
+        # Add rescaling when switching to s2_l2a_c1
+    return ds_msi
+
+
+def process_tm_data(ds_tm: xr.Dataset) -> xr.Dataset:
+    """
+    Process data loaded for the instrument `tm` by:
+    * Setting no data values for each band to nan
+    * Rescaling the loaded surface reflectance data
+
+    Parameters
+    ----------
+    ds_tm : xr.Dataset
+        Data loaded for the instrument `tm`.
+
+    Returns
+    -------
+    Dataset
+        Data loaded for the instrument `tm` that has the zeros set to
+        nans and has been rescaled.
+    """
+    for band in list(ds_tm.data_vars):
+        # Nodata value for surface reflectance bands is 0
+        # ? pq/pixel quality band no data value is 1
+        ds_tm[band] = ds_tm[band].where(ds_tm[band] > 0)
+
+        if band != "tm_pq":
+            # Rescale and multiply by 10,000 to match range of data
+            # for the msi instrument.
+            ds_tm[band] = (2.75e-5 * ds_tm[band] - 0.2) * 10000
+
+    return ds_tm
+
+
+def process_tirs_data(ds_tirs: xr.Dataset) -> xr.Dataset:
+    """
+    Process data loaded for the instrument `tirs` by:
+    * Setting no data values for each band to nan
+    * Rescaling the loaded surface temperature, surface temperature
+        quality (uncertainty in kelvin), and emissivity fraction.
+    * Converting the surface temperature from Kelvin to Centrigrade.
+
+    Parameters
+    ----------
+    ds_tirs : xr.Dataset
+        Data loaded for the instrument `tirs`.
+
+    Returns
+    -------
+    Dataset
+        Data loaded for the instrument `tirs` that has the zeros set to
+        nans and has been rescaled.
+    """
+    # TODO: Does setting zeros to nans produce the same results
+    # as setting no data values for each band to nan?
+    # tirs_st_qa -9999, tirs_emis -9999, tirs_st 0
+    ds_tirs["tirs_st_qa"] = ds_tirs["tirs_st_qa"].where(
+        ds_tirs["tirs_st_qa"] != -9999
+    )
+    ds_tirs["tirs_emis"] = ds_tirs["tirs_emis"].where(
+        ds_tirs["tirs_emis"] != -9999
+    )
+    ds_tirs["tirs_st"] = ds_tirs["tirs_st"].where(ds_tirs["tirs_st"] > 0)
+
+    # Set zeros to nans
+    # for band in list(ds_tirs.data_vars):
+    #    ds_tirs[band] = ds_tirs[band].where(ds_tirs[band] > 0)
+
+    # Rescale data
+    ds_tirs["tirs_st_qa"] = 0.01 * ds_tirs["tirs_st_qa"]
+    ds_tirs["tirs_emis"] = 0.0001 * ds_tirs["tirs_emis"]
+    ds_tirs["tirs_st"] = ds_tirs["tirs_st"] * 0.00341802 + 149.0
+
+    # Convert surface temperature from Kelvin to centrigrade.
+    ds_tirs["tirs_st"] = ds_tirs["tirs_st"] - 273.15
+
+    return ds_tirs
+
+
+def _load_and_reproject_instrument_data(
+    dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
+    instruments_to_filter: list[str],
+    dc: Datacube,
+    proccess_loaded_data_func: Callable[
+        [dict[str, xr.Dataset]], dict[str, xr.Dataset]
+    ],
+) -> dict[str, xr.Dataset]:
+    """
+    Helper function to load, compute, and reproject instrument data from
+    the datacube.
+
+    This function encapsulates the common logic for filtering queries,
+    determining the appropriate loading resolution, loading data,
+    triggering Dask computation, and reprojecting the datasets to the
+    target geobox.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, Dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including its crs.
+    instruments_to_filter : set[str]
+        A set of instrument names (e.g., {"oli", "msi"}) to filter
+        the `dc_queries` by, ensuring only relevant instruments are loaded.
+    dc : Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    Dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to a **computed and
+        reprojected** xarray Dataset containing data found for the
+        instrument in the datacube.
+    """
+    # Determine the default resolution from the tile GeoBox (e.g., 10m, 30m)
+    default_res = int(abs(tile_geobox.resolution.x))
+
+    # Filter the provided datacube queries based on the specified instruments
+    queries = {
+        k: v for k, v in dc_queries.items() if k in instruments_to_filter
+    }
+
+    log.info("Loading data using datacube queries...")
+
+    loaded_data: dict[str, xr.Dataset] = {}
+    for instrument_name, dc_query in queries.items():
+        # Load Landsat products and derivatives at their native 30m resolution
+        # if the default output resolution is not already 30m.
+        if "msi" not in instrument_name and default_res != 30:
+            like = reproject_tile_geobox(
+                tile_geobox=tile_geobox, resolution_m=30
+            )
+        else:
+            like = tile_geobox
+
+        xy_chunk_size = int(like.shape.x / 5)
+        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
+
+        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
+        ds = ds.rename(get_measurements_name_dict(instrument_name))
+        loaded_data[instrument_name] = ds
+
+    loaded_data = proccess_loaded_data_func(loaded_data)
+
+    log.info("Computing instrument datasets ...")
+    loaded_data = dict(
+        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    )
+
+    log.info("Reprojecting instrument datasets ...")
+    for instrument_name, ds in loaded_data.items():
+        if ds.odc.geobox.resolution != tile_geobox.resolution:
+            loaded_data[instrument_name] = xr_reproject(
+                loaded_data[instrument_name],
+                how=tile_geobox,
+                resampling=dc_queries[instrument_name]["resampling"],
+            )
+
+    return loaded_data
+
+
+def load_single_day_instruments_data(
+    dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
+    dc: Datacube = None,
+) -> dict[str, xr.Dataset]:
+    """
+    Load data for each single day instrument using the datacube queries
+    provided.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including it’s crs.
+
+    dc: Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to the a Dataset containing
+        data found for the instrument in the datacube.
+    """
+    if dc is None:
+        dc = Datacube(app="LoadSingleDayInstruments")
+
+    def _process_single_day_instrument_data(
+        loaded_data: dict[str, xr.Dataset],
+    ) -> dict[str, xr.Dataset]:
+        """Processes single-day satellite instrument data for oli, msi, and
+        tm instruments."""
+        if "oli" in loaded_data.keys():
+            loaded_data["oli"] = process_oli_data(ds_oli=loaded_data["oli"])
+
+        if "msi" in loaded_data.keys():
+            loaded_data["msi"] = process_msi_data(ds_msi=loaded_data["msi"])
+
+        if "tm" in loaded_data.keys():
+            loaded_data["tm"] = process_tm_data(ds_tm=loaded_data["tm"])
+
+        return loaded_data
+
+    loaded_data = _load_and_reproject_instrument_data(
+        dc_queries=dc_queries,
+        tile_geobox=tile_geobox,
+        instruments_to_filter=list(SINGLE_DAY_INSTRUMENTS.keys()),
+        dc=dc,
+        proccess_loaded_data_func=_process_single_day_instrument_data,
+    )
+
+    return loaded_data
+
+
+def load_composite_instruments_data(
+    dc_queries: dict[str, dict[str, Any]],
+    tile_geobox: GeoBox,
+    dc: Datacube = None,
+) -> dict[str, xr.Dataset]:
+    """
+    Load data for each composite instrument using the datacube queries
+    provided.
+
+    Parameters
+    ----------
+    dc_queries : dict[str, dict[str, Any]]
+        Datacube query to use to load data for each instrument.
+
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including it’s crs.
+
+    dc: Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    dict[str, xr.Dataset]
+        A dictionary mapping the instrument name to the a Dataset containing
+        data found for the instrument in the datacube.
+    """
+    if dc is None:
+        dc = Datacube(app="LoadCompositeInstruments")
+
+    def _process_composite_instrument_data(
+        loaded_data: dict[str, xr.Dataset],
+    ) -> dict[str, xr.Dataset]:
+        """Process composite sallelite instrument data."""
+        if "tirs" in loaded_data.keys():
+            log.info(
+                "Processing surface temperature data to annual composite ..."
+            )
+            if "wofs_ann" not in loaded_data.keys():
+                raise ValueError(
+                    "Data for the wofs_ann instrument is required to process "
+                    "daily surface temperature data for the tirs instrument into "
+                    "an annual timeseries."
+                )
+            else:
+                loaded_data["tirs"] = process_st_data_to_annnual(
+                    ds_tirs=loaded_data["tirs"],
+                    ds_wofs_ann=loaded_data["wofs_ann"],
+                )
+        return loaded_data
+
+    loaded_data = _load_and_reproject_instrument_data(
+        dc_queries=dc_queries,
+        tile_geobox=tile_geobox,
+        instruments_to_filter=list(COMPOSITE_INSTRUMENTS.keys()),
+        dc=dc,
+        proccess_loaded_data_func=_process_composite_instrument_data,
+    )
+
+    return loaded_data
+
+
 def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
-    for each instrument using the datacube queries provided.
+    for each composite products instrument using the datacube queries
+    provided.
 
     Parameters
     ----------
@@ -278,59 +621,9 @@ def build_wq_agm_dataset(
     """
     if dc is None:
         dc = Datacube(app="Build_wq_agm_dataset")
-
-    # Get default resolution to load data in from the tile Geobox
-    # should be 10m.
-    default_res = int(abs(tile_geobox.resolution.x))
-
-    # Load Landsat surface temperature, surface reflectance, and
-    # derivatives (e.g. WOfS, GeoMADs) data in the native resolution
-    # of 30m .
-    log.info("Loading data using datacube queries ...")
-    loaded_data: dict[str, xr.Dataset] = {}
-    for instrument_name, dc_query in dc_queries.items():
-        if instrument_name != "msi_agm" and default_res != 30:
-            like = reproject_tile_geobox(
-                tile_geobox=tile_geobox, resolution_m=30
-            )
-        else:
-            like = tile_geobox
-
-        xy_chunk_size = int(like.shape.x / 5)
-        dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
-
-        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
-        ds = ds.rename(get_measurements_name_dict(instrument_name))
-        loaded_data[instrument_name] = ds
-
-    if "tirs" in loaded_data.keys():
-        log.info("Processing surface temperature data to annual composite ...")
-        if "wofs_ann" not in loaded_data.keys():
-            raise ValueError(
-                "Data for the wofs_ann instrument is required to process "
-                "daily surface temperature data for the tirs instrument into "
-                "an annual timeseries."
-            )
-        else:
-            loaded_data["tirs"] = process_st_data_to_annnual(
-                ds_tirs=loaded_data["tirs"],
-                ds_wofs_ann=loaded_data["wofs_ann"],
-            )
-
-    log.info("Computing instrument datasets ...")
-    loaded_data = dict(
-        zip(loaded_data.keys(), dask.compute(*loaded_data.values()))
+    loaded_data = load_composite_instruments_data(
+        dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
     )
-
-    log.info("Reprojecting instrument datasets ...")
-    for instrument_name, ds in loaded_data.items():
-        if ds.odc.geobox.resolution != tile_geobox.resolution:
-            loaded_data[instrument_name] = xr_reproject(
-                loaded_data[instrument_name],
-                how=tile_geobox,
-                resampling=dc_queries[instrument_name]["resampling"],
-            )
-
     combined = xr.merge(list(loaded_data.values()))
     combined = combined.drop_vars("quantile", errors="ignore")
 

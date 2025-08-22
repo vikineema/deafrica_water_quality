@@ -5,6 +5,11 @@ This module provides functions to validate input dates.
 import calendar
 from datetime import date, datetime, timedelta
 
+import pandas as pd
+import toolz
+from odc.stats.model import DateTimeRange
+from odc.stats.utils import mk_season_rules, season_binner
+
 
 def check_date_str_format(date_str: str, date_format: str) -> date:
     """
@@ -182,3 +187,95 @@ def year_to_dc_datetime(year: int) -> datetime:
             f"Unexpected mid year date {mid_year_datetime} for the year {year}"
         )
     return mid_year_datetime
+
+
+def get_temporal_ids(
+    temporal_range: DateTimeRange, frequency: str
+) -> list[str]:
+    """
+    Generate temporal bin identifiers for a given date range and frequency.
+
+    The function creates a list of temporal IDs that represent the start date
+    and duration of each bin within the provided `temporal_range`. The binning
+    logic depends on the `frequency` specified.
+
+    Supported frequencies and their behavior:
+    - "annual"       → One bin per calendar year (format: YYYY--P1Y)
+    - "semiannual"   → Two bins per year, starting January 1 and July 1
+                        (format: YYYY-MM-DD--P6M)
+    - "monthly"      → One bin per calendar month (format: YYYY-MM-DD--P1M)
+    - "weekly"       → Fixed 7-day intervals starting from `temporal_range.start`
+                        (format: YYYY-MM-DD--P1W)
+    - "fortnightly"  → Fixed 14-day intervals starting from `temporal_range.start`
+                        (format: YYYY-MM-DD--P2W)
+
+    Parameters
+    ----------
+    temporal_range : DateTimeRange
+        Object with `.start` and `.end` datetime attributes representing the
+        inclusive temporal range to bin.
+    frequency : str
+        Temporal binning frequency. Must be one of:
+        {"annual", "semiannual", "monthly", "weekly", "fortnightly"}.
+
+    Returns
+    -------
+    list[str]
+        List of temporal ID strings, ordered by start date, each representing
+        one temporal bin.
+
+    """
+
+    temporal_range_start = temporal_range.start
+    temporal_range_end = temporal_range.end
+
+    dates = pd.date_range(start=temporal_range_start, end=temporal_range_end)
+
+    if frequency in ["annual"]:
+        grouped = toolz.groupby(lambda dt: dt.year, dates)
+        temporal_ids = [
+            f"{year}--P1Y" for year in list(grouped.keys()) if year != ""
+        ]
+
+    elif frequency in ["semiannual", "monthly"]:
+        if frequency == "semiannual":
+            months = 6
+            anchor = 1
+        elif frequency == "monthly":
+            months = 1
+            anchor = 1
+
+        binner = season_binner(mk_season_rules(months, anchor))
+        grouped = toolz.groupby(lambda dt: binner(dt), dates)
+        temporal_ids = [i for i in list(grouped.keys()) if i != ""]
+
+    elif frequency in ["weekly", "fortnightly"]:
+        if frequency == "weekly":
+            freq = "7D"
+            label_suffix = "--P1W"
+        elif frequency == "fortnightly":
+            freq = "14D"
+            label_suffix = "--P2W"
+
+        bins_start_dates = pd.date_range(
+            start=temporal_range_start, end=temporal_range_end, freq=freq
+        )
+        bins = {k: [] for k in bins_start_dates}
+        for idx, start_dt in enumerate(bins_start_dates):
+            if idx < len(bins_start_dates) - 1:
+                end_dt = bins_start_dates[idx + 1]
+                mask = (dates >= start_dt) & (dates < end_dt)
+            else:
+                # Last bin: include all remaining dates
+                mask = dates >= start_dt
+
+            bins[start_dt] = list(dates[mask])
+        temporal_ids = [
+            f"{i.strftime('%Y-%m-%d')}{label_suffix}"
+            for i in list(bins.keys())
+        ]
+    else:
+        raise NotImplementedError(
+            f"Temporal binning for frequency {frequency} not implementd."
+        )
+    return temporal_ids

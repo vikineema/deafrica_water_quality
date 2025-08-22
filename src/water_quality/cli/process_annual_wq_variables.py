@@ -9,8 +9,9 @@ from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
+from odc.stats._text import split_and_check
+from odc.stats.model import DateTimeRange
 
-from water_quality.dates import validate_end_date, validate_start_date
 from water_quality.grid import check_resolution, get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
@@ -43,14 +44,14 @@ from water_quality.tasks import parse_task_id
 
 
 @click.command(
-    name="process-tasks",
+    name="process-annual-wq-variables",
     no_args_is_help=True,
 )
 @click.option(
     "--tasks",
     help="List of comma separated tasks in the format"
-    "year/x{x:02d}/y{y:02d} to generate water quality variables for. "
-    "For example `2015/x200/y34,x178/y095,x199y/100`",
+    "period/x{x:02d}/y{y:02d} to generate water quality variables for. "
+    "For example `2015--P1Y/x200/y34,2015--P1Y/x178/y095, 2015--P1Y/x199y/100`",
 )
 @click.option(
     "--tasks-file",
@@ -94,8 +95,8 @@ def cli(
     overwrite: bool,
 ):
     """
-    Get the Water Quality variables for the input tasks and write the
-    resulting water quality variables to COG files.
+    Get the annual Water Quality variables for the input tasks and write
+    the resulting water quality variables to COG files.
 
     OUTPUT_DIRECTORY: The directory to write the water quality variables
     COG files to for each task.
@@ -160,23 +161,31 @@ def cli(
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
+    product_info = analysis_config["product"]
+    product_name = product_info["name"]
+    product_version = product_info["version"]
 
     gridspec = get_waterbodies_grid(resolution_m)
-    dc = Datacube(app="Process_WQ_variables")
+    dc = Datacube(app="ProcessAnnualWQvariables")
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
 
         try:
-            year, tile_id = parse_task_id(task_id)
+            temporal_id, tile_id = parse_task_id(task_id)
 
-            # Start date of the year
-            year_start = validate_start_date(str(year))
-            start_date = year_start.strftime("%Y-%m-%d")
+            # Enforce this command line tool only works for
+            # annual tasks.
+            _, freq = split_and_check(temporal_id, "--P", 2)
+            if freq != "1Y":
+                raise ValueError(
+                    f"Expecting tasks with an annual frequency '1Y' not {freq}"
+                )
 
-            # End date of the year
-            year_end = validate_end_date(str(year))
-            end_date = year_end.strftime("%Y-%m-%d")
+            temporal_range = DateTimeRange(temporal_id)
+
+            start_date = temporal_range.start.strftime("%Y-%m-%d")
+            end_date = temporal_range.end.strftime("%Y-%m-%d")
 
             tile_geobox = gridspec.tile_geobox(tile_index=tile_id)
 
@@ -315,8 +324,10 @@ def cli(
                 output_cog_url = get_wq_cog_url(
                     output_directory=output_directory,
                     tile_id=tile_id,
-                    year=year,
+                    temporal_id=temporal_id,
                     band_name=band,
+                    product_name=product_name,
+                    product_version=product_version,
                 )
 
                 da = ds[band]
@@ -334,7 +345,11 @@ def cli(
             tss_df = pd.DataFrame(data=dict(tss_measure=tsm_vlist))
             wq_parameters_df = pd.concat([tss_df, chla_df], axis=1)
             output_csv_url = get_wq_csv_url(
-                output_directory=output_directory, tile_id=tile_id, year=year
+                output_directory=output_directory,
+                tile_id=tile_id,
+                temporal_id=temporal_id,
+                product_name=product_name,
+                product_version=product_version,
             )
             with fs.open(output_csv_url, mode="w") as f:
                 wq_parameters_df.to_csv(f, index=False)

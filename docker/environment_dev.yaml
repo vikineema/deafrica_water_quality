@@ -1,0 +1,27 @@
+name: deafrica-water-quality-env
+channels:
+  - conda-forge
+dependencies:
+  # ODC ecosystem libraries
+  - eodatasets3
+  - odc-loader
+  - odc-stac
+  - odc-apps-dc-tools
+  # Code formatting
+  - ruff
+  - yamllint
+  # Tests
+  - coverage
+  - pytest
+  # Jupyter
+  - jupyterlab
+  - jupyterlab_iframe
+  - jupyter-resource-usage
+  - nodejs
+  # developer tools
+  - make
+  - wget
+  - curl
+  # packages requiring pip
+  - pip:
+    - memory-profiler

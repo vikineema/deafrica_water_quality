@@ -12,12 +12,12 @@ INDEX_DATE_START := 2024-01-01
 INDEX_DATE_END := 2024-12-31
 
 build:
-	docker compose build 
+	BUILD_ENV=dev docker compose build # --no-cache
 
 ## Environment setup
 up: ## Bring up your Docker environment
 	docker compose up -d db
-	docker compose up -d jupyter
+	docker compose up -d water-quality
 
 down:
 	docker compose down --remove-orphans
