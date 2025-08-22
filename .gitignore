@@ -39,4 +39,5 @@ WP1.3/**
 **/cfg.yaml
 # Tiles
 **/water_quality_regions.parquet
-
+# secrets
+.env

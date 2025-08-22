@@ -24,6 +24,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
+      args:
+        BUILD_ENV: "${BUILD_ENV:-prod}"
     environment:
       - DB_HOSTNAME=db
       - DB_DATABASE=opendatacube
