@@ -380,6 +380,10 @@ def calculate_qa_scores_all_instruments(
     composite_instruments_data: dict[str, xr.Dataset],
 ) -> xr.Dataset:
     if "msi" in single_day_instruments_data.keys():
+        log.info(
+            "Calculating relative spectral angle deviations (rsad) \n "
+            "from the geomedian... "
+        )
         comparison_type_name = "msi-v-msi_agm-noIRband"
         composite_scaling_band_alb = "msi_agm_bcmad"
         composite_scaling_band_sad = "msi_agm_smad"
