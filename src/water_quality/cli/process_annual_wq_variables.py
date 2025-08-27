@@ -40,6 +40,7 @@ from water_quality.mapping.load_data import (
 from water_quality.mapping.optical_water_type import OWT_pixel
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
+from water_quality.monitoring.load_data import NORMALISATION_PARAMETERS
 from water_quality.tasks import parse_task_id
 
 
@@ -330,9 +331,27 @@ def cli(
                     product_version=product_version,
                 )
 
+                # Enforce data type for all bands to float32
                 da = ds[band].astype(np.float32)
+                # Enforce no data for all bands to np.nan
+                nodata = np.nan
+
+                # Add scale and offset if needed
+                da_attrs = da.attrs
+                attrs_to_remove = ["scale_factor", "add_offset"]
+                for k in attrs_to_remove:
+                    if k in da_attrs:
+                        del da_attrs[k]
+
+                scale_and_offset = NORMALISATION_PARAMETERS.get(band, None)
+                if scale_and_offset is not None:
+                    da_attrs["scales"] = scale_and_offset["scale"]
+                    da_attrs["offsets"] = scale_and_offset["offset"]
+
+                da.attrs = da_attrs
+
                 cog_bytes = write_cog(
-                    geo_im=da, fname=":mem:", overwrite=True, nodata=np.nan
+                    geo_im=da, fname=":mem:", overwrite=True, nodata=nodata
                 )
                 with fs.open(output_cog_url, "wb") as f:
                     f.write(cog_bytes)
