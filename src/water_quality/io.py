@@ -109,70 +109,71 @@ def check_file_extension(
         return False
 
 
-def is_geotiff(path: str) -> bool:
-    accepted_geotiff_extensions = [".tif", ".tiff", ".gtiff"]
-    return check_file_extension(
-        path=path, accepted_file_extensions=accepted_geotiff_extensions
-    )
+def find_files_by_extension(
+    directory_path: str,
+    accepted_file_extensions: list[str],
+    file_name_pattern: str = ".*",
+) -> list[str]:
+    file_name_pattern = re.compile(file_name_pattern)
+
+    fs = get_filesystem(path=directory_path, anon=True)
+
+    matched_files = []
+
+    for root, dirs, files in fs.walk(directory_path):
+        for file_name in files:
+            if check_file_extension(
+                path=file_name,
+                accepted_file_extensions=accepted_file_extensions,
+            ):
+                if re.search(file_name_pattern, file_name):
+                    matched_files.append(os.path.join(root, file_name))
+                else:
+                    continue
+            else:
+                continue
+
+    if is_s3_path(path=directory_path):
+        matched_files = [f"s3://{file}" for file in matched_files]
+    elif is_gcsfs_path(path=directory_path):
+        matched_files = [f"gs://{file}" for file in matched_files]
+    return matched_files
 
 
 def find_geotiff_files(
     directory_path: str, file_name_pattern: str = ".*"
 ) -> list[str]:
-    file_name_pattern = re.compile(file_name_pattern)
-
-    fs = get_filesystem(path=directory_path, anon=True)
-
-    geotiff_file_paths = []
-
-    for root, dirs, files in fs.walk(directory_path):
-        for file_name in files:
-            if is_geotiff(path=file_name):
-                if re.search(file_name_pattern, file_name):
-                    geotiff_file_paths.append(os.path.join(root, file_name))
-                else:
-                    continue
-            else:
-                continue
-
-    if is_s3_path(path=directory_path):
-        geotiff_file_paths = [f"s3://{file}" for file in geotiff_file_paths]
-    elif is_gcsfs_path(path=directory_path):
-        geotiff_file_paths = [f"gs://{file}" for file in geotiff_file_paths]
-    return geotiff_file_paths
-
-
-def is_json(path: str) -> bool:
-    accepted_json_extensions = [".json"]
-    return check_file_extension(
-        path=path, accepted_file_extensions=accepted_json_extensions
+    geotiff_file_extensions = [".tif", ".tiff", ".gtiff"]
+    geotiff_file_paths = find_files_by_extension(
+        directory_path=directory_path,
+        accepted_file_extensions=geotiff_file_extensions,
+        file_name_pattern=file_name_pattern,
     )
+    return geotiff_file_paths
 
 
 def find_json_files(
     directory_path: str, file_name_pattern: str = ".*"
 ) -> list[str]:
-    file_name_pattern = re.compile(file_name_pattern)
-
-    fs = get_filesystem(path=directory_path, anon=True)
-
-    json_file_paths = []
-
-    for root, dirs, files in fs.walk(directory_path):
-        for file_name in files:
-            if is_json(path=file_name):
-                if re.search(file_name_pattern, file_name):
-                    json_file_paths.append(os.path.join(root, file_name))
-                else:
-                    continue
-            else:
-                continue
-
-    if is_s3_path(path=directory_path):
-        json_file_paths = [f"s3://{file}" for file in json_file_paths]
-    elif is_gcsfs_path(path=directory_path):
-        json_file_paths = [f"gs://{file}" for file in json_file_paths]
+    json_file_extensions = [".json"]
+    json_file_paths = find_files_by_extension(
+        directory_path=directory_path,
+        accepted_file_extensions=json_file_extensions,
+        file_name_pattern=file_name_pattern,
+    )
     return json_file_paths
+
+
+def find_csv_files(
+    directory_path: str, file_name_pattern: str = ".*"
+) -> list[str]:
+    csv_file_extensions = [".csv"]
+    csv_file_paths = find_files_by_extension(
+        directory_path=directory_path,
+        accepted_file_extensions=csv_file_extensions,
+        file_name_pattern=file_name_pattern,
+    )
+    return csv_file_paths
 
 
 def _get_wq_parent_dir(
@@ -221,7 +222,21 @@ def get_wq_cog_url(
     return cog_url
 
 
-def parse_wq_cog_url(cog_url: str):
+def parse_wq_cog_url(cog_url: str) -> tuple[str, str, str, str]:
+    """
+    Parse the filename of a water quality variable COG file path
+    into to the product name, region code, temporal id and the band name.
+
+    Parameters
+    ----------
+    cog_url : str
+        File path for a water quality variable COG.
+
+    Returns
+    -------
+    tuple[str, str, str, str]
+        product name, region code, temporal id and the band name.
+    """
     # f"{product_name}_{region_code}_{temporal_id}_{band}.tif"
     base = get_basename(cog_url)
     base = os.path.splitext(base)[0]
