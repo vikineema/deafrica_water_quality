@@ -330,11 +330,9 @@ def cli(
                     product_version=product_version,
                 )
 
-                da = ds[band]
+                da = ds[band].astype(np.float32)
                 cog_bytes = write_cog(
-                    geo_im=da,
-                    fname=":mem:",
-                    overwrite=True,
+                    geo_im=da, fname=":mem:", overwrite=True, nodata=np.nan
                 )
                 with fs.open(output_cog_url, "wb") as f:
                     f.write(cog_bytes)
