@@ -44,6 +44,7 @@ dependencies = [
     "toolz",
     "tqdm",
     "xarray[accel,io]",
+    "yarl"
 ]
 
 [project.optional-dependencies]
