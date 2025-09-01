@@ -7,100 +7,18 @@ import logging
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 log = logging.getLogger(__name__)
 
+# =============================================================================
+# Water Quality Algorithms
+# =============================================================================
 
-def WQ_vars(
-    ds: xr.Dataset,
-    algorithms: dict[str, dict[str, dict[str, Any]]],
-    instruments_list: dict[str, dict[str, dict[str, str | tuple]]],
-    new_dimension_name: str | None = None,
-    new_varname: str | None = None,
-) -> tuple[list[str], xr.Dataset]:
-    """
-    Run the TSS/TSP algorithms applying each algorithm to the
-    instruments and band combinations set in the `algorithms`
-    dictionary, checking that the necessary instruments are in the
-    dataset.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Input dataset with surface reflectance data.
-    algorithms : dict[str, dict[str, dict[str, Any]]]
-        Water Quality TSS/TSP algorithms, instruments, and bands
-    instruments_list :  dict[str, dict[str, dict[str, str | tuple]]],
-        Instruments that have been used to build the dataset.
-    new_dimension_name : str | None, optional
-        'tss_measure', or 'chla_measure', by default None
-    new_varname : str | None, optional
-        'tss' or 'chla', by default None
-
-    Returns
-    -------
-    tuple[list[str], xr.Dataset]
-        _description_
-    """
-    log.info(
-        f"Running  WQ algorithms for: {', '.join(list(algorithms.keys()))}"
-    )
-    wq_varlist = []
-    for alg in algorithms.keys():
-        log.info(f"Running  WQ algorithm {alg}")
-        for inst in list(algorithms[alg].keys()):
-            params = algorithms[alg][inst]
-            if inst in list(instruments_list.keys()):
-                log.info(f"Instrument: {inst}")
-                # Special case here as options are possible.
-                if inst == "msi_agm" and alg == "ndci_nir_r":
-                    for option in params.keys():
-                        opparams = params[option]
-                        function = opparams["func"]
-                        ds[opparams["wq_varname"]] = function(
-                            ds, **opparams["args"]
-                        )
-                        wq_varlist = np.append(
-                            wq_varlist, opparams["wq_varname"]
-                        )
-                else:
-                    function = params["func"]
-                    ds[params["wq_varname"]] = function(ds, **params["args"])
-                    wq_varlist = np.append(wq_varlist, params["wq_varname"])
-            else:
-                # Instrument is not used to build ds
-                # skip
-                pass
-
-    # If relevant arguments are provided, then create a dimension for
-    # the data variables and move them into it
-    if new_dimension_name is not None and new_varname is not None:
-        if new_dimension_name not in ["tss_measure", "chla_measure"]:
-            raise ValueError()
-        if new_varname not in ["tss", "chla"]:
-            raise ValueError()
-
-        new_dim_labels = list(wq_varlist)
-        ds = ds.assign_coords({new_dimension_name: new_dim_labels})
-
-        da_dims = ["time", "x", "y", new_dimension_name]
-        da_coords = {dim: ds.coords[dim] for dim in da_dims}
-        da_data_shape = tuple(len(da_coords[dim]) for dim in da_dims)
-        da = xr.DataArray(
-            data=np.zeros(da_data_shape, dtype=np.float32),
-            coords=da_coords,
-            dims=da_dims,
-            name=new_varname,
-        )
-
-        for name in new_dim_labels:
-            da.sel({new_dimension_name: name})[:] = ds[name]
-
-        ds[new_varname] = da
-        ds = ds.drop_vars(new_dim_labels, errors="ignore")
-
-    return ds, wq_varlist
+# For each algorithm function ensure the first argument is the
+# input dataset i.e data for all instruments used in the analysis.
+# The function should return a single-band `xarray.DataArray`
 
 
 def NDCI_NIR_R(
@@ -291,7 +209,16 @@ def TSS_Zhang(
     )  # the distribution of results is exponential; this measure will be more stable without raising to the power.
 
 
-# ----  dictionary of instruments, bands, algorithms, and  functions -----------------------
+# =============================================================================
+# Water Quality Algorithm Applications to Instrument Data
+# =============================================================================
+
+# For each algorithm, provide a mapping of the instruments it should be
+# applied to, along with details on how the algorithm function should be
+# applied to the instrument's data. This includes the specific band
+# combinations to use for each instrument and the name of the water quality
+# variable produced after applying the algorithm.
+
 ndci_nir_r = {
     "msi_agm": {
         "54": {
@@ -548,13 +475,47 @@ tss_zhang = {
     },
 }
 
-# ---- algorithms are grouped into two over-arching dictionaries ----
+NORMALISATION_PARAMETERS = {
+    "ndssi_rg_msi_agm": {"scale": 83.711, "offset": 56.756},
+    "ndssi_rg_oli_agm": {"scale": 45.669, "offset": 45.669},
+    "ndssi_rg_tm_agm": {"scale": 149.21, "offset": 57.073},
+    "ndssi_bnir_oli_agm": {"scale": 37.125, "offset": 37.125},
+    "ti_yu_oli_agm": {"scale": 6.656, "offset": 36.395},
+    "ti_yu_tm_agm": {"scale": 8.064, "offset": 42.562},
+    "tsm_lym_oli_agm": {"scale": 1.0, "offset": 0.0},
+    "tsm_lym_msi_agm": {"scale": 14.819, "offset": -118.137},
+    "tsm_lym_tm_agm": {"scale": 1.184, "offset": -2.387},
+    "tss_zhang_msi_agm": {"scale": 18.04, "offset": 0.0},
+    "tss_zhang_oli_agm": {"scale": 10.032, "offset": 0.0},
+    "spm_qiu_oli_agm": {"scale": 1.687, "offset": -0.322},
+    "spm_qiu_tm_agm": {"scale": 2.156, "offset": -16.863},
+    "spm_qiu_msi_agm": {"scale": 2.491, "offset": -4.112},
+    "ndci_msi54_agm": {"scale": 131.579, "offset": 21.737},
+    "ndci_msi64_agm": {"scale": 33.153, "offset": 33.153},
+    "ndci_msi74_agm": {"scale": 33.516, "offset": 33.516},
+    "ndci_tm43_agm": {"scale": 53.157, "offset": 28.088},
+    "ndci_oli54_agm": {"scale": 38.619, "offset": 29.327},
+    "chla_meris2b_msi_agm": {"scale": 1.148, "offset": -36.394},
+    "chla_modis2b_msi_agm": {"scale": 0.22, "offset": 7.139},
+    "chla_modis2b_tm_agm": {"scale": 1.209, "offset": -63.141},
+    "ndssi_bnir_tm_agm": {"scale": 37.41, "offset": 37.41},
+}
+
+# =============================================================================
+# Water Quality Algorithms Groups
+# =============================================================================
+
+# Algorithms to produce extimates of
+# Chlorophyll-A (ChlA) (generalised as ‘trophic state’)
 ALGORITHMS_CHLA = {
     "ndci_nir_r": ndci_nir_r,
     "chla_meris2b": chla_meris2b,
     "chla_modis2b": chla_modis2b,
 }
-ALGORITHMS_TSM = {
+
+# Algorithms to produce extimates of
+# Total Suspended Solids (TSS) (generalised as  ‘turbidity’)
+ALGORITHMS_TSS = {
     "ndssi_rg": ndssi_rg,
     "ndssi_bnir": ndssi_bnir,
     "ti_yu": ti_yu,
@@ -562,3 +523,176 @@ ALGORITHMS_TSM = {
     "tss_zhang": tss_zhang,
     "spm_qiu": spm_qiu,
 }
+
+
+def run_wq_algorithms(
+    ds: xr.Dataset,
+    instruments_list: dict[str, dict[str, dict[str, str | tuple]]],
+    algorithms_group: dict[str, dict[str, dict[str, Any]]],
+) -> tuple[xr.Dataset, list[str]]:
+    """
+    Run a group of water quality algorithms on water areas in the input
+    dataset `ds`. The dataset should already be masked so that non-water
+    pixels are set to ``np.nan``.
+    Each algorithm is applied to the specified instruments and band
+    combinations in the provided dictionary, ensuring that all required
+    instruments are present in the dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing data for the instruments listed in
+        `instruments_list`. Non-water pixels should already be masked as
+        ``np.nan``.
+    instruments_list :  dict[str, dict[str, dict[str, str | tuple]]],
+        Master list of instruments used to derive the input dataset.
+    algorithms_group : dict[str, dict[str, dict[str, Any]]]
+        A group of water quality algorithms. Each item in this mapping
+        describes:
+        1) the instruments an algorithm is to be applied to and
+        2) for each instrument, the band combinations to use for an
+            algorithm
+        3) and the name of the water quality variable produced after
+            applying the algorithm to an instrument.
+    Returns
+    -------
+    tuple[xr.Dataset, list[str]]:
+        A tuple containing:
+        - The input dataset with added water quality variables.
+        - A list of names for the generated water quality variables.
+    """
+    algorithm_names = list(algorithms_group.keys())
+    log.info(
+        f"Running water quality algorithms for: {', '.join(algorithm_names)}"
+    )
+
+    # Apply the water quality algorithms
+    wq_varlist = []
+    for algorithm_name in algorithm_names:
+        log.info(f"Running water quality algorithm {algorithm_name}")
+
+        algorithm_applications = algorithms_group[algorithm_name]
+        for instrument_name in list(algorithm_applications.keys()):
+            # check if data was loaded for the instrument.
+            if instrument_name not in list(instruments_list.keys()):
+                continue
+            else:
+                if (
+                    algorithm_name == "ndci_nir_r"
+                    and instrument_name == "msi_agm"
+                ):
+                    # There are multiple ndci_nir_r algorithm applications
+                    # for the instrument `msi_agm`.
+                    instrument_algorithm_apps = list(
+                        algorithm_applications[instrument_name].values()
+                    )
+                else:
+                    instrument_algorithm_apps = [
+                        algorithm_applications[instrument_name]
+                    ]
+                for inst_alg_app in instrument_algorithm_apps:
+                    alg_function = inst_alg_app["func"]
+                    alg_function_args = inst_alg_app["args"]
+                    wq_varname = inst_alg_app["wq_varname"]
+                    ds[wq_varname] = alg_function(ds, **alg_function_args)
+
+                    # Add the nodata, scale and offset metadata
+                    scale_and_offset = NORMALISATION_PARAMETERS.get(
+                        wq_varname, None
+                    )
+                    if scale_and_offset is None:
+                        scale = 1
+                        offset = 0
+                    else:
+                        scale = scale_and_offset["scale"]
+                        offset = scale_and_offset["offset"]
+                    ds[wq_varname].attrs = dict(
+                        nodata=np.nan, scales=scale, offsets=offset
+                    )
+
+                    wq_varlist.append(wq_varname)
+
+    return ds, wq_varlist
+
+
+def WQ_vars(
+    ds: xr.Dataset,
+    instruments_list: dict[str, dict[str, dict[str, str | tuple]]],
+    stack_wq_vars: bool,
+) -> tuple[xr.Dataset, pd.DataFrame]:
+    """
+    Run Chlorophyll-A (ChlA) and Total Suspended Solids (TSS) algorithms
+    on water areas in the input dataset `ds`. The dataset should already
+    be masked so that non-water pixels are set to ``np.nan``.
+    Computed water quality variables are added to the dataset, and their
+    names are collected into a list.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing data for the instruments listed in
+        `instruments_list`. Non-water pixels must already be masked as
+        ``np.nan``.
+    instruments_list :  dict[str, dict[str, dict[str, str | tuple]]],
+        Master list of instruments used to derive the input dataset.
+    stack_wq_vars : bool
+        If False, outputs are retained as separate variables in a 3D dataset.
+        If True, water quality variables are stacked into a multi-dimensional
+        dataset.
+
+    Returns
+    -------
+    tuple[xr.Dataset, pd.DataFrame]:
+        A tuple containing:
+        - The input dataset with added water quality variables.
+        - A table containing the generated TSS and ChlA water quality
+            variables.
+
+    """
+
+    ds, tss_wq_vars = run_wq_algorithms(
+        ds, algorithms_group=ALGORITHMS_TSS, instruments_list=instruments_list
+    )
+    ds, chla_wq_vars = run_wq_algorithms(
+        ds, algorithms_group=ALGORITHMS_CHLA, instruments_list=instruments_list
+    )
+
+    # Save a table containing the water quality variables
+    chla_df = pd.DataFrame(data=dict(chla_measures=chla_wq_vars))
+    tss_df = pd.DataFrame(data=dict(tss_measures=tss_wq_vars))
+    all_wq_vars_df = pd.concat([tss_df, chla_df], axis=1)
+
+    if stack_wq_vars:
+        # Keep the  dimensions of the 3D dataset
+        original_ds_dims = list(ds.dims)
+
+        # Stack the TSS water quality variables.
+        ds["tss"] = ds[tss_wq_vars].to_stacked_array(
+            new_dim="tss_measures",
+            sample_dims=original_ds_dims,
+            variable_dim="tss_wq_vars",
+            name="tss",
+        )
+        # Keep TSS water quality variables attributes
+        tss_wq_vars_attrs = {
+            var: ds[var].attrs for var in tss_wq_vars if ds[var].attrs
+        }
+        ds["tss"].attrs = {"tss_wq_vars_attrs": tss_wq_vars_attrs}
+
+        # Stack the Chla water quality variables.
+        ds["chla"] = ds[chla_wq_vars].to_stacked_array(
+            new_dim="chla_measures",
+            sample_dims=original_ds_dims,
+            variable_dim="chla_wq_vars",
+            name="chla",
+        )
+        # Keep Chla water quality variables attributes
+        chla_wq_vars_attrs = {
+            var: ds[var].attrs for var in chla_wq_vars if ds[var].attrs
+        }
+        ds["chla"].attrs = {"chla_wq_vars_attrs": chla_wq_vars_attrs}
+
+        all_wq_vars = tss_wq_vars.extend(chla_wq_vars)
+        ds = ds.drop_vars(all_wq_vars)
+
+    return ds, all_wq_vars_df

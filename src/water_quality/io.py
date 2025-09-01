@@ -6,12 +6,14 @@ import logging
 import os
 import posixpath
 import re
+from pathlib import Path
 
 import fsspec
 from fsspec.implementations.http import HTTPFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from gcsfs import GCSFileSystem
 from s3fs.core import S3FileSystem
+from yarl import URL
 
 from water_quality.tiling import get_region_code, parse_region_code
 
@@ -46,18 +48,18 @@ def join_url(base, *paths) -> str:
         return posixpath.join(base, *paths)
 
 
-def split_path(path: str):
-    if is_local_path(path):
-        return os.path.split(path)
-    else:
-        return posixpath.split(path)
-
-
 def get_basename(path: str):
     if is_local_path(path):
         return os.path.basename(path)
     else:
         return posixpath.basename(path)
+
+
+def get_parent_dir(path: str):
+    if is_local_path(path):
+        return str(Path(path).resolve().parent)
+    else:
+        return str(URL(path).parent)
 
 
 def get_filesystem(
@@ -269,6 +271,6 @@ def get_wq_csv_url(
     )
     # f"{product_name}_{region_code}_{temporal_id}_{band}.tif"
     region_code = get_region_code(tile_id, sep="")
-    file_name = f"{product_name}_{region_code}_{temporal_id}_water_quality_measures.csv"
+    file_name = f"{product_name}_{region_code}_{temporal_id}_water_quality_variables.csv"
     csv_url = join_url(parent_dir, file_name)
     return csv_url

@@ -1,13 +1,11 @@
 import json
 import os
 import sys
-from itertools import chain
 
 import click
 import numpy as np
 from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
-from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 from odc.stats._text import split_and_check
 from odc.stats.model import DateTimeRange
@@ -17,25 +15,19 @@ from water_quality.io import (
     check_directory_exists,
     check_file_exists,
     get_filesystem,
-    get_wq_cog_url,
-    get_wq_csv_url,
     join_url,
 )
 from water_quality.logs import setup_logging
-from water_quality.mapping.algorithms import WQ_vars
 from water_quality.mapping.config import check_config
-from water_quality.mapping.hue import hue_calculation
 from water_quality.mapping.instruments import (
     check_instrument_dates,
     get_instruments_list,
 )
 from water_quality.mapping.load_data import (
     build_dc_queries,
-    build_wq_agm_dataset,
+    load_composite_instruments_data,
+    load_single_day_instruments_data,
 )
-from water_quality.mapping.optical_water_type import OWT_pixel
-from water_quality.mapping.pixel_correction import R_correction
-from water_quality.mapping.water_detection import water_analysis
 from water_quality.tasks import parse_task_id
 
 
@@ -157,12 +149,9 @@ def cli(
     WFTL = analysis_config["water_frequency_threshold_low"]
     PWT = analysis_config["permanent_water_threshold"]
     SC = analysis_config["sigma_coefficient"]
-    product_info = analysis_config["product"]
-    product_name = product_info["name"]
-    product_version = product_info["version"]
 
     gridspec = get_waterbodies_grid(resolution_m)
-    dc = Datacube(app="ProcessAnnualWQvariables")
+    dc = Datacube(app="ProcessShortTermWQvariables")
     failed_tasks = []
     for idx, task_id in enumerate(task_ids):
         log.info(f"Processing task {task_id} {idx + 1} / {len(task_ids)}")
@@ -171,13 +160,12 @@ def cli(
             temporal_id, tile_id = parse_task_id(task_id)
 
             # Enforce this command line tool only works for
-            # annual tasks.
+            # shorter term time series tasks.
             _, freq = split_and_check(temporal_id, "--P", 2)
-            if freq != "1Y":
+            if freq == "1Y":
                 raise ValueError(
-                    f"Expecting tasks with an annual frequency '1Y' not {freq}"
+                    "Expecting tasks with shorter frequency not '1Y'"
                 )
-
             temporal_range = DateTimeRange(temporal_id)
 
             start_date = temporal_range.start.strftime("%Y-%m-%d")
@@ -194,13 +182,12 @@ def cli(
             )
             instruments_list = get_instruments_list(instruments_to_use)
 
-            log.info("Building the multivariate/multi-sensor dataset")
-            # build the multivariate/multi-sensor dataset.
             dc_queries = build_dc_queries(
                 instruments_to_use=instruments_to_use,
                 start_date=start_date,
                 end_date=end_date,
             )
+
             # Set up a dask client if on the sandbox.
             if bool(os.environ.get("JUPYTERHUB_USER", None)):
                 client = create_local_dask_cluster(
@@ -209,153 +196,18 @@ def cli(
             else:
                 client = None
 
-            ds = build_wq_agm_dataset(
+            log.info("Loading data for single day acquisition instruments....")
+            single_day_instruments_data = load_single_day_instruments_data(
+                dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
+            )
+
+            log.info("Loading data for composite instruments....")
+            composite_instruments_data = load_composite_instruments_data(
                 dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
             )
 
             if client is not None:
                 client.close()
-
-            log.info("Determining the pixels that are water")
-            # Determine pixels that are water (sometimes, usually, permanent)
-            ds = water_analysis(
-                ds,
-                water_frequency_threshold=WFTH,
-                wofs_varname="wofs_ann_freq",
-                permanent_water_threshold=PWT,
-                sigma_coefficient=SC,
-            )
-
-            # Dark pixel correction
-            ds = R_correction(ds, instruments_to_use, WFTL)
-
-            if "msi_agm" in instruments_list.keys():
-                log.info("Calculating the hue.")
-                ds["hue"] = hue_calculation(ds, instrument="msi_agm")
-
-            if "msi_agm" in instruments_list.keys():
-                log.info(
-                    "Determining the open water type for each pixel "
-                    "using the instrument msi_agm"
-                )
-                ds["owt_msi"] = OWT_pixel(
-                    ds,
-                    instrument="msi_agm",
-                    resample_rate=3,
-                )
-
-            if "oli_agm" in instruments_list.keys():
-                log.info(
-                    "Determining the open water type for each pixel "
-                    "using the instrument oli_agm"
-                )
-                ds["owt_oli"] = OWT_pixel(
-                    ds,
-                    instrument="oli_agm",
-                    resample_rate=3,
-                )
-
-            log.info("Applying the WQ algorithms to water areas.")
-
-            ds, wq_vars_df = WQ_vars(
-                ds.where(ds.wofs_ann_freq >= WFTL),
-                instruments_list=instruments_list,
-                stack_wq_vars=False,
-            )
-            # Get the list of all generated water quality variables
-            # from the table
-            wq_vars_list = list(
-                chain.from_iterable(
-                    [
-                        wq_vars_df[col].dropna().to_list()
-                        for col in wq_vars_df.columns
-                    ]
-                )
-            )
-
-            initial_keep_list = [
-                # wofs_ann instrument
-                "wofs_ann_freq",
-                "wofs_ann_clearcount",
-                "wofs_ann_wetcount",
-                # water_analysis
-                "wofs_ann_freq_sigma",
-                "wofs_ann_confidence",
-                "wofs_pw_threshold",
-                "wofs_ann_pwater",
-                "watermask",
-                # optical water type
-                "owt_msi",
-                "owt_oli",
-                # wq variables
-                "tss",
-                "chla",
-            ]
-            # The keeplist is not complete;
-            # if the wq variables are retained as variables they will
-            # appear in a listing of data_vars. Therefore, revert to the
-            # instruments dictionary to list variables to drop
-            droplist = []
-            for instrument in list(instruments_list.keys()):
-                for band in list(instruments_list[instrument].keys()):
-                    variable = instruments_list[instrument][band]["varname"]
-                    if variable not in initial_keep_list:
-                        droplist = np.append(droplist, variable)
-                        droplist = np.append(droplist, variable + "r")
-            ds = ds.drop_vars(droplist, errors="ignore")
-
-            # Save each band into a COG file.
-            fs = get_filesystem(output_directory, anon=False)
-            bands = list(ds.data_vars)
-            for band in bands:
-                output_cog_url = get_wq_cog_url(
-                    output_directory=output_directory,
-                    tile_id=tile_id,
-                    temporal_id=temporal_id,
-                    band_name=band,
-                    product_name=product_name,
-                    product_version=product_version,
-                )
-
-                # Enforce data type for all bands to float32
-                da = ds[band].astype(np.float32)
-
-                # Attributes for water quality variables should be
-                # set in run_wq_algorithms
-                if band not in wq_vars_list:
-                    # Enforce no data for all bands to np.nan
-                    nodata = np.nan
-                    scale = 1
-                    offset = 0
-                    da.attrs = dict(
-                        nodata=np.nan, scales=scale, offsets=offset
-                    )
-
-                cog_bytes = write_cog(
-                    geo_im=da,
-                    fname=":mem:",
-                    overwrite=True,
-                    nodata=nodata,
-                    tags=da.attrs,
-                )
-                with fs.open(output_cog_url, "wb") as f:
-                    f.write(cog_bytes)
-                log.info(f"Band {band} saved to {output_cog_url}")
-
-            # Save a table containing the water quality parameters
-
-            output_csv_url = get_wq_csv_url(
-                output_directory=output_directory,
-                tile_id=tile_id,
-                temporal_id=temporal_id,
-                product_name=product_name,
-                product_version=product_version,
-            )
-            with fs.open(output_csv_url, mode="w") as f:
-                wq_vars_df.to_csv(f, index=False)
-
-            # Generate the stac file for the task
-
         except Exception as error:
             log.exception(error)
             failed_tasks.append(task_id)

@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from importlib.resources import files
+from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -11,12 +12,14 @@ from deafrica_tools.waterbodies import get_waterbody
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 from odc.geo.xr import assign_crs
+from odc.stats._text import split_and_check
 
 from water_quality.dates import year_to_dc_datetime
 from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
+    find_csv_files,
     find_geotiff_files,
-    get_wq_csv_url,
+    get_parent_dir,
     join_url,
     parse_wq_cog_url,
 )
@@ -27,32 +30,6 @@ from water_quality.tiling import (
 )
 
 log = logging.getLogger(__name__)
-
-NORMALISATION_PARAMETERS = {
-    "ndssi_rg_msi_agm": {"scale": 83.711, "offset": 56.756},
-    "ndssi_rg_oli_agm": {"scale": 45.669, "offset": 45.669},
-    "ndssi_rg_tm_agm": {"scale": 149.21, "offset": 57.073},
-    "ndssi_bnir_oli_agm": {"scale": 37.125, "offset": 37.125},
-    "ti_yu_oli_agm": {"scale": 6.656, "offset": 36.395},
-    "ti_yu_tm_agm": {"scale": 8.064, "offset": 42.562},
-    "tsm_lym_oli_agm": {"scale": 1.0, "offset": 0.0},
-    "tsm_lym_msi_agm": {"scale": 14.819, "offset": -118.137},
-    "tsm_lym_tm_agm": {"scale": 1.184, "offset": -2.387},
-    "tss_zhang_msi_agm": {"scale": 18.04, "offset": 0.0},
-    "tss_zhang_oli_agm": {"scale": 10.032, "offset": 0.0},
-    "spm_qiu_oli_agm": {"scale": 1.687, "offset": -0.322},
-    "spm_qiu_tm_agm": {"scale": 2.156, "offset": -16.863},
-    "spm_qiu_msi_agm": {"scale": 2.491, "offset": -4.112},
-    "ndci_msi54_agm": {"scale": 131.579, "offset": 21.737},
-    "ndci_msi64_agm": {"scale": 33.153, "offset": 33.153},
-    "ndci_msi74_agm": {"scale": 33.516, "offset": 33.516},
-    "ndci_tm43_agm": {"scale": 53.157, "offset": 28.088},
-    "ndci_oli54_agm": {"scale": 38.619, "offset": 29.327},
-    "chla_meris2b_msi_agm": {"scale": 1.148, "offset": -36.394},
-    "chla_modis2b_msi_agm": {"scale": 0.22, "offset": 7.139},
-    "chla_modis2b_tm_agm": {"scale": 1.209, "offset": -63.141},
-    "ndssi_bnir_tm_agm": {"scale": 37.41, "offset": 37.41},
-}
 
 
 def _load_all_waterbodies_uids():
@@ -170,123 +147,29 @@ def get_waterbody_tiles(
     return tiles
 
 
-def _get_cog_year(cog_url: str) -> str:
-    _, _, year = parse_wq_cog_url(cog_url)
-    return year
-
-
-def get_wq_measures_cogs(
-    wq_measures_dir: str,
-    waterbody_uid: str = None,
-    aoi_geopolygon: Geometry = None,
-) -> dict[str, dict[tuple[int, int], list[str]]]:
-    """
-    Find all the COGs in the water quality measures directory that
-    overlap with either the extent of a waterbody, or other area of
-    interest and group them by year and tile.
-
-    Parameters
-    ----------
-    waterbody_uid : str
-        Geohash / UID for the waterbody to find COGs for.
-    aoi_geopolygon : Geometry
-        Geometry defining the area of interest to find COGs for. This
-        is mutually exclusive to the `waterboduy_uid` parameter.
-    wq_measures_dir : str
-        Directory containing the water quality measures COGs.
-
-    Returns
-    -------
-    dict[str, dict[tuple[int, int], list]]
-        All the COGs in the water quality measures directory that
-        overlap with the either the extent of a waterbody, or an area of
-        interest polygon grouped by year and tile.
-    """
-    if waterbody_uid is None and aoi_geopolygon is None:
-        raise TypeError(
-            "You must provide either 'waterbody_uid' or 'aoi_geopolygon'."
-        )
-
-    if waterbody_uid is not None and aoi_geopolygon is not None:
-        raise TypeError(
-            "You must provide either 'waterbody_uid' or "
-            "'aoi_geopolygon', but not both."
-        )
-
-    if waterbody_uid:
-        tiles = get_waterbody_tiles(waterbody_uid)
-        region_codes = get_tile_region_codes(tiles, sep="")
-        log.info(
-            f"Found {len(tiles)} tiles covering the "
-            f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
-        )
-
-    if aoi_geopolygon:
-        tiles = get_aoi_tiles(aoi_geopolygon)
-        tiles = list(tiles)
-        region_codes = get_tile_region_codes(tiles, sep="")
-        log.info(
-            f"Found {len(tiles)} tiles covering "
-            f"the area of interest: {', '.join(region_codes)}"
-        )
-
-    grouped_by_year_and_tile = defaultdict(lambda: defaultdict(list))
-    for tile_id, _ in tiles:
-        region_code = get_region_code(tile_id, "/")
-        tile_cogs_dir = join_url(wq_measures_dir, region_code)
-        all_tile_cog_urls = find_geotiff_files(tile_cogs_dir)
-        for year, cog_urls in toolz.groupby(
-            _get_cog_year, all_tile_cog_urls
-        ).items():
-            grouped_by_year_and_tile[year][tile_id].extend(cog_urls)
-    return grouped_by_year_and_tile
-
-
-def load_wq_measurements_table(wq_parameters_csv_url: str) -> pd.DataFrame:
-    """
-    Load the water quality measures table from a CSV file.
-
-    Parameters
-    ----------
-    wq_parameters_csv_url : str
-        Path to the csv file to load the water quality measures table
-        from.
-
-    Returns
-    -------
-    pd.DataFrame
-        Table containing the water quality measures.
-    """
-    wq_parameters_df = pd.read_csv(wq_parameters_csv_url)
-    assert all(
-        col in wq_parameters_df.columns
-        for col in ["tss_measure", "chla_measure"]
-    ), "Required columns 'tss_measure' and/or 'chla_measure' are missing."
-    return wq_parameters_df
-
-
-def get_bands_to_load(wq_parameters_csv_url: str) -> list[str]:
+def get_bands_to_load(wq_vars_csv_url: str) -> list[str]:
     """
     Get the list of all the bands required when loading the  water
-    quality measures for a tile.
+    quality variables for a tile.
 
     Parameters
     ----------
-    wq_parameters_csv_url : str
-        Path to the csv file to load the water quality measures table
+    wq_vars_csv_url : str
+        Path to the csv file to load the water quality variables table
         from.
 
     Returns
     -------
     list[str]
         List of all the bands required when loading the  water quality
-        measures for a tile.
+        variables for a tile.
     """
-    wq_parameters_df = load_wq_measurements_table(wq_parameters_csv_url)
-    bands_to_load = []
-    for col in wq_parameters_df:
-        bands = wq_parameters_df[col].dropna().to_list()
-        bands_to_load.extend(bands)
+    wq_vars_df = pd.read_csv(wq_vars_csv_url)
+    bands_to_load = list(
+        chain.from_iterable(
+            [wq_vars_df[col].dropna().to_list() for col in wq_vars_df.columns]
+        )
+    )
 
     other_bands = [
         "wofs_ann_pwater",
@@ -306,7 +189,7 @@ def create_ds_from_cogs(
 ) -> xr.Dataset:
     """
     Given a list of all the COGs for a tile for a specific year, load
-    the water quality measures (bands) specified and crop the Dataset to
+    the water quality variables (bands) specified and crop the Dataset to
     the extent of the selected waterbody or area of interest.
 
     Parameters
@@ -314,7 +197,7 @@ def create_ds_from_cogs(
     cog_urls : str
         List of all the COGs found for a tile for a single year.
     bands_to_load : list[str]
-        Water quality measures (bands) to load from the list of COGs.
+        Water quality variables to load from the list of COGs.
     waterbody_uid : str
         The UID/geohash of the waterbody to crop the data to.
     aoi_geopolygon : Geometry
@@ -323,7 +206,7 @@ def create_ds_from_cogs(
     Returns
     -------
     xr.Dataset
-        Dataset containing all the water quality measures required,
+        Dataset containing all the water quality variables required,
         cropped to the extent of the selected waterbody or area of
         interest.
     """
@@ -364,20 +247,20 @@ def create_ds_from_cogs(
     return ds
 
 
-def normalise_water_quality_measures(
+def normalise_water_quality_variables(
     ds: xr.Dataset,
-    wq_parameters_csv_url: str,
+    wq_vars_csv_url: str,
     water_frequency_threshold: float,
 ) -> xr.Dataset:
     """
-    Normalize the water quality measures in a Dataset.
+    Stack and normalize the water quality variables in a dataset.
 
     Parameters
     ----------
     ds : xr.Dataset
-        Dataset containing the water quality measures to normalize.
-    wq_parameters_csv_url : str
-        Path to the csv file to load the water quality measures table
+        Dataset containing the water quality variables to normalize.
+    wq_vars_csv_url : str
+        Path to the csv file to load the water quality variables table
         from.
     water_frequency_threshold : float
         Threshold to use when classifying water and non-water pixels
@@ -386,39 +269,45 @@ def normalise_water_quality_measures(
     Returns
     -------
     xr.Dataset
-        Water quality measures after normalization.
+        Multi-dimensional dataset containing the water quality variables
+        after normalization.
     """
-    wq_parameters_df = load_wq_measurements_table(wq_parameters_csv_url)
+    original_ds_dims = list(ds.dims)
 
-    for col in wq_parameters_df.columns:
-        bands = wq_parameters_df[col].dropna().to_list()
-        ds = ds.assign_coords({col: bands})
+    wq_vars_df = pd.read_csv(wq_vars_csv_url)
+    tss_wq_vars = wq_vars_df["tss_measures"].dropna().to_list()
+    chla_wq_vars = wq_vars_df["chla_measures"].dropna().to_list()
+    all_wq_vars = tss_wq_vars.extend(chla_wq_vars)
 
-        var_name = col.replace("_measure", "")
+    # Apply normalization parameters
+    for band in all_wq_vars:
+        scale = ds[band].attrs["scale"]
+        offset = ds[band].attrs["add_offset"]
+        ds[band] = ds[band] * scale + offset
 
-        da_dims = ["time", "x", "y", col]
-        da_coords = {dim: ds.coords[dim] for dim in da_dims}
-        da_data_shape = tuple(len(da_coords[dim]) for dim in da_dims)
-        da = xr.DataArray(
-            data=np.zeros(da_data_shape, dtype=np.float32),
-            coords=da_coords,
-            dims=da_dims,
-            name=var_name,
-        )
-        log.info(
-            f"Applying scale and offset to {var_name} water quality variables"
-        )
-        for band in bands:
-            log.debug(
-                f"Applying scale and offset to {var_name} "
-                f"water quality variable {band}"
-            )
-            scale = NORMALISATION_PARAMETERS[band]["scale"]
-            offset = NORMALISATION_PARAMETERS[band]["offset"]
-            da.sel({col: band})[:] = ds[band] * scale + offset
+    ## Stack
+    # Keep the  dimensions of the 3D dataset
+    original_ds_dims = list(ds.dims)
 
-        ds[var_name] = da
-        ds = ds.drop_vars(bands, errors="ignore")
+    # Stack the TSS water quality variables.
+    ds["tss"] = ds[tss_wq_vars].to_stacked_array(
+        new_dim="tss_measures",
+        sample_dims=original_ds_dims,
+        variable_dim="tss_wq_vars",
+        name="tss",
+    )
+    ds["tss"].attrs = {}
+
+    # Stack the Chla water quality variables.
+    ds["chla"] = ds[chla_wq_vars].to_stacked_array(
+        new_dim="chla_measures",
+        sample_dims=original_ds_dims,
+        variable_dim="chla_wq_vars",
+        name="chla",
+    )
+    ds["chla"].attrs = {}
+
+    ds = ds.drop_vars(all_wq_vars)
 
     log.info("Get median of tss and chla measurements for water pixels")
     water_mask = ds["wofs_ann_pwater"] > water_frequency_threshold
@@ -433,35 +322,51 @@ def normalise_water_quality_measures(
     return ds
 
 
-def load_water_quality_measures(
-    wq_measures_dir: str,
+def _get_cog_year(cog_url: str) -> str:
+    """
+    Helper function to get the year component
+    in the url of an annual water quality variable COG
+    """
+    _, _, temporal_id, band = parse_wq_cog_url(cog_url)
+    year, _ = split_and_check(temporal_id, "--P", 2)
+    return year
+
+
+def load_annual_water_quality_variables(
     water_frequency_threshold: float,
     waterbody_uid: str = None,
     aoi_geopolygon: Geometry = None,
     years: list[int] = None,
+    product_location: str = "s3://deafrica-water-quality-dev/mapping/wqs_annual/1-0-0/",
 ) -> xr.Dataset:
-    """Load the water quality measures for a waterbody or defined area
-    of interest.
+    """
+    Load the annual water quality variables for a waterbody or
+    defined area of interest.
 
     Parameters
     ----------
-    waterbody_uid : str
-        The UID/geohash of the waterbody to load data for.
-    aoi_geopolygon : Geometry
-        Geometry defining the area of interest to load data for. This
-        is mutually exclusive to the `waterboduy_uid` parameter.
-    wq_measures_dir : str
-        Directory containing the water quality measures COGs.
     water_frequency_threshold : float
         Threshold to use when classifying water and non-water pixels
-        in the normalization process.
-    years: list[int]:
-        List of years to load data for.
+        in the normalization process for the water quality variables.
+    waterbody_uid : str, optional
+        The UID/geohash of the waterbody to load data for.
+    aoi_geopolygon : Geometry, optional
+        Geometry defining the area of interest to load data for. This
+        is mutually exclusive to the `waterboduy_uid` parameter.
+    years : list[int], optional
+        List of years to load data for. If None all available data is
+        loaded.
+    product_location : str, optional
+        Directory containing the water quality service annual product,
+        by default "s3://deafrica-water-quality-dev/mapping/wqs_annual/1-0-0/"
+
     Returns
     -------
     xr.Dataset
-        Chl-A and TSS water quality measures for a waterbody.
+        Chl-A and TSS water quality variables for the specified area of
+        interest.
     """
+
     if waterbody_uid is None and aoi_geopolygon is None:
         raise TypeError(
             "You must provide either 'waterbody_uid' or 'aoi_geopolygon'."
@@ -474,33 +379,46 @@ def load_water_quality_measures(
         )
 
     if waterbody_uid:
-        log.info(f"Loading data for waterbody {waterbody_uid}")
+        tiles = get_waterbody_tiles(waterbody_uid)
+        region_codes = get_tile_region_codes(tiles, sep="")
+        log.info(
+            f"Found {len(tiles)} tiles covering the "
+            f"waterbody {waterbody_uid}: {', '.join(region_codes)}"
+        )
 
-    grouped_by_year_and_tile = get_wq_measures_cogs(
-        waterbody_uid=waterbody_uid,
-        aoi_geopolygon=aoi_geopolygon,
-        wq_measures_dir=wq_measures_dir,
-    )
+    if aoi_geopolygon:
+        tiles = get_aoi_tiles(aoi_geopolygon)
+        tiles = list(tiles)
+        region_codes = get_tile_region_codes(tiles, sep="")
+        log.info(
+            f"Found {len(tiles)} tiles covering "
+            f"the area of interest: {', '.join(region_codes)}"
+        )
+
+    grouped_by_year_and_tile = defaultdict(lambda: defaultdict(list))
+    for tile_id, _ in tiles:
+        region_code = get_region_code(tile_id, sep="/")
+        tile_cogs_dir = join_url(product_location, region_code)
+        all_tile_cog_urls = find_geotiff_files(tile_cogs_dir)
+        for year, cog_urls in toolz.groupby(
+            _get_cog_year, all_tile_cog_urls
+        ).items():
+            grouped_by_year_and_tile[year][tile_id].extend(cog_urls)
 
     if years is not None:
         years = [str(year) for year in years]
         grouped_by_year_and_tile = {
             k: v for k, v in grouped_by_year_and_tile.items() if k in years
         }
+
     per_year_ds = []
     for year, grouped_by_tile in grouped_by_year_and_tile.items():
         log.info(f"Loading data for year {year}")
         per_tile_ds = []
         for tile_id, cog_urls in grouped_by_tile.items():
             log.info(f"Loading data for tile {get_region_code(tile_id)}")
-            wq_parameters_csv_url = get_wq_csv_url(
-                output_directory=wq_measures_dir,
-                tile_id=tile_id,
-                year=year,
-            )
-            bands_to_load = get_bands_to_load(
-                wq_parameters_csv_url=wq_parameters_csv_url
-            )
+            wq_vars_csv_url = find_csv_files(get_parent_dir(cog_urls[0]))[0]
+            bands_to_load = get_bands_to_load(wq_vars_csv_url=wq_vars_csv_url)
 
             ds = create_ds_from_cogs(
                 cog_urls=cog_urls,
@@ -509,9 +427,9 @@ def load_water_quality_measures(
                 aoi_geopolygon=aoi_geopolygon,
             )
             ds = ds.compute()
-            ds = normalise_water_quality_measures(
+            ds = normalise_water_quality_variables(
                 ds=ds,
-                wq_parameters_csv_url=wq_parameters_csv_url,
+                wq_vars_csv_url=wq_vars_csv_url,
                 water_frequency_threshold=water_frequency_threshold,
             )
             per_tile_ds.append(ds)
