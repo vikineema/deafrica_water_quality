@@ -54,6 +54,7 @@ dependencies:
   - shapely
   - toolz
   - tqdm
+  - yarl
   # required for building hdstats
   - compilers 
   # packages requiring pip
