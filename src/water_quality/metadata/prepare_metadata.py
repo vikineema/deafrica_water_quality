@@ -1,24 +1,27 @@
 """
 Create per dataset metadata (stac files) for the Water Quality Service
-products.
+products
 """
 
 import logging
-from pathlib import PurePath
+from datetime import datetime
 from typing import Any
 
+import rioxarray
 import toolz
 import yaml
-from eodatasets3.model import DatasetDoc
-from yarl import URL
+from eodatasets3.images import ValidDataMethod
+from odc.apps.dc_tools._docs import odc_uuid
+from odc.stats.model import DateTimeRange
 
 from water_quality.io import (
     find_geotiff_files,
     get_parent_dir,
-    is_local_path,
+    join_url,
     parse_wq_cog_url,
 )
 from water_quality.mapping.algorithms import NORMALISATION_PARAMETERS
+from water_quality.metadata.easi_assemble import EasiPrepare
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +106,23 @@ def generate_annual_product_template(tile_directory: str) -> dict[str, Any]:
 def get_dummy_product_yaml(
     dataset_path: str,
 ) -> dict[str, Any]:
+    """
+    Generate an ODC product definition file for a dataset, with only
+    the measurements (bands) available for the dataset. This is to
+    account for the fact not all datasets for a water quality service
+    product will have the same measurements due to varying availability
+    of instrument data across the years.
+
+    Parameters
+    ----------
+    dataset_path : str
+        Path or URI to the dataset directory
+
+    Returns
+    -------
+    dict[str, Any]
+        ODC product definition for the product a dataset belongs to.
+    """
     measurements = []
     dataset_measurements = find_geotiff_files(dataset_path)
     for measurement_path in dataset_measurements:
@@ -156,57 +176,139 @@ def get_dummy_product_yaml(
 def get_dataset_tile_id(dataset_path: str):
     """
     Get a unique tile id given a dataset path.
-    Expected dataset path is based on `_get_wq_parent_dir`
-    in the `io` module.
+    e.g. wqs_annual_x217y077_2024--P1Y
     """
-    if is_local_path(dataset_path):
-        (
-            product_name,
-            product_version_dashed,
-            region_code_x,
-            region_code_y,
-            temporal_id,
-        ) = PurePath(dataset_path).parts[-5:]
-    else:
-        (
-            product_name,
-            product_version_dashed,
-            region_code_x,
-            region_code_y,
-            temporal_id,
-        ) = URL(dataset_path).path.strip("/").split("/")[-5:]
+    cog_file = find_geotiff_files(dataset_path)[0]
+    product_name, region_code, temporal_id, _ = parse_wq_cog_url(cog_file)
 
-    dataset_tile_id = f"{product_name}_{product_version_dashed}_{region_code_x}{region_code_y}_{temporal_id}"
+    dataset_tile_id = f"{product_name}_{region_code}_{temporal_id}"
     return dataset_tile_id
+
+
+def get_common_attrs(dataset_measurement_url: str) -> dict:
+    """Get the attributes from a single dataset measurement that are
+    expected to be common to all measurements for a dataset."""
+
+    # Attributes located in the metadata of the measurement GeoTIFF file
+    common_attrs = rioxarray.open_rasterio(dataset_measurement_url).attrs
+
+    if "product_version" not in common_attrs:
+        common_attrs["product_version"] = "1.0.0"
+    # Attributes from the file name of the measurement GeoTIFF file
+    _, region_code, temporal_id, _ = parse_wq_cog_url(dataset_measurement_url)
+    temporal_range = DateTimeRange(temporal_id)
+
+    common_attrs.update(
+        dict(
+            region_code=region_code,
+            date_time=temporal_range.start,
+            date_time_range=(temporal_range.start, temporal_range.end),
+        )
+    )
+    return common_attrs
 
 
 def prepare_dataset(
     dataset_path: str,
-    # product_definition: str,
-    output_path: str,
-) -> DatasetDoc:
-    """Prepare an eo3 metadata file for a data product.
+    output_path: str = None,
+) -> str:
+    """Prepares a STAC dataset metadata file for a data product.
 
     Parameters
     ----------
-    tile_id : str
-        Unique tile ID for a single dataset to prepare.
     dataset_path : str
-        Directory of the datasets
-    product_definition : str
-        Path to the product definition yaml file.
+        Directory of the dataset
     output_path : str
-        Path to write the output eo3 metadata file.
+        Path to write the output metadata file.
 
     Returns
     -------
-    DatasetDoc
-        eo3 metadata document
+    str
+        Path to odc dataset STAC file
     """
     tile_id = get_dataset_tile_id(dataset_path)
+    if output_path is None:
+        # If no path is provided for the metadata document
+        # save the file in the same directory as the dataset.
+        output_path = join_url(dataset_path, f"{tile_id}.stac-item.json")
+
+    product_definition = get_dummy_product_yaml(dataset_path)
 
     ## Initialise and validate inputs
     # Creates variables (see EasiPrepare for others):
     # - p.dataset_path
     # - p.product_name
-    product_definition = get_dummy_product_yaml(dataset_path)
+    p = EasiPrepare(dataset_path, product_definition, output_path)
+
+    # Find all measurement paths for a dataset
+    tile_id_regex = rf"{tile_id}_(.*?)\.tif$"
+    measurement_map = p.map_measurements_to_paths(tile_id_regex)
+
+    # Get attrs from one of the measurement files
+    common_attrs = get_common_attrs(list(measurement_map.values())[0])
+
+    ## IDs and Labels
+    # The version of the source dataset
+    p.dataset_version = f"{common_attrs['product_version']}"
+    p.dataset_id = odc_uuid(p.product_name, p.dataset_version, [tile_id])
+    # product_name is added by EasiPrepare().init()
+    p.product_uri = (
+        f"https://explorer.digitalearth.africa/product/{p.product_name}"
+    )
+
+    ## Satellite, Instrument and Processing level
+    # High-level name for the source data (satellite platform or project name).
+    # Comma-separated for multiple platforms.
+    p.platform = "WaterQualityService"
+    #  Instrument name, optional
+    # p.instrument = 'SAMPLETYPE'
+    # Organisation that produces the data
+    # URI domain format containing a '.'
+    p.producer = "digitalearthafrica.org"
+    # ODC/EASI identifier for this "family" of products, optional
+    p.product_family = "water_quality_service"
+    # Helpful but not critical
+    p.properties["odc:file_format"] = "GeoTIFF"
+    p.properties["odc:product"] = p.product_name
+
+    ## Scene capture and Processing
+    # Searchable datetime of the dataset, datetime object
+    p.datetime = common_attrs["date_time"]
+    # Searchable start and end datetimes of the dataset, datetime objects
+    p.datetime_range = common_attrs["date_time_range"]
+    # When the source dataset was created by the producer, datetime object
+    p.processed = datetime.now()
+
+    ## Geometry
+    # Geometry adds a "valid data" polygon for the scene, which helps bounding box searching in ODC
+    # Either provide a "valid data" polygon or calculate it from all bands in the dataset
+    # ValidDataMethod.thorough = Vectorize the full valid pixel mask as-is
+    # ValidDataMethod.filled = Fill holes in the valid pixel mask before vectorizing
+    # ValidDataMethod.convex_hull = Take convex-hull of valid pixel mask before vectorizing
+    # ValidDataMethod.bounds = Use the image file bounds, ignoring actual pixel values
+    # p.geometry = Provide a "valid data" polygon rather than read from the file, shapely.geometry.base.BaseGeometry()
+    # p.crs = Provide a CRS string if measurements GridSpec.crs is None, "epsg:*" or WKT
+    p.valid_data_method = ValidDataMethod.bounds
+
+    ## Scene metrics, as available
+    # The "region" of acquisition, if applicable
+    p.region_code = common_attrs["region_code"]
+
+    # Add measurement paths
+    for measurement_name, file_location in measurement_map.items():
+        p.note_measurement(
+            measurement_name=measurement_name,
+            file_path=file_location,
+            expand_valid_data=True,
+            relative_to_metadata=False,
+        )
+    ## Complete validate and return
+    # validation is against the eo3 specification and your product/dataset definitions
+    try:
+        dataset_uuid, output_path = p.write_stac(
+            validate_correctness=True, sort_measurements=True
+        )
+    except Exception as error:
+        raise error
+    log.info(f"Wrote dataset {dataset_uuid} to {output_path}")
+    return output_path

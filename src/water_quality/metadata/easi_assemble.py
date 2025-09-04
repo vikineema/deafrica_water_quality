@@ -27,6 +27,7 @@ from eodatasets3.validate import (
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
+    get_basename,
     get_filesystem,
     get_gdal_vsi_prefix,
     get_parent_dir,
@@ -98,7 +99,7 @@ class EasiPrepare(Eo3Interface):
         # Update defaults
         self._dataset.locations = None
         self._dataset.product = ProductDoc()
-        # self._dataset.product.name = self.get_product_name()
+        self._dataset.product.name = self.get_product_name()
         self._dataset.accessories = {}
         self._dataset.lineage = None
 
@@ -635,7 +636,7 @@ class EasiPrepare(Eo3Interface):
         doc = serialise.to_formatted_doc(dataset)
 
         output_yaml = self._output_path
-        if not output_yaml.name.lower().endswith(".yaml"):
+        if not get_basename(output_yaml).lower().endswith(".yaml"):
             raise ValueError(
                 f"YAML filename doesn't end in *.yaml (?). Received {output_yaml!r}"
             )
@@ -667,7 +668,7 @@ class EasiPrepare(Eo3Interface):
         )
 
         output_json = self._output_path
-        if not output_json.name.lower().endswith(".json"):
+        if not get_basename(output_json).lower().endswith(".json"):
             raise ValueError(
                 f"JSON filename doesn't end in *.json (?). Received {output_json!r}"
             )
