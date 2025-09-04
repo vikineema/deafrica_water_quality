@@ -11,13 +11,14 @@ INDEX_LIMIT := 200
 INDEX_DATE_START := 2024-01-01
 INDEX_DATE_END := 2024-12-31
 
+# DEV environment setup
 build:
-	BUILD_ENV=dev docker compose build # --no-cache
+	docker compose -f compose_dev.yaml build
 
 ## Environment setup
 up: ## Bring up your Docker environment
-	docker compose up -d db
-	docker compose up -d water-quality
+	docker compose -f compose_dev.yaml up -d db
+	docker compose -f compose_dev.yaml up -d jupyter
 
 down:
 	docker compose down --remove-orphans

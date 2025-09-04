@@ -1,10 +1,12 @@
 import json
 import os
 import sys
+import warnings
 from itertools import chain
 
 import click
 import numpy as np
+import xarray as xr
 from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
@@ -17,6 +19,7 @@ from water_quality.io import (
     check_directory_exists,
     check_file_exists,
     get_filesystem,
+    get_parent_dir,
     get_wq_cog_url,
     get_wq_csv_url,
     join_url,
@@ -36,6 +39,7 @@ from water_quality.mapping.load_data import (
 from water_quality.mapping.optical_water_type import OWT_pixel
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
+from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import parse_task_id
 
 
@@ -318,24 +322,33 @@ def cli(
                 )
 
                 # Enforce data type for all bands to float32
-                da = ds[band].astype(np.float32)
+                da: xr.DataArray = ds[band].astype(np.float32)
 
-                # Attributes for water quality variables should be
-                # set in run_wq_algorithms
+                # No data and offset attributes for water quality
+                # variables should be set in run_wq_algorithms
                 if band not in wq_vars_list:
                     # Enforce no data for all bands to np.nan
-                    nodata = np.nan
-                    scale = 1
-                    offset = 0
                     da.attrs = dict(
-                        nodata=np.nan, scales=scale, offsets=offset
+                        nodata=np.nan,
+                        # scale
+                        scales=1,
+                        # add_offset
+                        offsets=0,
+                        product_name=product_name,
+                        product_version=product_version,
                     )
-
+                else:
+                    da.attrs.update(
+                        dict(
+                            product_name=product_name,
+                            product_version=product_version,
+                        )
+                    )
                 cog_bytes = write_cog(
                     geo_im=da,
                     fname=":mem:",
                     overwrite=True,
-                    nodata=nodata,
+                    nodata=da.attrs["nodata"],
                     tags=da.attrs,
                 )
                 with fs.open(output_cog_url, "wb") as f:
@@ -343,7 +356,6 @@ def cli(
                 log.info(f"Band {band} saved to {output_cog_url}")
 
             # Save a table containing the water quality parameters
-
             output_csv_url = get_wq_csv_url(
                 output_directory=output_directory,
                 tile_id=tile_id,
@@ -355,6 +367,13 @@ def cli(
                 wq_vars_df.to_csv(f, index=False)
 
             # Generate the stac file for the task
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                log.info("Creating metadata STAC file ...")
+                stac_file_url = prepare_dataset(  # noqa F841
+                    dataset_path=get_parent_dir(output_csv_url),
+                    output_path=None,
+                )
 
         except Exception as error:
             log.exception(error)
