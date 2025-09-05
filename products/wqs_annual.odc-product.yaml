@@ -1,20 +1,19 @@
 ---
-name: wqs_annual_v1
-description: '> DE Africa Water Quality Service annual water quality variables for
-  at 10m resolution - version 1.'
+name: wqs_annual
+description: DE Africa Water Quality Service annual water quality variables at 10m
+  resolution - version 1.
 metadata_type: eo3
 license: CC-BY-4.0
-
-metadata:
-  product:
-      name: wqs_annual_v1
 
 load:
   crs: EPSG:6933
   resolution:
     x: 10
     y: -10
-    
+
+metadata:
+  product_name: wqs_annual
+
 measurements:
 - name: chla_meris2b_msi_agm
   dtype: float32
@@ -238,3 +237,4 @@ measurements:
   units: '1'
   scale_factor: 1.0
   add_offset: 0.0
+...
