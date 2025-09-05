@@ -85,10 +85,8 @@ def generate_annual_product_template(tile_directory: str) -> dict[str, Any]:
     description = "DE Africa Water Quality Service annual water quality variables at 10m resolution - version 1."
     metadata_type = "eo3"
     license = "CC-BY-4.0"
-
-    metadata = dict(product_name=product_name)
-
     load = dict(crs="EPSG:6933", resolution=dict(x=10, y=-10))
+    metadata = dict(product_name=product_name)
 
     product_config = dict(
         name=product_name,
@@ -102,12 +100,6 @@ def generate_annual_product_template(tile_directory: str) -> dict[str, Any]:
 
     output_yaml = "wqs_annual.odc-product.yaml"
 
-    """
-    fs = get_filesystem(output_yaml, anon=False)
-    with fs.open(output_yaml, "w") as file:
-        yaml.dump_all(product_config, file, sort_keys=False, explicit_start=True)
-    log.info(f"{product_name} ODC product template written to {output_yaml} ")
-    """
     fs = get_filesystem(output_yaml, anon=False)
     with fs.open(output_yaml, "w") as stream:
         yaml.dump_all(
@@ -118,6 +110,7 @@ def generate_annual_product_template(tile_directory: str) -> dict[str, Any]:
             explicit_end=True,
             indent=2,
         )
+    log.info(f"{product_name} ODC product template written to {output_yaml} ")
     return product_config
 
 
@@ -178,6 +171,7 @@ def get_dummy_product_yaml(
     metadata_type = "eo3"
     license = "CC-BY-4.0"
     load = dict(crs="EPSG:6933", resolution=dict(x=10, y=-10))
+    metadata = dict(product_name=product_name)
 
     product_config = dict(
         name=product_name,
@@ -185,6 +179,7 @@ def get_dummy_product_yaml(
         metadata_type=metadata_type,
         license=license,
         load=load,
+        metadata=metadata,
         measurements=measurements,
     )
 
