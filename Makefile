@@ -21,13 +21,14 @@ up: ## Bring up your Docker environment
 	docker compose -f compose_dev.yaml up -d jupyter
 
 down:
-	docker compose down --remove-orphans
+	docker compose -f compose_dev.yaml down --remove-orphans
 
 init: ## Prepare the database, initialise the database schema.
-	docker compose exec -T jupyter datacube -v system init
+	docker compose -f compose_dev.yaml exec -T jupyter datacube -v system init
 
-products:
-	docker compose exec -T jupyter dc-sync-products products.csv --update-if-exists
+add-products:
+	docker compose -f compose_dev.yaml exec -T jupyter dc-sync-products products/wqs_products.csv --update-if-exists
+	docker compose -f compose_dev.yaml exec -T jupyter dc-sync-products products.csv --update-if-exists
 
 index: index-gm_s2_annual index-gm_ls8_ls9_annual index-wofs_ls_summary_annual index-wofs_ls_summary_alltime index-landsat-st
 
@@ -79,13 +80,19 @@ index-landsat-st:
 		--bbox=$(BBOX) 
 	@echo "$$(date) Done with landsat surface temp"
 
+index-wqs-annual:
+	docker compose -f compose_dev.yaml exec -T jupyter s3-to-dc --no-sign-request --stac \
+	's3://deafrica-water-quality-dev/mapping/wqs_annual/1-0-0/x217/y077/**/*.json' \
+	wqs_annual
+
+
 install-pkg: ## Editable install of package for development
-	docker compose exec jupyter bash -c "cd /home/jovyan && pip install -e ."
+	docker compose -f compose_dev.yaml exec jupyter bash -c "cd /home/jovyan && pip install -e ."
 
 run-tests:
-	docker compose exec -T jupyter  pytest tests/
+	docker compose -f compose_dev.yaml exec -T jupyter  pytest tests/
 
-test-env: build up init products index install-pkg
+test-env: build up init add-product index install-pkg
 
 lint-src:
 	ruff check --select I --fix src/ tests/             
@@ -101,14 +108,14 @@ sync-local-env:
 	micromamba env update -n deafrica-water-quality-env -f environment.yaml 
 
 jupyter-shell: ## Open shell in jupyter service
-	docker compose exec jupyter /bin/bash
+	docker compose -f compose_dev.yaml exec jupyter /bin/bash
 
 ## Explorer
 setup-explorer: ## Setup the datacube explorer
 	# Initialise and create product summaries
-	docker compose up -d explorer
-	docker compose exec -T explorer cubedash-gen --init --all
+	docker compose -f compose_dev.yaml up -d explorer
+	docker compose -f compose_dev.yaml exec -T explorer cubedash-gen --init --all
 	# Services available on http://localhost:8080/products
 
 explorer-refresh-products:
-	docker compose exec -T explorer cubedash-gen --init --all
+	ddocker compose -f compose_dev.yaml exec -T explorer cubedash-gen --init --all

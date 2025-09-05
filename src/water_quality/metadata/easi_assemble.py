@@ -641,12 +641,10 @@ class EasiPrepare(Eo3Interface):
                 f"YAML filename doesn't end in *.yaml (?). Received {output_yaml!r}"
             )
 
-        yaml = serialise._init_yaml()
-
         fs = get_filesystem(output_yaml, anon=False)
-        with fs.open(output_yaml, "w") as file:
-            yaml.dump_all(doc, file, sort_keys=False)
-
+        with fs.open(output_yaml, "w") as stream:
+            yaml = serialise._init_yaml()
+            yaml.dump_all([doc], stream)
         return dataset.id, self._output_path
 
     def write_stac(
