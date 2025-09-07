@@ -236,27 +236,73 @@ def find_csv_files(
     return csv_file_paths
 
 
-def _get_wq_parent_dir(
+def get_wq_dataset_path(
     output_directory: str,
     tile_id: tuple[int, int],
     temporal_id: str,
     product_name: str,
     product_version: str,
 ) -> str:
+    """
+    Return the dataset path for a task.
+
+    The dataset path is the directory where all water quality variables
+    and associated metadata for the task are stored.
+    """
     product_version_dashed = product_version.replace(".", "-")
-    # output_dir/productname/productversion/x/y/temporal_id/file_name
+
     region_code = get_region_code(tile_id, sep="/")
-    parent_dir = join_url(
+
+    dataset_path = join_url(
         output_directory,
         product_name,
         product_version_dashed,
         region_code,
         temporal_id,
     )
-    if not check_directory_exists(parent_dir):
-        fs = get_filesystem(parent_dir, anon=False)
-        fs.makedirs(parent_dir, exist_ok=True)
-    return parent_dir
+
+    if not check_directory_exists(dataset_path):
+        fs = get_filesystem(dataset_path, anon=False)
+        fs.makedirs(dataset_path, exist_ok=True)
+
+    return dataset_path
+
+
+def get_wq_dataset_id(dataset_path: str) -> str:
+    """
+    Return a unique dataset ID from a dataset path.
+
+    e.g. wqs_annual_x217y077_2024--P1Y
+    """
+    # Parse the dataset path
+    if is_local_path(dataset_path):
+        (
+            product_name,
+            product_version_dashed,
+            region_code_x,
+            region_code_y,
+            temporal_id,
+        ) = Path(dataset_path).resolve().parts[-5:]
+    else:
+        (
+            product_name,
+            product_version_dashed,
+            region_code_x,
+            region_code_y,
+            temporal_id,
+        ) = URL(dataset_path).parts[-5:]
+
+    dataset_id = f"{product_name}_{region_code_x}{region_code_y}_{temporal_id}"
+    return dataset_id
+
+
+def get_wq_stac_url(dataset_path: str) -> str:
+    """
+    Return the file path for writing the dataset metadata STAC file.
+    """
+    dataset_id = get_wq_dataset_id(dataset_path)
+    output_path = join_url(dataset_path, f"{dataset_id}.stac-item.json")
+    return output_path
 
 
 def get_wq_cog_url(
@@ -266,8 +312,11 @@ def get_wq_cog_url(
     band_name: str,
     product_name: str,
     product_version: str,
-):
-    parent_dir = _get_wq_parent_dir(
+) -> str:
+    """
+    Return the path or URL for writing a water variable COG file.
+    """
+    parent_dir = get_wq_dataset_path(
         output_directory=output_directory,
         tile_id=tile_id,
         temporal_id=temporal_id,
@@ -284,18 +333,20 @@ def get_wq_cog_url(
 
 def parse_wq_cog_url(cog_url: str) -> tuple[str, str, str, str]:
     """
-    Parse the filename of a water quality variable COG file path
-    into to the product name, region code, temporal id and the band name.
+    Parse the filename of a water quality variable COG URL.
+
+    Extracts the product name, region code, temporal ID, and band name.
 
     Parameters
     ----------
     cog_url : str
-        File path for a water quality variable COG.
+        Path or URL to a water quality variable COG.
 
     Returns
     -------
     tuple[str, str, str, str]
-        product name, region code, temporal id and the band name.
+        A tuple containing the product name, region code, temporal ID,
+        and band name.
     """
     # f"{product_name}_{region_code}_{temporal_id}_{band}.tif"
     base = get_basename(cog_url)
@@ -319,8 +370,12 @@ def get_wq_csv_url(
     temporal_id: str,
     product_name: str,
     product_version: str,
-):
-    parent_dir = _get_wq_parent_dir(
+) -> str:
+    """
+    Return the path or URL for writing a table with TSS and Chl-a water
+    quality variables for a task.
+    """
+    parent_dir = get_wq_dataset_path(
         output_directory=output_directory,
         tile_id=tile_id,
         temporal_id=temporal_id,

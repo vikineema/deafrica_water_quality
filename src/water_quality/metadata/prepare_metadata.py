@@ -19,7 +19,8 @@ from water_quality.io import (
     find_geotiff_files,
     get_filesystem,
     get_parent_dir,
-    join_url,
+    get_wq_dataset_id,
+    get_wq_stac_url,
     parse_wq_cog_url,
 )
 from water_quality.mapping.algorithms import NORMALISATION_PARAMETERS
@@ -187,18 +188,6 @@ def get_dummy_product_yaml(
     return product_config
 
 
-def get_dataset_tile_id(dataset_path: str):
-    """
-    Get a unique tile id given a dataset path.
-    e.g. wqs_annual_x217y077_2024--P1Y
-    """
-    cog_file = find_geotiff_files(dataset_path)[0]
-    product_name, region_code, temporal_id, _ = parse_wq_cog_url(cog_file)
-
-    dataset_tile_id = f"{product_name}_{region_code}_{temporal_id}"
-    return dataset_tile_id
-
-
 def get_common_attrs(dataset_measurement_url: str) -> dict:
     """Get the attributes from a single dataset measurement that are
     expected to be common to all measurements for a dataset."""
@@ -224,7 +213,6 @@ def get_common_attrs(dataset_measurement_url: str) -> dict:
 
 def prepare_dataset(
     dataset_path: str,
-    output_path: str = None,
     source_datasets_uuids: list[UUID] = None,
 ) -> str:
     """Prepares a STAC dataset metadata file for a data product.
@@ -232,9 +220,9 @@ def prepare_dataset(
     Parameters
     ----------
     dataset_path : str
-        Directory of the dataset
-    output_path : str
-        Path to write the output metadata file.
+        Directory of the dataset. The dataset path is the directory
+        where all water quality variables and associated metadata for
+        a processed task are stored.
     source_datasets_uuids : list[UUID]
         Option list of the UUIDs for datasets that were used in the
         calculation of this dataset.
@@ -243,11 +231,8 @@ def prepare_dataset(
     str
         Path to odc dataset STAC file
     """
-    tile_id = get_dataset_tile_id(dataset_path)
-    if output_path is None:
-        # If no path is provided for the metadata document
-        # save the file in the same directory as the dataset.
-        output_path = join_url(dataset_path, f"{tile_id}.stac-item.json")
+    dataset_id = get_wq_dataset_id(dataset_path)
+    output_path = get_wq_stac_url(dataset_path)
 
     product_definition = get_dummy_product_yaml(dataset_path)
 
@@ -263,8 +248,8 @@ def prepare_dataset(
     )
 
     # Find all measurement paths for a dataset
-    tile_id_regex = rf"{tile_id}_(.*?)\.tif$"
-    measurement_map = p.map_measurements_to_paths(tile_id_regex)
+    dataset_id_regex = rf"{dataset_id}_(.*?)\.tif$"
+    measurement_map = p.map_measurements_to_paths(dataset_id_regex)
 
     # Get attrs from one of the measurement files
     common_attrs = get_common_attrs(list(measurement_map.values())[0])
@@ -272,7 +257,7 @@ def prepare_dataset(
     ## IDs and Labels
     # The version of the source dataset
     p.dataset_version = f"{common_attrs['product_version']}"
-    p.dataset_id = odc_uuid(p.product_name, p.dataset_version, [tile_id])
+    p.dataset_id = odc_uuid(p.product_name, p.dataset_version, [dataset_id])
     # product_name is added by EasiPrepare().init()
     p.product_uri = (
         f"https://explorer.digitalearth.africa/product/{p.product_name}"
