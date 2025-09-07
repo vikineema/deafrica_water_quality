@@ -22,6 +22,8 @@ from water_quality.io import (
     get_parent_dir,
     get_wq_cog_url,
     get_wq_csv_url,
+    get_wq_dataset_path,
+    get_wq_stac_url,
     join_url,
 )
 from water_quality.logs import setup_logging
@@ -182,6 +184,23 @@ def cli(
                     f"Expecting tasks with an annual frequency '1Y' not {freq}"
                 )
 
+            # Check if this task has been processed before by checking if
+            # expected dataset metadata file exists.
+            dataset_path = get_wq_dataset_path(
+                output_directory=output_directory,
+                tile_id=tile_id,
+                temporal_id=temporal_id,
+                product_name=product_name,
+                product_version=product_version,
+            )
+            output_stac_url = get_wq_stac_url(dataset_path)
+            exists = check_file_exists(output_stac_url)
+            if not overwrite and exists:
+                log.info(
+                    f"{output_stac_url} exists! Skipping processing task {task_id}"
+                )
+                continue
+
             temporal_range = DateTimeRange(temporal_id)
 
             start_date = temporal_range.start.strftime("%Y-%m-%d")
@@ -213,7 +232,7 @@ def cli(
             else:
                 client = None
 
-            ds = build_wq_agm_dataset(
+            ds, source_datasets_uuids = build_wq_agm_dataset(
                 dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
             )
 
@@ -372,7 +391,7 @@ def cli(
                 log.info("Creating metadata STAC file ...")
                 stac_file_url = prepare_dataset(  # noqa F841
                     dataset_path=get_parent_dir(output_csv_url),
-                    output_path=None,
+                    source_datasets_uuids=source_datasets_uuids,
                 )
 
         except Exception as error:

@@ -6,6 +6,7 @@ import uuid
 import warnings
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import UUID
 
 import boto3
 import numpy
@@ -52,6 +53,7 @@ class EasiPrepare(Eo3Interface):
         dataset_path: str,
         product_yaml: str | dict,
         output_path: str = None,
+        input_source_datasets: list[UUID] = None,
     ) -> None:
         """
         Prepare eo3 metadata for a dataset.
@@ -68,6 +70,10 @@ class EasiPrepare(Eo3Interface):
         :param output_path:
             Optional. Specify the output dataset YAML file. Default is to create it next
             to the dataset file(s).
+
+        :param input_source_datasets:
+            Optional. Specify the list of the UUIDs for datasets that were used in the calculation of
+            this dataset.
         """
         # Internal variables
         self._dataset_scheme = None  # Set by self._set_dataset_path()
@@ -101,7 +107,7 @@ class EasiPrepare(Eo3Interface):
         self._dataset.product = ProductDoc()
         self._dataset.product.name = self.get_product_name()
         self._dataset.accessories = {}
-        self._dataset.lineage = None
+        self._set_dataset_lineage(input_source_datasets)
 
         # Available for user input, else defaults will be used
         self.geometry = None  # BaseGeometry, overrides valid_data polygon
@@ -186,6 +192,15 @@ class EasiPrepare(Eo3Interface):
                 f"Require a valid output_path to write to: {output_path}"
             )
         self._output_path = meta
+
+    def _set_dataset_lineage(self, input_source_datasets: list[UUID]):
+        """
+        Add the UUIDs of the source datasets to the lineage.
+        """
+        if input_source_datasets is None:
+            self._dataset.lineage = None
+        else:
+            self._dataset.lineage = {"inputs": input_source_datasets}
 
     def __enter__(self):
         return self

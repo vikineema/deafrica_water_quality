@@ -1,5 +1,7 @@
 import logging
+from itertools import chain
 from typing import Any, Callable
+from uuid import UUID
 
 import dask
 import numpy as np
@@ -147,19 +149,19 @@ def build_dc_queries(
     Returns
     -------
     dict[str, dict[str, Any]]
-        Datacube query for each instrument.
+        Datacube queries for each instrument.
     """
     dc_queries = {}
     for instrument_name, usage in instruments_to_use.items():
         if usage["use"] is True:
             dc_products = get_dc_products(instrument_name)
             dc_measurements = get_dc_measurements(instrument_name)
+
             dc_query = dict(
                 product=dc_products,
                 measurements=dc_measurements,
                 time=(start_date, end_date),
                 resampling=resampling,
-                # align=(0, 0), not supported when using like
             )
             if instrument_name in SINGLE_DAY_INSTRUMENTS:
                 dc_query.update({"group_by": "solar_day"})
@@ -396,7 +398,7 @@ def _load_and_reproject_instrument_data(
     proccess_loaded_data_func: Callable[
         [dict[str, xr.Dataset]], dict[str, xr.Dataset]
     ],
-) -> dict[str, xr.Dataset]:
+) -> tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]:
     """
     Helper function to load, compute, and reproject instrument data from
     the datacube.
@@ -421,10 +423,13 @@ def _load_and_reproject_instrument_data(
 
     Returns
     -------
-    Dict[str, xr.Dataset]
-        A dictionary mapping the instrument name to a **computed and
-        reprojected** xarray Dataset containing data found for the
-        instrument in the datacube.
+    tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]
+        A tuple containing:
+            - A dictionary mapping the instrument name to a **computed and
+                reprojected** xarray Dataset containing data found for the
+                instrument in the datacube.
+            - A dictionary mapping the instrument name to a list of
+            UUIDs for the datasets loaded for the instrument.
     """
     # Determine the default resolution from the tile GeoBox (e.g., 10m, 30m)
     default_res = int(abs(tile_geobox.resolution.x))
@@ -436,8 +441,21 @@ def _load_and_reproject_instrument_data(
 
     log.info("Loading data using datacube queries...")
 
+    input_datasets: dict[str, list[UUID]] = {}
     loaded_data: dict[str, xr.Dataset] = {}
     for instrument_name, dc_query in queries.items():
+        # Find datasets.
+        datasets = dc.find_datasets(
+            product=dc_query["product"],
+            time=dc_query["time"],
+            # resolution and crs does not matter at this point
+            # just need the spatial boundaries
+            like=tile_geobox,
+        )
+        input_datasets[instrument_name] = [dataset.id for dataset in datasets]
+
+        # Load datasets.
+
         # Load Landsat products and derivatives at their native 30m resolution
         # if the default output resolution is not already 30m.
         if "msi" not in instrument_name and default_res != 30:
@@ -450,7 +468,14 @@ def _load_and_reproject_instrument_data(
         xy_chunk_size = int(like.shape.x / 5)
         dask_chunks = {"x": xy_chunk_size, "y": xy_chunk_size}
 
-        ds = dc.load(**dc_query, like=like, dask_chunks=dask_chunks)
+        ds = dc.load(
+            datasets=datasets,
+            measurements=dc_query["measurements"],
+            like=like,
+            resampling=dc_query["resampling"],
+            dask_chunks=dask_chunks,
+            group_by=dc_query.get("group_by", None),
+        )
         ds = ds.rename(get_measurements_name_dict(instrument_name))
         loaded_data[instrument_name] = ds
 
@@ -470,14 +495,14 @@ def _load_and_reproject_instrument_data(
                 resampling=dc_queries[instrument_name]["resampling"],
             )
 
-    return loaded_data
+    return loaded_data, input_datasets
 
 
 def load_single_day_instruments_data(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
-) -> dict[str, xr.Dataset]:
+) -> tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]:
     """
     Load data for each single day instrument using the datacube queries
     provided.
@@ -496,9 +521,12 @@ def load_single_day_instruments_data(
 
     Returns
     -------
-    dict[str, xr.Dataset]
-        A dictionary mapping the instrument name to the a Dataset containing
-        data found for the instrument in the datacube.
+    tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]
+        A tuple containing:
+            - A dictionary mapping the instrument name to the a Dataset
+                containing data found for the instrument in the datacube.
+            - A dictionary mapping the instrument name to a list of
+            UUIDs for the datasets loaded for the instrument.
     """
     if dc is None:
         dc = Datacube(app="LoadSingleDayInstruments")
@@ -519,22 +547,21 @@ def load_single_day_instruments_data(
 
         return loaded_data
 
-    loaded_data = _load_and_reproject_instrument_data(
+    loaded_data, input_datasets = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
         tile_geobox=tile_geobox,
         instruments_to_filter=list(SINGLE_DAY_INSTRUMENTS.keys()),
         dc=dc,
         proccess_loaded_data_func=_process_single_day_instrument_data,
     )
-
-    return loaded_data
+    return (loaded_data, input_datasets)
 
 
 def load_composite_instruments_data(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
-) -> dict[str, xr.Dataset]:
+) -> tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]:
     """
     Load data for each composite instrument using the datacube queries
     provided.
@@ -553,9 +580,12 @@ def load_composite_instruments_data(
 
     Returns
     -------
-    dict[str, xr.Dataset]
-        A dictionary mapping the instrument name to the a Dataset containing
-        data found for the instrument in the datacube.
+    tuple[dict[str, xr.Dataset], dict[str, list[UUID]]]
+        A tuple containing:
+            - A dictionary mapping the instrument name to the a Dataset
+                containing data found for the instrument in the datacube.
+            - A dictionary mapping the instrument name to a list of
+            uuids for the datasets loaded for the instrument.
     """
     if dc is None:
         dc = Datacube(app="LoadCompositeInstruments")
@@ -581,7 +611,7 @@ def load_composite_instruments_data(
                 )
         return loaded_data
 
-    loaded_data = _load_and_reproject_instrument_data(
+    loaded_data, input_datasets = _load_and_reproject_instrument_data(
         dc_queries=dc_queries,
         tile_geobox=tile_geobox,
         instruments_to_filter=list(COMPOSITE_INSTRUMENTS.keys()),
@@ -589,14 +619,14 @@ def load_composite_instruments_data(
         proccess_loaded_data_func=_process_composite_instrument_data,
     )
 
-    return loaded_data
+    return loaded_data, input_datasets
 
 
 def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
-) -> xr.Dataset:
+) -> tuple[xr.Dataset, list[UUID]]:
     """Build a combined annual dataset from loading data
     for each composite products instrument using the datacube queries
     provided.
@@ -615,16 +645,21 @@ def build_wq_agm_dataset(
 
     Returns
     -------
-    xr.Dataset
-        A single dataset containing all the data found for each
+    tuple[xr.Dataset, list[UUID]]
+        A tuple containing:
+        - A single dataset containing all the data found for each
         instrument in the datacube.
+        - A list of the UUIDs for all the datasets found for each
+        instrument in the datacube.
+
     """
     if dc is None:
         dc = Datacube(app="Build_wq_agm_dataset")
-    loaded_data = load_composite_instruments_data(
+    loaded_data, input_datasets = load_composite_instruments_data(
         dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
     )
     combined = xr.merge(list(loaded_data.values()))
     combined = combined.drop_vars("quantile", errors="ignore")
 
-    return combined
+    source_datasets_uuids = list(chain.from_iterable(input_datasets.values()))
+    return combined, source_datasets_uuids
