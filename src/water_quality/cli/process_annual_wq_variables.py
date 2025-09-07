@@ -213,7 +213,7 @@ def cli(
             else:
                 client = None
 
-            ds = build_wq_agm_dataset(
+            ds, source_datasets_uuids = build_wq_agm_dataset(
                 dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
             )
 
@@ -373,6 +373,7 @@ def cli(
                 stac_file_url = prepare_dataset(  # noqa F841
                     dataset_path=get_parent_dir(output_csv_url),
                     output_path=None,
+                    source_datasets_uuids=source_datasets_uuids,
                 )
 
         except Exception as error:

@@ -6,6 +6,7 @@ products
 import logging
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 import rioxarray
 import toolz
@@ -224,6 +225,7 @@ def get_common_attrs(dataset_measurement_url: str) -> dict:
 def prepare_dataset(
     dataset_path: str,
     output_path: str = None,
+    source_datasets_uuids: list[UUID] = None,
 ) -> str:
     """Prepares a STAC dataset metadata file for a data product.
 
@@ -233,7 +235,9 @@ def prepare_dataset(
         Directory of the dataset
     output_path : str
         Path to write the output metadata file.
-
+    source_datasets_uuids : list[UUID]
+        Option list of the UUIDs for datasets that were used in the
+        calculation of this dataset.
     Returns
     -------
     str
@@ -251,7 +255,12 @@ def prepare_dataset(
     # Creates variables (see EasiPrepare for others):
     # - p.dataset_path
     # - p.product_name
-    p = EasiPrepare(dataset_path, product_definition, output_path)
+    p = EasiPrepare(
+        dataset_path=dataset_path,
+        product_yaml=product_definition,
+        output_path=output_path,
+        input_source_datasets=source_datasets_uuids,
+    )
 
     # Find all measurement paths for a dataset
     tile_id_regex = rf"{tile_id}_(.*?)\.tif$"
