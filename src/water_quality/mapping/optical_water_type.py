@@ -241,7 +241,6 @@ def OWT_pixel(
     ds: xr.Dataset,
     instrument: str,
     resample_rate: int | None = None,
-    water_frequency_threshold=0.8,
 ) -> xr.DataArray:
     """Determine the open water type for each pixel, over areas
     that are usually water.
@@ -252,13 +251,11 @@ def OWT_pixel(
         _description_
     instrument : str
         Selected instrument established while building the dataset.
-    water_frequency_threshold : float, optional
-        _description_, by default 0.8
 
     Returns
     -------
     xr.DataArray
-        _description_
+        Open Water Type for each pixel, over areas that are usually water.
     """
     shortname = instrument[0:3]
 
@@ -311,21 +308,24 @@ def OWT_pixel(
         ]
     ).reshape(data_stack_shape)
     resampled_ds[var_name] = (("time", "y", dim_name, "x"), data_stack)
-    # To allow the matrix multiplication the bands dimension needs to be transposed to the end
+    # To allow the matrix multiplication the bands dimension needs to be
+    # transposed to the end
     resampled_ds = resampled_ds.transpose("time", "y", "x", dim_name)
 
     # add a dimension for the OWT type
     OWT = OWT.sel({dim_name: resampled_ds[dim_name].values})
     resampled_ds = resampled_ds.assign_coords(owt=OWT.owt.values)
 
-    # Calculate the dot product between each pixel vector and each owt type vector
+    # Calculate the dot product between each pixel vector and each
+    # owt type vector
     resampled_ds[shortname + "_x_owt"] = resampled_ds[var_name].dot(
         OWT.T, dim=dim_name
     )
     # The result now has for every pixel, the dot product with the
     # spectral reference vector.
 
-    # Calculate the self product (the scale) of each of the OWT reference vectors
+    # Calculate the self product (the scale) of each of the OWT
+    # reference vectors
     owt_scale = np.sqrt(np.square(OWT).T.sum(dim=dim_name))
 
     # Calculate the scale of each pixel vector
@@ -339,13 +339,15 @@ def OWT_pixel(
     ) / owt_scale
 
     # Find the owt closest to the msi vector (the largest cosine)
-    # to avoid nan problems use np.argmax, then the array is  brought back into the dataset
+    # to avoid nan problems use np.argmax, then the array is  brought
+    # back into the dataset
     resampled_ds[shortname + "_owt"] = (
         ("time", "y", "x"),
         np.argmax(resampled_ds[shortname + "_owt_cosine"].values, axis=3) + 1,
     )
 
-    # replace zeros (where the scale of the pixel vector is zero) with nodata
+    # replace zeros (where the scale of the pixel vector is zero)
+    # with nodata
     resampled_ds[shortname + "_owt"] = xr.where(
         resampled_ds[shortname + "_scale"] > 0,
         resampled_ds[shortname + "_owt"],
@@ -361,7 +363,8 @@ def OWT_pixel(
         da = xr.where(np.isnan(da), fill_value, da)
 
         # Interpolate to the original coordinates,
-        # and fill out any gaps including for years prior to the msi sensor being available
+        # and fill out any gaps including for years prior to the msi
+        # sensor being available
         da = da.interp(
             coords={"time": ds.time, "x": ds.x, "y": ds.y},
             method="nearest",
@@ -371,7 +374,8 @@ def OWT_pixel(
         # Reduce coverage to water areas
         da = xr.where(~np.isnan(ds.watermask), da, np.nan)
 
-        # Replace the fill values with median values for the pixel, or year
+        # Replace the fill values with median values for the pixel,
+        # or year
         # glob_med = da.where(da != fill_value).median()
         pixel_med = da.where(da != fill_value).median(dim="time")
         annual_med = da.where(da != fill_value).median(dim=("x", "y"))
