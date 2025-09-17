@@ -1,0 +1,62 @@
+{
+  "nodes": {
+    "micromamba-shell": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1758134103,
+        "narHash": "sha256-0sJAU+6hMGLItY9xrySKTtVRPdnZdUpZM8q1pJ8Rp0g=",
+        "owner": "vikineema",
+        "repo": "micromamba-shell",
+        "rev": "6e208095bba475365b634f9f8577279ce3c815ba",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vikineema",
+        "repo": "micromamba-shell",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1757941119,
+        "narHash": "sha256-TssJZFzMRYdWgpHySzKv4YQg6DUv5SDENiWbVgNTo0M=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7ff837017c3b82bd3671932599a119d7bc672ff0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-25.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1757941119,
+        "narHash": "sha256-TssJZFzMRYdWgpHySzKv4YQg6DUv5SDENiWbVgNTo0M=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7ff837017c3b82bd3671932599a119d7bc672ff0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-25.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "micromamba-shell": "micromamba-shell",
+        "nixpkgs": "nixpkgs_2"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
