@@ -33,8 +33,8 @@ if ! micromamba env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
     [ -f $DEV_YAML ] && micromamba install -n $ENV_NAME -f $DEV_YAML -y
 else
     echo "Updating micromamba environment '$ENV_NAME'..."
-    micromamba install -n $ENV_NAME -f $PROD_YAML -y
-    [ -f $DEV_YAML ] && micromamba install -n $ENV_NAME -f $DEV_YAML -y
+    # micromamba install -n $ENV_NAME -f $PROD_YAML -y
+    # [ -f $DEV_YAML ] && micromamba install -n $ENV_NAME -f $DEV_YAML -y
 fi
 
 # Activate environment

@@ -41,3 +41,5 @@ WP1.3/**
 **/water_quality_regions.parquet
 # secrets
 .env
+# Nix files
+.direnv/**
