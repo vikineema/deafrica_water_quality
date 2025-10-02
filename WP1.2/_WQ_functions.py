@@ -591,7 +591,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Mare_Vacoas'    :     {'run':True, "xyt" :{"x": (  57.48 ,  57.52),   "y" : ( - 20.38 , -20.36  ) ,"time": (year1,year2)},"desc": "Mauritius - Mare aux Vacoas"},
         'Naute'          :     {'run':True, "xyt" :{"x": (  17.93 ,  18.05),   "y" : ( - 26.97 , -26.92  ) ,"time": (year1,year2)},"desc": "Namibia - Naute reserve"},
         'Lake_Turkana'   :     {'run':True, "xyt" :{"x": (  35.80 ,  36.72),   "y" : (    2.38 ,   4.79  ) ,"time": (year1,year2)},"desc": "Kenya -- Lake Turkana"},
-        'Haartbeesport_dam':   {'run':True, "xyt" :{"x": (  27.7972, 27.91117.72), "y" : (-25.7761,-25.7275) ,"time": (year1,year2)},"desc": "Haartbeesport Dam  -- South Africa"},
+        'Haartbeesport_dam':   {'run':True, "xyt" :{"x": (  27.7972, 27.91117), "y" : (-25.7761,-25.7275) ,"time": (year1,year2)},"desc": "Haartbeesport Dam  -- South Africa"},
+        'Lake Bogoria'   :     {'run':True, "xyt" :{"x": (  36.058, 36.133),   "y" : (  0.1791 ,0.3534) ,"time": (year1,year2)},"desc": "Lake Bogoria  -- south of Baringo"},
         }
 
      #Manyara is a shallow alkaline lake 10 feet deep. https://wildlifesafaritanzania.com/facts-about-lake-manyara-national-park/
