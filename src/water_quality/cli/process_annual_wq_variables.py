@@ -27,7 +27,10 @@ from water_quality.io import (
     join_url,
 )
 from water_quality.logs import setup_logging
-from water_quality.mapping.algorithms import WQ_vars
+from water_quality.mapping.algorithms import (
+    WQ_vars,
+    normalise_and_stack_wq_vars,
+)
 from water_quality.mapping.config import check_config
 from water_quality.mapping.hue import hue_calculation
 from water_quality.mapping.instruments import (
@@ -285,6 +288,10 @@ def cli(
                 instruments_list=instruments_list,
                 stack_wq_vars=False,
             )
+            ds = normalise_and_stack_wq_vars(
+                ds=ds, wq_vars_table=wq_vars_df, water_frequency_threshold=0
+            )
+
             # Get the list of all generated water quality variables
             # from the table
             wq_vars_list = list(
@@ -313,6 +320,7 @@ def cli(
                 # wq variables
                 "tss",
                 "chla",
+                "tsi",
             ]
             # The keeplist is not complete;
             # if the wq variables are retained as variables they will
