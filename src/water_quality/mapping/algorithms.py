@@ -4,6 +4,7 @@ to EO data from a set of instruments.
 """
 
 import logging
+from itertools import chain
 from typing import Any
 
 import numpy as np
@@ -696,3 +697,143 @@ def WQ_vars(
         ds = ds.drop_vars(all_wq_vars)
 
     return ds, all_wq_vars_df
+
+
+def classify_chla_values(chla_values: np.ndarray) -> np.ndarray:
+    """
+    Classify Chlorophyll-a (µg/l) values into Trophic State Index
+    values based on the table of Trophic State Index and related
+    chlorophyll concentration classes (according to Carlson (1977)).
+
+    Parameters
+    ----------
+    chla_values : np.ndarray
+        Chlorophyll-a (µg/l) values to classify
+
+    Returns
+    -------
+    np.ndarray
+        Corresponding Trophic State Index values.
+    """
+    # Chlorophyll-a (µg/l) (upper limit)
+    conditions = [
+        (chla_values <= 0.04),
+        (chla_values > 0.04) & (chla_values <= 0.12),
+        (chla_values > 0.12) & (chla_values <= 0.34),
+        (chla_values > 0.34) & (chla_values <= 0.94),
+        (chla_values > 0.94) & (chla_values <= 2.6),
+        (chla_values > 2.6) & (chla_values <= 6.4),
+        (chla_values > 6.4) & (chla_values <= 20),
+        (chla_values > 20) & (chla_values <= 56),
+        (chla_values > 56) & (chla_values <= 154),
+        (chla_values > 154) & (chla_values <= 427),
+        (chla_values > 427) & (chla_values <= 1183),
+    ]
+    # Trophic State Index, CGLOPS TSI values
+    choices = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    tsi_values = np.select(conditions, choices, default=np.nan)
+    return tsi_values
+
+
+def compute_trophic_state_index(
+    ds: xr.Dataset, chla_variable: str
+) -> xr.Dataset:
+    """
+    Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
+    and add the Trophic State Index as the variable "tsi" to the input
+    dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset to add the Trophic State Index to.
+    chla_variable : str
+        Variable in input dataset containing the Chlorophyll-a (µg/l)
+        values to derive the Trophic State Index from.
+
+    Returns
+    -------
+    xr.Dataset
+        Input dataset with the Trophic State Index added as the
+        variable "tsi".
+    """
+    ds["tsi"] = (tuple(ds.dims), classify_chla_values(ds[chla_variable]))
+    return ds
+
+
+def normalise_and_stack_wq_vars(
+    ds: xr.Dataset,
+    wq_vars_table: pd.DataFrame,
+    water_frequency_threshold: float,
+) -> xr.Dataset:
+    """
+    Normalize the water quality variables in the input dataset `ds`,
+    then stack them into the variables "tss" and "chla".
+    Finally, compute the Trophic State Index from the Chlorophyll-a
+    (µg/l) values and add it to the dataset as the variable "tsi".
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing the water quality variables to normalize.
+    wq_vars_table : pd.DataFrame
+        DataFrame containing the water quality variables table.
+    water_frequency_threshold : float
+        Threshold to use when classifying water and non-water pixels
+        in the normalization process.
+
+    Returns
+    -------
+    xr.Dataset
+        3D dataset containing the water quality variables
+        after normalization and stacking.
+    """
+    tss_wq_vars = wq_vars_table["tss_measures"].dropna().to_list()
+    chla_wq_vars = wq_vars_table["chla_measures"].dropna().to_list()
+    all_wq_vars = list(chain(tss_wq_vars, chla_wq_vars))
+
+    # Apply normalization parameters
+    for band in list(ds.data_vars):
+        if band in NORMALISATION_PARAMETERS.keys():
+            scale = NORMALISATION_PARAMETERS[band]["scale"]
+            offset = NORMALISATION_PARAMETERS[band]["offset"]
+            ds[band] = ds[band] * scale + offset
+
+    log.info("Stack the water quality variables")
+    # Keep the  dimensions of the 3D dataset
+    original_ds_dims = list(ds.dims)
+
+    # Stack the TSS water quality variables.
+    tss_da = ds[tss_wq_vars].to_stacked_array(
+        new_dim="tss_measures",
+        sample_dims=original_ds_dims,
+        variable_dim="tss_wq_vars",
+        name="tss",
+    )
+    tss_da.attrs = {}
+
+    # Stack the Chla water quality variables.
+    chla_da = ds[chla_wq_vars].to_stacked_array(
+        new_dim="chla_measures",
+        sample_dims=original_ds_dims,
+        variable_dim="chla_wq_vars",
+        name="chla",
+    )
+    chla_da.attrs = {}
+
+    # Drop the original water quality variables
+    ds = ds.drop_vars(all_wq_vars)
+
+    log.info("Get median of tss and chla measurements for water pixels")
+    water_mask = ds["wofs_ann_pwater"] > water_frequency_threshold
+
+    ds["tss"] = xr.where(water_mask, tss_da.median(dim="tss_measures"), np.nan)
+    ds["chla"] = xr.where(
+        water_mask, chla_da.median(dim="chla_measures"), np.nan
+    )
+    ds = ds.drop_dims(["tss_measures", "chla_measures"])
+
+    # Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
+    ds = compute_trophic_state_index(ds, chla_variable="chla")
+
+    return ds
