@@ -40,5 +40,10 @@ fi
 eval "$(micromamba shell hook --shell bash)"
 micromamba activate "$ENV_NAME"
 
+# Environment variables
+export AWS_S3_ENDPOINT=s3.af-south-1.amazonaws.com
+export AWS_DEFAULT_REGION=af-south-1
+export AWS_NO_SIGN_REQUEST=YES
+
 # Start interactive shell
 exec bash

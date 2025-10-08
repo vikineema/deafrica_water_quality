@@ -12,6 +12,7 @@
 .bash_history
 # Dev containers files
 *.ssh/**
+*.vscode/**
 *.vscode-server/**
 *.dotnet/**
 # Ignore items in data folder
