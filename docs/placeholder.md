@@ -51,7 +51,7 @@ Generates a list of processing tasks based on temporal range, frequency, and spa
 - `--tile-ids-file`: Path to file containing tile IDs
 - `--place-name`: Predefined test area name (view with `wq-list-test-areas`)
 
-**Note**: Specify exactly one of `--tile-ids`, `--tile-ids-file`, or `--place-name`. If none specified, generates tasks for all Africa tiles.
+**Note**: Specify exactly one of `--tile-ids`, `--tile-ids-file`, or `--place-name`. If none specified, generates tasks for all African tiles.
 
 #### Temporal Range Behavior
 If the temporal range doesn't completely cover a temporal bin, all data for the complete bin will be loaded:
@@ -67,7 +67,7 @@ Example: `2015--P1Y/x200/y034`
 
 ### Stage 2: Water Quality Processing (`wq-process-annual-wq-variables`)
 
-Processes tasks to generate water quality variables and outputs as Cloud Optimized GeoTIFFs (COGs).
+Processes tasks to generate annual water quality variables and outputs as Cloud Optimized GeoTIFFs (COGs).
 
 #### Command
 
@@ -99,24 +99,22 @@ resolution: 30  # Spatial resolution in meters
 
 # Satellite instruments to use
 instruments_to_use:
-  oli_agm:    # Landsat 8/9 OLI with atmospheric correction
+  oli_agm:    #  Landsat 8/9 OLI annual Geomedians,a cloud-free composite compiled over specific timeframes
     use: true
-  oli:        # Landsat 8/9 OLI without atmospheric correction
+  oli:        # Landsat 8/9 OLI surface reflectance image collection
     use: false
-  msi_agm:    # Sentinel-2 MSI with atmospheric correction
+  msi_agm:    # Sentinel-2 MSI annual Geomedians
     use: true
-  msi:        # Sentinel-2 MSI without atmospheric correction
+  msi:        # Sentinel-2 MSI surface reflectance image collection
     use: false
-  tm_agm:     # Landsat 5 TM with atmospheric correction
+  tm_agm:     # Landsat 5 TM annual Geomedians
     use: true
-  tm:         # Landsat 5 TM without atmospheric correction
+  tm:         # Landsat 5 TM surface reflectance image collection
     use: false
   tirs:       # Thermal infrared sensor
     use: true
   wofs_ann:   # Annual Water Observations from Space
     use: true
-  wofs_all:   # All-time WOFS
-    use: false
 
 # Water detection thresholds
 water_frequency_threshold_high: 0.5   # High confidence water threshold
@@ -211,21 +209,64 @@ product:
 
 ### Generated Variables
 
-| Variable | Description | Source |
-|----------|-------------|--------|
-| `wofs_ann_freq` | Annual water frequency (0-1) | WOFS |
-| `wofs_ann_clearcount` | Number of clear observations | WOFS |
-| `wofs_ann_wetcount` | Number of wet observations | WOFS |
-| `wofs_ann_freq_sigma` | Water frequency standard deviation | Water analysis |
-| `wofs_ann_confidence` | Water detection confidence | Water analysis |
-| `wofs_pw_threshold` | Permanent water threshold | Water analysis |
-| `wofs_ann_pwater` | Permanent water flag | Water analysis |
-| `watermask` | Binary water mask | Water analysis |
-| `owt_msi` | Optical water type (Sentinel-2) | OWT algorithm |
-| `owt_oli` | Optical water type (Landsat) | OWT algorithm |
-| `tss` | Total suspended solids (mg/L) | WQ algorithm |
-| `chla` | Chlorophyll-a concentration (μg/L) | WQ algorithm |
-| `hue` | Water color hue angle | Hue calculation |
+#### Water Frequency & Masking Variables
+| Variable | Description | Source | Units |
+|----------|-------------|--------|-------|
+| `wofs_ann_freq` | Annual water frequency | WOFS | 0-1 (proportion) |
+| `wofs_ann_freq_sigma` | Water frequency standard deviation | WOFS | 0-1 |
+| `wofs_ann_clearcount` | Number of clear observations | WOFS | count |
+| `wofs_ann_wetcount` | Number of wet observations | WOFS | count |
+| `wofs_ann_confidence` | Water detection confidence | Water analysis | 0-1 |
+| `wofs_pw_threshold` | Permanent water threshold | Water analysis | 0-1 |
+| `wofs_ann_pwater` | Permanent water flag | Water analysis | boolean |
+| `wofs_ann_water` | Annual water presence flag | Water analysis | boolean |
+| `watermask` | Binary water mask | Water analysis | boolean |
+
+#### Optical Water Type Variables
+| Variable | Description | Source | Units |
+|----------|-------------|--------|-------|
+| `owt_msi` | Optical water type classification | OWT algorithm (Sentinel-2) | class |
+| `owt_oli` | Optical water type classification | OWT algorithm (Landsat) | class |
+
+#### Chlorophyll-a (ChlA) Concentration Variables
+| Variable | Description | Algorithm | Instrument | Units |
+|----------|-------------|-----------|------------|-------|
+| `chla_meris2b_msi_agm` | Chlorophyll-a concentration | MERIS 2-Band | Sentinel-2 MSI | μg/L |
+| `chla_modis2b_msi_agm` | Chlorophyll-a concentration | MODIS 2-Band | Sentinel-2 MSI | μg/L |
+| `chla_modis2b_tm_agm` | Chlorophyll-a concentration | MODIS 2-Band | Landsat TM | μg/L |
+| `ndci_msi54_agm` | Normalized Difference Chlorophyll Index | NDCI (B5-B4) | Sentinel-2 MSI | index |
+| `ndci_msi64_agm` | Normalized Difference Chlorophyll Index | NDCI (B6-B4) | Sentinel-2 MSI | index |
+| `ndci_msi74_agm` | Normalized Difference Chlorophyll Index | NDCI (B7-B4) | Sentinel-2 MSI | index |
+| `ndci_oli54_agm` | Normalized Difference Chlorophyll Index | NDCI (B5-B4) | Landsat OLI | index |
+| `ndci_tm43_agm` | Normalized Difference Chlorophyll Index | NDCI (B4-B3) | Landsat TM | index |
+
+#### Total Suspended Solids (TSS) / Turbidity Variables
+| Variable | Description | Algorithm | Instrument | Units |
+|----------|-------------|-----------|------------|-------|
+| `tss` | Total suspended solids (stacked) | Multiple algorithms | Multi-instrument | mg/L |
+| `ndssi_rg_msi_agm` | Normalized Difference Suspended Sediment Index | NDSSI (Red-Green) | Sentinel-2 MSI | index |
+| `ndssi_rg_oli_agm` | Normalized Difference Suspended Sediment Index | NDSSI (Red-Green) | Landsat OLI | index |
+| `ndssi_rg_tm_agm` | Normalized Difference Suspended Sediment Index | NDSSI (Red-Green) | Landsat TM | index |
+| `ndssi_bnir_oli_agm` | Normalized Difference Suspended Sediment Index | NDSSI (Blue-NIR) | Landsat OLI | index |
+| `ndssi_bnir_tm_agm` | Normalized Difference Suspended Sediment Index | NDSSI (Blue-NIR) | Landsat TM | index |
+| `ti_yu_oli_agm` | Turbidity Index | Yu et al. | Landsat OLI | index |
+| `ti_yu_tm_agm` | Turbidity Index | Yu et al. | Landsat TM | index |
+| `tsm_lym_msi_agm` | Total Suspended Matter | Lymburner et al.  | Sentinel-2 MSI | mg/L |
+| `tsm_lym_oli_agm` | Total Suspended Matter | Lymburner et al. | Landsat OLI | mg/L |
+| `tsm_lym_tm_agm` | Total Suspended Matter | Lymburner et al. | Landsat TM | mg/L |
+| `tss_zhang_msi_agm` | Total Suspended Solids | Zhang et al. | Sentinel-2 MSI | mg/L |
+| `tss_zhang_oli_agm` | Total Suspended Solids | Zhang et al. | Landsat OLI | mg/L |
+| `spm_qiu_msi_agm` | Suspended Particulate Matter | Zhongfeng Qiu et.al. 2013 | Sentinel-2 MSI | mg/L |
+| `spm_qiu_oli_agm` | Suspended Particulate Matter | Zhongfeng Qiu et.al. 2013 | Landsat OLI | mg/L |
+| `spm_qiu_tm_agm` | Suspended Particulate Matter | Zhongfeng Qiu et.al. 2013 | Landsat TM | mg/L |
+
+#### Surface Temperature Variables
+| Variable | Description | Source | Units |
+|----------|-------------|--------|-------|
+| `tirs_st_ann_max` | Annual maximum surface temperature | Landsat TIRS | °C or K |
+| `tirs_st_ann_min` | Annual minimum surface temperature | Landsat TIRS | °C or K |
+
+
 
 ---
 
