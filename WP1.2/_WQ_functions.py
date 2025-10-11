@@ -62,6 +62,32 @@ def WQ_vars(ds,
         if True: ds= ds.drop_vars(list(ds[new_dimension_name].values))
     return ds,wq_varlist
         
+# ------------------------------------------------------------------------------------------------------------------------------------
+# FAI algorithm depends on knowledge of hte central wavelengths of the red, nir, and swir sensors. I include  a dictionary of those values here to keep the function self-contained
+def FAI (ds, instrument, test=False):
+    inst_bands = ib = {}
+    ib['msi']     = {  'red' : ('msi04',     665),          'nir' : ('msi8a',     864),          'swir': ('msi11',     1612)            }
+    ib['msi_agm'] = {  'red' : ('msi04_agm', 665),          'nir' : ('msi8a_agm', 864),          'swir': ('msi11_agm', 1612)            }
+    ib['oli']     = {  'red' : ('oli04',    (640 + 670)/2), 'nir' : ('oli05',    (850 + 880)/2), 'swir': ('oli06',    (1570 + 1650)/2)  }
+    ib['oli_agm'] = {  'red' : ('oli04_agm',(640 + 670)/2), 'nir' : ('oli05_agm',(850 + 880)/2), 'swir': ('oli06_agm',(1570 + 1650)/2)  }
+    ib['tm']      = {  'red' : ('tm03',     (630 + 690)/2), 'nir' : ('tm04',     (760 + 900)/2), 'swir': ('tm05',     (1550 + 1750)/2)  }
+    ib['tm_agm']  = {  'red' : ('tm03_agm', (630 + 690)/2), 'nir' : ('tm04_agm',(760 + 900)/2),  'swir': ('tm05_agm', (1550 + 1750)/2)  }
+    if not instrument in inst_bands.keys():
+        print('! -- invalid instrument, FAI will be calculated as zero --- !')
+        return(0)
+    red, l_red   = ib[instrument]['red'][0], ib[instrument]['red'] [1]
+    nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
+    swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
+
+    if test: 
+        print('red : ',red,l_red)
+        print('nir : ',nir,l_nir)
+        print('swir: ',swir,l_swir)
+        print((l_nir - l_red )/(l_swir-l_red))
+            
+    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0     
+    return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
+# ------------------------------------------------------------------------------------------------------------------------------------
 
 
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
