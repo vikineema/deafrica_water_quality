@@ -85,7 +85,7 @@ def FAI (ds, instrument, test=False):
         print('swir: ',swir,l_swir)
         print((l_nir - l_red )/(l_swir-l_red))
             
-    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0     
+    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
     return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
 # ------------------------------------------------------------------------------------------------------------------------------------
 
