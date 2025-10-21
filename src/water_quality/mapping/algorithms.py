@@ -831,7 +831,7 @@ def normalise_and_stack_wq_vars(
     ds["chla"] = xr.where(
         water_mask, chla_da.median(dim="chla_measures"), np.nan
     )
-    ds = ds.drop_dims(["tss_measures", "chla_measures"])
+    # ds = ds.drop_dims(["tss_measures", "chla_measures"], errors="ignore")
 
     # Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
     ds = compute_trophic_state_index(ds, chla_variable="chla")
