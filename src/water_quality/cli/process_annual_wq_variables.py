@@ -393,6 +393,8 @@ def cli(
             with fs.open(output_csv_url, mode="w") as f:
                 wq_vars_df.to_csv(f, index=False)
 
+            # TODO: Turn on stac generation
+            """
             # Generate the stac file for the task
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=UserWarning)
@@ -401,7 +403,7 @@ def cli(
                     dataset_path=get_parent_dir(output_csv_url),
                     source_datasets_uuids=source_datasets_uuids,
                 )
-
+            """
         except Exception as error:
             log.exception(error)
             failed_tasks.append(task_id)
