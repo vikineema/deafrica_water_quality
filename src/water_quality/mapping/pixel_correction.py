@@ -32,7 +32,37 @@ def R_correction(
     ds: Dataset,
     instruments_to_use: dict[str, dict[str, bool]],
     water_frequency_threshold: float = 0.9,
-):
+) -> Dataset:
+    """
+    Applies atmospheric dark pixel (R) correction to specified
+    remote sensing bands within an xarray Dataset.ary_
+
+    This function iterates through defined sensors and, if enabled,
+    performs a dark pixel subtraction.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        An xarray Dataset containing remote sensing bands
+        (e.g., 'msi04_agm', 'oli07_agm') and 'wofs_ann_freq' for
+        water masking.
+    instruments_to_use : dict[str, dict[str, bool]]
+        A dictionary of the instruments used to get the remote sensing
+        bands.
+    water_frequency_threshold : float, optional
+        The water frequency threshold. Pixels with 'wofs_ann_freq'
+        values below this threshold will have their original
+        (uncorrected) band values retained, effectively excluding
+        water bodies from the dark pixel correction. Defaults to 0.9.
+
+
+    Returns
+    -------
+    xarray.Dataset
+        The input `ds` Dataset with new atmospherically corrected bands
+        added. Each corrected band will have its original name appended
+        with 'r' (e.g., 'msi04_agm' becomes 'msi04_agmr').
+    """
     for sensor in DP_ADJUST.keys():
         if sensor in instruments_to_use.keys():
             usage = instruments_to_use[sensor]["use"]

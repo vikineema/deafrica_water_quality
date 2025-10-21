@@ -1,31 +1,50 @@
 FROM mambaorg/micromamba:2.0.8 AS micromamba
 
+ENV PYTHONDONTWRITEBYTECODE=true
+ARG BUILD_ENV=prod
+ARG MAMBA_DOCKERFILE_ACTIVATE=1 
+
 USER root
-COPY docker/environment.yaml docker/requirements.txt /tmp/
+COPY docker/environment_prod.yaml  docker/environment_dev.yaml /tmp/
 COPY docker/assets/tflite_runtime-2.20.0-cp312-cp312-linux_x86_64.whl /tmp/assets/
 
 # Install packages into the empty conda environmemnt base
-RUN  micromamba install --yes --name base  --file /tmp/environment.yaml --verbose \
-    # Clean package cache
-    && micromamba clean --all --yes \
+RUN  micromamba install --yes --name base  --file /tmp/environment_prod.yaml --verbose 
+RUN if [ "$BUILD_ENV" = "dev" ]; then \
+    micromamba install --yes --name base  --file /tmp/environment_dev.yaml --verbose; \
+    fi 
+
+# Install python package
+COPY src /tmp/src/
+COPY pyproject.toml /tmp/
+RUN pip install --no-cache-dir /tmp/ 
+
+# conda clean
+RUN micromamba clean --all --index-cache --packages --tarballs \
+     --locks --trash --force-pkgs-dirs --yes \
+    && find /opt/conda/ -follow -type f -name '*.a' -delete \
+    && find /opt/conda/ -follow -type f -name '*.pyc' -delete \
+    && find /opt/conda/ -follow -type d -name '__pycache__' -delete \
+    && find /opt/conda/ -follow -type f -name '*.js.map' -delete \
+    && find /opt/conda/lib/python*/site-packages/bokeh/server/static -follow -type f -name '*.js' ! -name '*.min.js' -delete \
+    # pip clean
+    && micromamba run --name base pip cache purge \
+    # file clean up
+    && rm -rf /tmp/* /root/.cache \
     # List packages installed
     && micromamba env export --name base --explicit
-
-ARG MAMBA_DOCKERFILE_ACTIVATE=1
-# Clear pip cache 
-RUN micromamba run --name base pip cache purge
 
 FROM ubuntu:jammy
 
 ARG NB_USER="jovyan"
 ARG NB_UID="1000"
 ARG NB_GID="100"
+ARG BUILD_ENV=prod
 
 # Configure python environment.
 # This should be the same prefix 
 # as the environment used in micromamba
 ENV PYTHON_ENV=/opt/conda
-
 ENV DEBIAN_FRONTEND=noninteractive \ 
     SHELL=/bin/bash \
     LC_ALL=C.UTF-8 \
@@ -35,7 +54,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SPATIALITE_LIBRARY_PATH='mod_spatialite.so' \
     HOME="/home/${NB_USER}" \
     PATH="${PYTHON_ENV}/bin:${PATH}" \
-    PROJ_DATA="${PYTHON_ENV}/share/proj"
+    PROJ_DATA="${PYTHON_ENV}/share/proj" \
+    BUILD_ENV=$BUILD_ENV \
+    JUPYTERLAB_DIR=$PYTHON_ENV/share/jupyter/lab 
 
 ## Non-root user creation
 # Delete existing user with UID="${NB_UID}" if it exists
@@ -49,28 +70,25 @@ RUN useradd --no-log-init --create-home --shell /bin/bash --no-user-group --gid 
 COPY --chown=$NB_UID:$NB_GID --from=micromamba /opt/conda $PYTHON_ENV
 
 ## Jupyter config
-USER root
-ENV JUPYTERLAB_DIR=$PYTHON_ENV/share/jupyter/lab 
 COPY docker/assets/overrides.json $JUPYTERLAB_DIR/settings/
 COPY docker/assets/jupyter_lab_config.py $PYTHON_ENV/etc/jupyter/
 # Enable server extensions
 USER $NB_USER
-RUN jupyter server extension enable --py --sys-prefix jupyterlab_iframe jupyter_resource_usage \
-    && jupyter lab build
+RUN if [ "$BUILD_ENV" = "dev" ]; then \
+    jupyter server extension enable --py --sys-prefix jupyterlab_iframe jupyter_resource_usage \
+    && jupyter lab build; \
+    fi 
 
-# Copy only python package files
-WORKDIR $HOME
-COPY --chown=$NB_UID:$NB_GID  src src/
-COPY --chown=$NB_UID:$NB_GID  pyproject.toml .
-RUN pip install . \
-    && pip cache purge  # Clean pip cache in final image
-
-# Clean up
 USER root
+# clean up
 RUN apt clean autoclean -y \
     && apt autoremove -y \
     && rm -rf /var/lib/{apt,dpkg,cache}/
 
+# Configure entrypoint
+COPY docker/assets/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER $NB_USER
 WORKDIR $HOME
-CMD ["jupyter", "lab", "--config==$PYTHON_ENV/etc/jupyter/jupyter_lab_config.py"]
+ENTRYPOINT ["/entrypoint.sh"]

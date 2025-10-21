@@ -88,7 +88,7 @@ def hue_calculation(dataset: xr.Dataset, instrument: str) -> xr.DataArray:
 
     Returns
     -------
-    xr.Dataset
+    xr.DataArray
         The derived hue.
 
     """

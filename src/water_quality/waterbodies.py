@@ -13,7 +13,6 @@ import shapely
 from deafrica_tools.waterbodies import (
     get_waterbodies as get_deafrica_waterbodies,
 )
-from shapely.geometry import box
 
 from water_quality.africa_extent import AFRICA_EXTENT_URL
 
