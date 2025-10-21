@@ -62,6 +62,32 @@ def WQ_vars(ds,
         if True: ds= ds.drop_vars(list(ds[new_dimension_name].values))
     return ds,wq_varlist
         
+# ------------------------------------------------------------------------------------------------------------------------------------
+# FAI algorithm depends on knowledge of hte central wavelengths of the red, nir, and swir sensors. I include  a dictionary of those values here to keep the function self-contained
+def FAI (ds, instrument, test=False):
+    inst_bands = ib = {}
+    ib['msi']     = {  'red' : ('msi04',     665),          'nir' : ('msi8a',     864),          'swir': ('msi11',     1612)            }
+    ib['msi_agm'] = {  'red' : ('msi04_agm', 665),          'nir' : ('msi8a_agm', 864),          'swir': ('msi11_agm', 1612)            }
+    ib['oli']     = {  'red' : ('oli04',    (640 + 670)/2), 'nir' : ('oli05',    (850 + 880)/2), 'swir': ('oli06',    (1570 + 1650)/2)  }
+    ib['oli_agm'] = {  'red' : ('oli04_agm',(640 + 670)/2), 'nir' : ('oli05_agm',(850 + 880)/2), 'swir': ('oli06_agm',(1570 + 1650)/2)  }
+    ib['tm']      = {  'red' : ('tm03',     (630 + 690)/2), 'nir' : ('tm04',     (760 + 900)/2), 'swir': ('tm05',     (1550 + 1750)/2)  }
+    ib['tm_agm']  = {  'red' : ('tm03_agm', (630 + 690)/2), 'nir' : ('tm04_agm',(760 + 900)/2),  'swir': ('tm05_agm', (1550 + 1750)/2)  }
+    if not instrument in inst_bands.keys():
+        print('! -- invalid instrument, FAI will be calculated as zero --- !')
+        return(0)
+    red, l_red   = ib[instrument]['red'][0], ib[instrument]['red'] [1]
+    nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
+    swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
+
+    if test: 
+        print('red : ',red,l_red)
+        print('nir : ',nir,l_nir)
+        print('swir: ',swir,l_swir)
+        print((l_nir - l_red )/(l_swir-l_red))
+            
+    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
+    return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
+# ------------------------------------------------------------------------------------------------------------------------------------
 
 
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
@@ -542,7 +568,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Lake_vic_east':       {'run':True, "xyt" :{"x": ( 32.78, 33.3),       "y" : ( -2.65,-2.3),      "time": (year1,year2)  },"desc": ""          },
         'Lake_vic_test':       {'run':True, "xyt" :{"x": ( 32.78, 33.13),       "y" : ( -1.95,-1.6),      "time": (year1,year2)  },"desc": "Lake Victoria cloud affected"},
         'Lake_vic_turbid':     {'run':True, "xyt" :{"x": ( 34.60, 34.70),       "y" : ( -.25,-.20),      "time": (year1,year2)  },"desc": "Lake Victoria turbid area in NE"},
-        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.45, 34.58),       "y" : ( -.275,-.210),    "time": ('2015-04-15','2015-05-30')  },"desc": "Lake Victoria turbid area in NE"}, #lake vic turbid is case study for algal bloom I think vis in l7 etm 2015-05-03.
+        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.45, 34.58),       "y" : ( -.275,-.210),    "time": ('2015-04-15','2015-05-30')  },"desc": "Lake Victoria Water Hyacinth affected area in NE"}, #lake vic turbid is case study for algal bloom I think vis in l7 etm 2015-05-03.
         'Lake_vic_clear':      {'run':True, "xyt" :{"x": ( 34.00, 34.10),       "y" : ( -.32,-.27),      "time": (year1,year2)  },"desc": "Lake Victoria clear water area"},
         'Lake_Victoria_NE' :   {'run':True, "xyt" :{'x': (33.5,34.8),         'y': (-.6,0.4),            'time': (year1,year2)  },"desc": 'Lake Victoria NE'},
         'Morocco':             {'run':True, "xyt" :{"x": (-7.45, -7.65),       "y" : (  32.4,32.5),      "time": (year1,year2)  },"desc": "Barrage Al Massira"          },
@@ -591,6 +617,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Mare_Vacoas'    :     {'run':True, "xyt" :{"x": (  57.48 ,  57.52),   "y" : ( - 20.38 , -20.36  ) ,"time": (year1,year2)},"desc": "Mauritius - Mare aux Vacoas"},
         'Naute'          :     {'run':True, "xyt" :{"x": (  17.93 ,  18.05),   "y" : ( - 26.97 , -26.92  ) ,"time": (year1,year2)},"desc": "Namibia - Naute reserve"},
         'Lake_Turkana'   :     {'run':True, "xyt" :{"x": (  35.80 ,  36.72),   "y" : (    2.38 ,   4.79  ) ,"time": (year1,year2)},"desc": "Kenya -- Lake Turkana"},
+        'Haartbeesport_dam':   {'run':True, "xyt" :{"x": (  27.7972, 27.91117), "y" : (-25.7761,-25.7275) ,"time": (year1,year2)},"desc": "Haartbeesport Dam  -- South Africa"},
+        'Lake Bogoria'   :     {'run':True, "xyt" :{"x": (  36.058, 36.133),   "y" : (  0.1791 ,0.3534) ,"time": (year1,year2)},"desc": "Lake Bogoria -- Tanzania"},
         }
 
      #Manyara is a shallow alkaline lake 10 feet deep. https://wildlifesafaritanzania.com/facts-about-lake-manyara-national-park/
