@@ -1,10 +1,10 @@
-name : Build and Push Image
+name: Build and Push Image
 
 env:
   IMAGE_NAME: victorianeema/deafrica-water-quality
 
 on:
-  workflow_dispatch:  # This makes it triggerable only manually
+  workflow_dispatch: # This makes it triggerable only manually
 
 jobs:
   push-if-main:
