@@ -263,7 +263,7 @@ def ChlA_MERIS2B(dataset, band_708, band_665, verbose=False):   #matching MSI ba
 # ---- Functions to estimate ChlA using the MERIS and MODIS 2-Band models, using closest bands from MSI (6, 5, 4) or other
     if verbose: print("ChlA_MERIS two-band model")
     X = dataset[band_708] / dataset[band_665]
-    return  (25.28 * (X)*2) + 14.85 * (X) - 15.18
+    return  (25.28 * (X)**2) + 14.85 * (X) - 15.18
 
 
 def ChlA_MODIS2B(dataset, band_748, band_667,verbose=False):  #matching MSI bands are 6 and 4
