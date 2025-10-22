@@ -181,6 +181,7 @@ def SPM_QIU(dataset,green_band,red_band,verbose=False):
 # ---- Quang Total Suspended Solids (TSS)
 # Paper: Quang et al. 2017
 # Units of mg/L concentration
+
 def TSS_QUANG8(dataset,red_band,verbose=False):
     # ---- Function to calculate quang8 value ----
     if verbose: print("TSS_QUANG8")
@@ -195,6 +196,8 @@ def TSS_QUANG8(dataset,red_band,verbose=False):
 #  ridiculous (exp(10000) etc. is not a good number). This therefore avoids overflow. 
 # This model can only be used together with other models and indices; it may handle some situations well...
 
+# --- This measure by Zhang is based on a log regression and therefore requires an exponential making it fundamentally unstable. 
+#     Propose to remove this measure since I can't make it work in the published form. 
 def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=False):
     if verbose: print("TSS_Zhang")
     abovezero = .00001  #avoids div by zero if blue is zero
@@ -568,7 +571,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Lake_vic_east':       {'run':True, "xyt" :{"x": ( 32.78, 33.3),       "y" : ( -2.65,-2.3),      "time": (year1,year2)  },"desc": ""          },
         'Lake_vic_test':       {'run':True, "xyt" :{"x": ( 32.78, 33.13),       "y" : ( -1.95,-1.6),      "time": (year1,year2)  },"desc": "Lake Victoria cloud affected"},
         'Lake_vic_turbid':     {'run':True, "xyt" :{"x": ( 34.60, 34.70),       "y" : ( -.25,-.20),      "time": (year1,year2)  },"desc": "Lake Victoria turbid area in NE"},
-        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.45, 34.58),       "y" : ( -.275,-.210),    "time": ('2015-04-15','2015-05-30')  },"desc": "Lake Victoria Water Hyacinth affected area in NE"}, #lake vic turbid is case study for algal bloom I think vis in l7 etm 2015-05-03.
+        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.62, 34.78),       "y" : ( -.18,-.08),      "time": (year1,year2)  },"desc": "Lake Victoria Water Hyacinth affected area in NE, port Kisumu"},
         'Lake_vic_clear':      {'run':True, "xyt" :{"x": ( 34.00, 34.10),       "y" : ( -.32,-.27),      "time": (year1,year2)  },"desc": "Lake Victoria clear water area"},
         'Lake_Victoria_NE' :   {'run':True, "xyt" :{'x': (33.5,34.8),         'y': (-.6,0.4),            'time': (year1,year2)  },"desc": 'Lake Victoria NE'},
         'Morocco':             {'run':True, "xyt" :{"x": (-7.45, -7.65),       "y" : (  32.4,32.5),      "time": (year1,year2)  },"desc": "Barrage Al Massira"          },
