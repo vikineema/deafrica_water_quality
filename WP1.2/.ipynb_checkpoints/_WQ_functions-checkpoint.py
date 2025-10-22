@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python 
 # coding: utf-8
 import numpy  as np
 import xarray as xr
@@ -62,6 +62,32 @@ def WQ_vars(ds,
         if True: ds= ds.drop_vars(list(ds[new_dimension_name].values))
     return ds,wq_varlist
         
+# ------------------------------------------------------------------------------------------------------------------------------------
+# FAI algorithm depends on knowledge of hte central wavelengths of the red, nir, and swir sensors. I include  a dictionary of those values here to keep the function self-contained
+def FAI (ds, instrument, test=False):
+    inst_bands = ib = {}
+    ib['msi']     = {  'red' : ('msi04',     665),          'nir' : ('msi8a',     864),          'swir': ('msi11',     1612)            }
+    ib['msi_agm'] = {  'red' : ('msi04_agm', 665),          'nir' : ('msi8a_agm', 864),          'swir': ('msi11_agm', 1612)            }
+    ib['oli']     = {  'red' : ('oli04',    (640 + 670)/2), 'nir' : ('oli05',    (850 + 880)/2), 'swir': ('oli06',    (1570 + 1650)/2)  }
+    ib['oli_agm'] = {  'red' : ('oli04_agm',(640 + 670)/2), 'nir' : ('oli05_agm',(850 + 880)/2), 'swir': ('oli06_agm',(1570 + 1650)/2)  }
+    ib['tm']      = {  'red' : ('tm03',     (630 + 690)/2), 'nir' : ('tm04',     (760 + 900)/2), 'swir': ('tm05',     (1550 + 1750)/2)  }
+    ib['tm_agm']  = {  'red' : ('tm03_agm', (630 + 690)/2), 'nir' : ('tm04_agm',(760 + 900)/2),  'swir': ('tm05_agm', (1550 + 1750)/2)  }
+    if not instrument in inst_bands.keys():
+        print('! -- invalid instrument, FAI will be calculated as zero --- !')
+        return(0)
+    red, l_red   = ib[instrument]['red'][0], ib[instrument]['red'] [1]
+    nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
+    swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
+
+    if test: 
+        print('red : ',red,l_red)
+        print('nir : ',nir,l_nir)
+        print('swir: ',swir,l_swir)
+        print((l_nir - l_red )/(l_swir-l_red))
+            
+    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
+    return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
+# ------------------------------------------------------------------------------------------------------------------------------------
 
 
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
@@ -155,6 +181,7 @@ def SPM_QIU(dataset,green_band,red_band,verbose=False):
 # ---- Quang Total Suspended Solids (TSS)
 # Paper: Quang et al. 2017
 # Units of mg/L concentration
+
 def TSS_QUANG8(dataset,red_band,verbose=False):
     # ---- Function to calculate quang8 value ----
     if verbose: print("TSS_QUANG8")
@@ -169,6 +196,8 @@ def TSS_QUANG8(dataset,red_band,verbose=False):
 #  ridiculous (exp(10000) etc. is not a good number). This therefore avoids overflow. 
 # This model can only be used together with other models and indices; it may handle some situations well...
 
+# --- This measure by Zhang is based on a log regression and therefore requires an exponential making it fundamentally unstable. 
+#     Propose to remove this measure since I can't make it work in the published form. 
 def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=False):
     if verbose: print("TSS_Zhang")
     abovezero = .00001  #avoids div by zero if blue is zero
@@ -186,18 +215,12 @@ def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbos
     # --- 'resample_rate' is the spatial resample step to reduce the memory required
     # --- The returned lattice is on the same t,x,y coordinates as the original, after resampling back to it
     # --- this code will need revisiting to support non-geomedian data which has more bands available. 
-    # --- Also, right now, msi and oli are dealt with separately rather than as alternatives...
-    # --- it would be nice to remove this 'hard-wiring'.
+    # --- Also, right now, msi and oli are dealt with separately rather than as alternatives ... and it would be nice to remove this 'hard-wiring'.
     # --- Memory intensive due to the use of vector multiplication (dot products). 
     #      A less elegant coding approch might be more memory efficient ----
     # 
-    
     if verbose: print('Determining the Optical Water Type ...')
-    owt_groups = {}
-    owt_groups['oligotrophic']                   = [3,9,13]
-    owt_groups['eutropic and blue-green']        = [1,2,4,5,11,12]
-    owt_groups['hypereutrophic and green-brown'] = [6,7,8,10]
-
+    
     # estimated spectra for each optical water type for each sensor (MSI, OLI, TM) calculated from full spectra table provided by Vagelis Spyrakos
     #columns are bands, rows are OWT
     #1	2	3	4	5	6	7
@@ -495,7 +518,6 @@ def water_analysis(ds,
     
     return(ds)
 
-
 def rename_vars_robust(dataset,var_names,verbose=False):
         # --- helpful function when renaming variables. var_names nees to be pairs of old and new names  --- 
         for var in var_names :
@@ -512,6 +534,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     # - the input argument tells it which parameters to choose
     # - secondary parameters such as the grid resolution are computed and returned
 
+    if year1 == None: year1 = '2000'
+    if year2 == None: year2 = '2024'
     '''
     the structure is:
     - a dictionary of lists, called 'places'. Each list contains:
@@ -523,6 +547,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     
     places = {
         'Lake_Baringo'     :   {'run':True, "xyt" :{"x": (36.00,  36.17),     "y": (00.45,00.74),        "time": (year1,year2)},"desc":'Lake Baringo'    },
+        'Lake_Tikpan'      :   {'run':True, "xyt" :{"x": ( 1.8215,   1.8265), "y": (6.459,6.4626),       "time": (year1,year2)},"desc":'Lake Tikpan'    },
         'Lake_Chad'        :   {'run':True, "xyt" :{"x": (12.97,  15.50),     "y": (12.40,14.50),        "time": (year1,year2)},"desc":'Lake Chad'       },
         'Weija_Reservoir'  :   {'run':True, "xyt" :{"x": (-0.325, -0.41),     "y": ( 5.54, 5.62),        "time": (year1,year2)  },"desc":''                },
         'Senegal_StLouis'  :   {'run':True, "xyt" :{"x": (-15.74,-15.84),     "y": (16.3, 16.3900),      "time": (year1,year2)  },"desc":'Lac de Guiers'   },
@@ -540,6 +565,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Lake_vic_east':       {'run':True, "xyt" :{"x": ( 32.78, 33.3),       "y" : ( -2.65,-2.3),      "time": (year1,year2)  },"desc": ""          },
         'Lake_vic_test':       {'run':True, "xyt" :{"x": ( 32.78, 33.13),       "y" : ( -1.95,-1.6),      "time": (year1,year2)  },"desc": "Lake Victoria cloud affected"},
         'Lake_vic_turbid':     {'run':True, "xyt" :{"x": ( 34.60, 34.70),       "y" : ( -.25,-.20),      "time": (year1,year2)  },"desc": "Lake Victoria turbid area in NE"},
+        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.62, 34.78),       "y" : ( -.18,-.08),      "time": (year1,year2)  },"desc": "Lake Victoria Water Hyacinth affected area in NE, port Kisumu"},
         'Lake_vic_clear':      {'run':True, "xyt" :{"x": ( 34.00, 34.10),       "y" : ( -.32,-.27),      "time": (year1,year2)  },"desc": "Lake Victoria clear water area"},
         'Lake_Victoria_NE' :   {'run':True, "xyt" :{'x': (33.5,34.8),         'y': (-.6,0.4),            'time': (year1,year2)  },"desc": 'Lake Victoria NE'},
         'Morocco':             {'run':True, "xyt" :{"x": (-7.45, -7.65),       "y" : (  32.4,32.5),      "time": (year1,year2)  },"desc": "Barrage Al Massira"          },
@@ -553,9 +579,14 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Ethiopia_Lake_Tana':  {'run':True, "xyt" :{"x": ( 37.05,   37.22),    "y" : (  11.9  ,  12.0),  "time": (year1,year2)  },"desc": "Ethiopia_Lake_Tana"          },
         'Mare_aux_Vacoas':     {'run':True, "xyt" :{"x": ( 57.485,  57.524),   "y" : ( -20.389, -20.359),"time": (year1,year2)  },"desc": "Mare_aux_Vacoas"          },
         'SA_smalldam':         {'run':True, "xyt" :{"x": ( 19.494,  19.498),   "y" : ( -33.802, -33.800),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa"          },
+        'SA_smalldam1':        {'run':True, "xyt" :{"x": ( 19.505, 19.510),   "y" : ( -33.8065, -33.803),"time": (year1,year2)  },"desc": "Irrigation Dam, South Africa, clear water"     },
         'Ethiopia_both':       {'run':False, "xyt" :{"x": ( 38.35,   38.83),    "y" : (   7.37 ,   7.71), "time": (year1,year2)  },"desc": "Ethiopia, Lake Abiata +"          },
+        'Lake Chamo'   :       {'run':True, "xyt" :{"x": ( 37.45,   37.65) ,   "y" : (   5.685 ,  5.979), "time": (year1,year2)  },"desc": "Lake Chamo, Ethiopia"          },
+        'Lake Ziway'   :       {'run':True, "xyt" :{"x": ( 38.711,  38.966),   "y" : (   7.838 ,  8.148), "time": (year1,year2)  },"desc": "Lake Ziway, Ethiopia"          },
+        'Lake Alwassa' :       {'run':True, "xyt" :{"x": ( 38.380,  38.493),   "y" : (   6.977 ,  7.133), "time": (year1,year2)  },"desc": "Lake Alwassa, Ethiopia"          },
+        'Lake Elmenteita' :    {'run':True, "xyt" :{"x": ( 36.211,  36.273),   "y" : (  -0.488 , -0.401), "time": (year1,year2)  },"desc": "Lake Elmenteita, Kenya"          },
         'Madagascar':          {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
-        'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.68 ,  35.92 ),   "y" : ( -03.86 , -03.38), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
+        'Lake_Manyara':        {'run':True, "xyt" :{"x": ( 35.724 ,  35.929 ), "y" : ( -03.814, -03.409), "time": (year1,year2) },"desc": "Lake_Manyara, Tanzania"          },#this is the lake to use as an example of monitoring, see 2015-12-28
         'Farihy_':             {'run':True, "xyt" :{"x": ( 43.58 ,  43.76 ),   "y" : ( -22.03 , -21.87 ),"time": (year1,year2)  },"desc": "Farihy Ihotry, Madagascar"          },
         'Farihy_itasy':        {'run':True, "xyt" :{"x": ( 46.73 ,  46.83 ),   "y" : ( -19.10 , -19.04 ),"time": (year1,year2)},"desc": "Farihy Itasy, Madagascar"          },
         'Kolokonda':           {'run':True, "xyt" :{"x": ( 35.4888, 35.5488),   "y" : ( -5.976, -5.916 ),"time": (year1,year2)},"desc": "Kolokonda, Tanzania"          },
@@ -583,6 +614,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Mare_Vacoas'    :     {'run':True, "xyt" :{"x": (  57.48 ,  57.52),   "y" : ( - 20.38 , -20.36  ) ,"time": (year1,year2)},"desc": "Mauritius - Mare aux Vacoas"},
         'Naute'          :     {'run':True, "xyt" :{"x": (  17.93 ,  18.05),   "y" : ( - 26.97 , -26.92  ) ,"time": (year1,year2)},"desc": "Namibia - Naute reserve"},
         'Lake_Turkana'   :     {'run':True, "xyt" :{"x": (  35.80 ,  36.72),   "y" : (    2.38 ,   4.79  ) ,"time": (year1,year2)},"desc": "Kenya -- Lake Turkana"},
+        'Haartbeesport_dam':   {'run':True, "xyt" :{"x": (  27.7972, 27.91117), "y" : (-25.7761,-25.7275) ,"time": (year1,year2)},"desc": "Haartbeesport Dam  -- South Africa"},
+        'Lake Bogoria'   :     {'run':True, "xyt" :{"x": (  36.058, 36.133),   "y" : (  0.1791 ,0.3534) ,"time": (year1,year2)},"desc": "Lake Bogoria -- Tanzania"},
         }
 
      #Manyara is a shallow alkaline lake 10 feet deep. https://wildlifesafaritanzania.com/facts-about-lake-manyara-national-park/
