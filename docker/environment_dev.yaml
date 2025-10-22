@@ -12,7 +12,8 @@ dependencies:
   - coverage
   - pytest
   # Jupyter
-  - jupyterlab
+  - jupytergis 
+  - qgis
   - jupyterlab_iframe
   - jupyter-resource-usage
   - nodejs

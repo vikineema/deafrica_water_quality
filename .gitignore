@@ -8,6 +8,7 @@
 *.local/**
 *.npm/**
 **/.ipynb_checkpoints/**
+**/.jupyter_ystore.db
 # Bash files
 .bash_history
 # Dev containers files
