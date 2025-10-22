@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import gc   # garbage collection
 
 
+
+
 def WQ_vars(ds,
             algorithms,              # a dictionary of  algorithms instruments, and bands
             instruments,             # a dictionary of the instruments that have been used to build the dataset
@@ -61,7 +63,180 @@ def WQ_vars(ds,
         #drop  the old variables to keep it tidy:
         if True: ds= ds.drop_vars(list(ds[new_dimension_name].values))
     return ds,wq_varlist
+
+    
+# ------------------------------------------------------------------------------------------------------------------------------------
+# --- Calculate NDVI values for annual geomedians instrument ----
+#     NDVI is calculated for each instrument in the series (tm, oli, msi).
+#     The overall NDVI is a weighted mean (weighted by the number of observations in each geomedian)
+
+def geomedian_NDVI(ds_annual,test=False):
+    WAFT = 0.45
+    ndvi_bands = {}
+    ndvi_bands['tm']  = ['tm04','tm03']
+    ndvi_bands['oli'] = ['oli05','oli04']
+    ndvi_bands['msi'] = ['msi8a','msi04']
+
+    # --- these values are used as a simple adjustment of the ndvi values to maximise comparability
+    #     In practice over a few years the NDVI distributions are remakably consistent, but in any given year they are quite divergent.
+    
+    reference_mean = {
+        'ndvi' : {'msi_agm': 0.2335, 'oli_agm' : 0.2225, 'tm_agm': 0.2000},
+        }
+    cutoff = {
+        'ndvi' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
+        }
+    count = 0
+    for inst in list(('msi','oli','tm')):
+        inst_agm = inst+'_agm'
+        if inst_agm in ds_annual.data_vars: 
+            scale = reference_mean['ndvi']['msi_agm'] / reference_mean['ndvi'][inst_agm]
+            if test : print(inst_agm)
+                
+            ndvi_data = \
+                (ds_annual[ndvi_bands[inst][0]+'_agm'] - ds_annual[ndvi_bands[inst][1]+'_agm']) / \
+                (ds_annual[ndvi_bands[inst][0]+'_agm'] + ds_annual[ndvi_bands[inst][1]+'_agm']) * scale
+
+            # --- set nans to zero, and also in the agm_count variable in the dataset which is more logically zero rather than nan
+            ndvi_data                    = np.where(~np.isnan(ndvi_data),ndvi_data,0)
+            ds_annual[inst_agm+'_count'] = (ds_annual[inst_agm+'_count'].dims), np.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+
+            # --- this step must be done before thresholding for the instrument, since that brings in nans
+            if count == 0: 
+                mean_ndvi = ndvi_data * ds_annual[inst_agm+'_count']
+                agm_count =             ds_annual[inst_agm+'_count']
+            else :    
+                mean_ndvi = mean_ndvi + ndvi_data
+                agm_count = agm_count + ds_annual[inst_agm+'_count']
+            count = count + 1
+
+            # --- trim the ndvi values back to relevant areas and values
+            ndvi_data = np.where(ndvi_data > cutoff['ndvi']['msi_agm'],ndvi_data,np.nan)
+            ndvi_data = np.where(ds_annual.wofs_5yr_freq > WAFT,ndvi_data,np.nan)
+
+            # --- this retains an ndvi for each instument, but that is not essential
+            ds_annual[inst_agm+'_ndvi'] = (ds_annual.wofs_ann_freq.dims),ndvi_data
+
+    # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
+    mean_ndvi = mean_ndvi / agm_count
+    mean_ndvi = np.where(mean_ndvi > cutoff['ndvi']['msi_agm'],mean_ndvi,np.nan)
+    mean_ndvi = np.where(ds_annual.wofs_5yr_freq > WAFT       ,mean_ndvi,np.nan)
+
+    ds_annual['agm_ndvi'] = (ds_annual.wofs_ann_freq.dims), mean_ndvi
+    return(ds_annual)
+
+def geomedian_NDVI_percent_affected (ds_annual,agm_ndvi_cutoff=None,WAFT=None) :
+    # calculate the percent of the water area that is affected. For this to work it is important to take a longer term view of 
+    # the wofs frequency since the annual frequency is reduced due to the presence of water hyacinth etc. in affected areas.
+    # The wofs_5yr_frequency is used.
+    if agm_ndvi_cutoff == None: agm_ndvi_cutoff  = 0.20   ## --- empirically determined; values over this are considered to be indicative of Surface photosynthetic material
+    if WAFT            == None: WAFT             = 0.45   #water frequency threshold for deciding water from non-water
+    
+    water_pixels     = ds_annual.where(ds_annual.wofs_5yr_freq > WAFT).wofs_5yr_freq.count(dim=('x','y'))
+
+    ds_annual['ndvi_percent_cover'] = ('time'), \
+            (ds_annual.where(ds_annual.wofs_5yr_freq > WAFT)\
+            .where(ds_annual.agm_ndvi > agm_ndvi_cutoff)\
+             .agm_ndvi\
+            .count(dim= ('x','y'))*100/water_pixels).data
+    
+    return(ds_annual)
+
+    
+# ------------------------------------------------------------------------------------------------------------------------------------
+#     Values from different sensors are standardised using mean values developed empirically, with MSI taken as the reference becasue there are more msi data. 
+#     The FAI function needs to kmow the instrument because the bands used are instrunent-specific
+
+def geomedian_FAI (ds_annual,test=False):
+    reference_mean = {
+        'fai'  : {'msi_agm': 0.0970, 'oli_agm' : 0.1015, 'tm_agm': 0.0962},
+        }
+    cutoff = {
+        'fai' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
+        }
+    WAFT = 0.45    # WAter Frequency Threshold. Higher than this loses some of the areas that are persistently infested with weeds; 
+                   # unlikely to be a problem in general but it slightly affects the results for Hartbeespoort Dam.
+    
+    count = 0   
+    for inst in list(('msi','oli','tm')):
+        inst_agm = inst+'_agm'
+        if inst_agm in ds_annual.data_vars: 
+            scale = reference_mean['fai']['msi_agm'] / reference_mean['fai'][inst_agm]
+            #ds[instrument+'_fai']        = ds_annual.wofs_ann_freq  * 0  # --- initiates the array with the correct dimension and VALUE ZERO 
+            fai_data = FAI(ds_annual,inst_agm,test = False) * scale
+
+            # --- set nans to zero, and also in the agm_count variable
+            fai_data                    = np.where(~np.isnan(fai_data),fai_data,0)
+            ds_annual[inst_agm+'_count'] = (ds_annual[inst_agm+'_count'].dims), np.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+
+            # --- this step must be done before thresholding for the instrument, since that brings in nans
+            if count == 0: 
+                mean_fai  =  fai_data * ds_annual[inst_agm+'_count']
+                agm_count =             ds_annual[inst_agm+'_count']
+            else :    
+                mean_fai  = mean_fai  + fai_data
+                agm_count = agm_count + ds_annual[inst_agm+'_count']
+            count = count + 1
+
+            # --- trim the fai values back to relevant areas and values
+            fai_data = np.where(fai_data > cutoff['fai']['msi_agm'],fai_data,np.nan)
+            fai_data = np.where(ds_annual.wofs_5yr_freq > WAFT,fai_data,np.nan)
+
+            # --- this retains an ndvi for each instument, but that is not essential
+            ds_annual[inst_agm+'_fai'] = (ds_annual.wofs_ann_freq.dims),fai_data
+
+    # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
+    mean_fai = mean_fai / agm_count
+    mean_fai = np.where(mean_fai > cutoff['fai']['msi_agm'] ,mean_fai,np.nan)
+    mean_fai = np.where(ds_annual.wofs_5yr_freq > WAFT      ,mean_fai,np.nan)
+
+    ds_annual['agm_fai'] = (ds_annual.wofs_ann_freq.dims), mean_fai
+
+    return(ds_annual)
+
+def geomedian_FAI_percent_affected (ds_annual,agm_fai_cutoff=None,WAFT=None) :
+    # calculate the percent of the water area that is affected. For this to work it is important to take a longer term view of 
+    # the wofs frequency since the annual frequency is reduced due to the presence of water hyacinth etc. in affected areas.
+    # The wofs_5yr_frequency is used.
+
+    if agm_fai_cutoff == None: agm_fai_cutoff  = 0.01   #value above which FAI is considered to indicate cyanobacteria or plant material
+    if WAFT           == None: WAFT            = 0.45   #water frequency threshold for deciding water from non-water
         
+    water_pixels    = ds_annual.where(ds_annual.wofs_5yr_freq > WAFT).wofs_5yr_freq.count(dim=('x','y'))
+    ds_annual['fai_percent_cover'] = ('time'), \
+            (ds_annual.where(ds_annual.wofs_5yr_freq > WAFT)\
+            .where(ds_annual.agm_fai > agm_fai_cutoff)\
+             .agm_fai\
+            .count(dim= ('x','y'))*100/water_pixels).data
+    return(ds_annual)
+    
+    
+# ------------------------------------------------------------------------------------------------------------------------------------
+# FAI algorithm depends on knowledge of the central wavelengths of the red, nir, and swir sensors. I include  a dictionary of those values here to keep the function self-contained
+def FAI (ds, instrument, test=False):
+    inst_bands = ib = {}
+    ib['msi']     = {  'red' : ('msi04',     665),          'nir' : ('msi8a',     864),          'swir': ('msi11',     1612)            }
+    ib['msi_agm'] = {  'red' : ('msi04_agm', 665),          'nir' : ('msi8a_agm', 864),          'swir': ('msi11_agm', 1612)            }
+    ib['oli']     = {  'red' : ('oli04',    (640 + 670)/2), 'nir' : ('oli05',    (850 + 880)/2), 'swir': ('oli06',    (1570 + 1650)/2)  }
+    ib['oli_agm'] = {  'red' : ('oli04_agm',(640 + 670)/2), 'nir' : ('oli05_agm',(850 + 880)/2), 'swir': ('oli06_agm',(1570 + 1650)/2)  }
+    ib['tm']      = {  'red' : ('tm03',     (630 + 690)/2), 'nir' : ('tm04',     (760 + 900)/2), 'swir': ('tm05',     (1550 + 1750)/2)  }
+    ib['tm_agm']  = {  'red' : ('tm03_agm', (630 + 690)/2), 'nir' : ('tm04_agm',(760 + 900)/2),  'swir': ('tm05_agm', (1550 + 1750)/2)  }
+    if not instrument in inst_bands.keys():
+        print('! -- invalid instrument, FAI will be calculated as zero --- !')
+        return(0)
+    red, l_red   = ib[instrument]['red'][0], ib[instrument]['red'] [1]
+    nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
+    swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
+
+    if test: 
+        print('red : ',red,l_red)
+        print('nir : ',nir,l_nir)
+        print('swir: ',swir,l_swir)
+        print((l_nir - l_red )/(l_swir-l_red))
+            
+    # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
+    return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
+# ------------------------------------------------------------------------------------------------------------------------------------
 
 
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
@@ -88,7 +263,7 @@ def ChlA_MERIS2B(dataset, band_708, band_665, verbose=False):   #matching MSI ba
 # ---- Functions to estimate ChlA using the MERIS and MODIS 2-Band models, using closest bands from MSI (6, 5, 4) or other
     if verbose: print("ChlA_MERIS two-band model")
     X = dataset[band_708] / dataset[band_665]
-    return  (25.28 * (X)*2) + 14.85 * (X) - 15.18
+    return  (25.28 * (X)**2) + 14.85 * (X) - 15.18
 
 
 def ChlA_MODIS2B(dataset, band_748, band_667,verbose=False):  #matching MSI bands are 6 and 4
@@ -155,6 +330,7 @@ def SPM_QIU(dataset,green_band,red_band,verbose=False):
 # ---- Quang Total Suspended Solids (TSS)
 # Paper: Quang et al. 2017
 # Units of mg/L concentration
+
 def TSS_QUANG8(dataset,red_band,verbose=False):
     # ---- Function to calculate quang8 value ----
     if verbose: print("TSS_QUANG8")
@@ -169,6 +345,8 @@ def TSS_QUANG8(dataset,red_band,verbose=False):
 #  ridiculous (exp(10000) etc. is not a good number). This therefore avoids overflow. 
 # This model can only be used together with other models and indices; it may handle some situations well...
 
+# --- This measure by Zhang is based on a log regression and therefore requires an exponential making it fundamentally unstable. 
+#     Propose to remove this measure since I can't make it work in the published form. 
 def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=False):
     if verbose: print("TSS_Zhang")
     abovezero = .00001  #avoids div by zero if blue is zero
@@ -186,18 +364,12 @@ def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbos
     # --- 'resample_rate' is the spatial resample step to reduce the memory required
     # --- The returned lattice is on the same t,x,y coordinates as the original, after resampling back to it
     # --- this code will need revisiting to support non-geomedian data which has more bands available. 
-    # --- Also, right now, msi and oli are dealt with separately rather than as alternatives...
-    # --- it would be nice to remove this 'hard-wiring'.
+    # --- Also, right now, msi and oli are dealt with separately rather than as alternatives ... and it would be nice to remove this 'hard-wiring'.
     # --- Memory intensive due to the use of vector multiplication (dot products). 
     #      A less elegant coding approch might be more memory efficient ----
     # 
-    
     if verbose: print('Determining the Optical Water Type ...')
-    owt_groups = {}
-    owt_groups['oligotrophic']                   = [3,9,13]
-    owt_groups['eutropic and blue-green']        = [1,2,4,5,11,12]
-    owt_groups['hypereutrophic and green-brown'] = [6,7,8,10]
-
+    
     # estimated spectra for each optical water type for each sensor (MSI, OLI, TM) calculated from full spectra table provided by Vagelis Spyrakos
     #columns are bands, rows are OWT
     #1	2	3	4	5	6	7
@@ -542,7 +714,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Lake_vic_east':       {'run':True, "xyt" :{"x": ( 32.78, 33.3),       "y" : ( -2.65,-2.3),      "time": (year1,year2)  },"desc": ""          },
         'Lake_vic_test':       {'run':True, "xyt" :{"x": ( 32.78, 33.13),       "y" : ( -1.95,-1.6),      "time": (year1,year2)  },"desc": "Lake Victoria cloud affected"},
         'Lake_vic_turbid':     {'run':True, "xyt" :{"x": ( 34.60, 34.70),       "y" : ( -.25,-.20),      "time": (year1,year2)  },"desc": "Lake Victoria turbid area in NE"},
-        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.45, 34.58),       "y" : ( -.275,-.210),    "time": ('2015-04-15','2015-05-30')  },"desc": "Lake Victoria turbid area in NE"}, #lake vic turbid is case study for algal bloom I think vis in l7 etm 2015-05-03.
+        'Lake_vic_algae':      {'run':True, "xyt" :{"x": ( 34.62, 34.78),       "y" : ( -.18,-.08),      "time": (year1,year2)  },"desc": "Lake Victoria Water Hyacinth affected area in NE, port Kisumu"},
         'Lake_vic_clear':      {'run':True, "xyt" :{"x": ( 34.00, 34.10),       "y" : ( -.32,-.27),      "time": (year1,year2)  },"desc": "Lake Victoria clear water area"},
         'Lake_Victoria_NE' :   {'run':True, "xyt" :{'x': (33.5,34.8),         'y': (-.6,0.4),            'time': (year1,year2)  },"desc": 'Lake Victoria NE'},
         'Morocco':             {'run':True, "xyt" :{"x": (-7.45, -7.65),       "y" : (  32.4,32.5),      "time": (year1,year2)  },"desc": "Barrage Al Massira"          },
@@ -591,6 +763,8 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
         'Mare_Vacoas'    :     {'run':True, "xyt" :{"x": (  57.48 ,  57.52),   "y" : ( - 20.38 , -20.36  ) ,"time": (year1,year2)},"desc": "Mauritius - Mare aux Vacoas"},
         'Naute'          :     {'run':True, "xyt" :{"x": (  17.93 ,  18.05),   "y" : ( - 26.97 , -26.92  ) ,"time": (year1,year2)},"desc": "Namibia - Naute reserve"},
         'Lake_Turkana'   :     {'run':True, "xyt" :{"x": (  35.80 ,  36.72),   "y" : (    2.38 ,   4.79  ) ,"time": (year1,year2)},"desc": "Kenya -- Lake Turkana"},
+        'Haartbeesport_dam':   {'run':True, "xyt" :{"x": (  27.7972, 27.91117), "y" : (-25.7761,-25.7275) ,"time": (year1,year2)},"desc": "Haartbeesport Dam  -- South Africa"},
+        'Lake Bogoria'   :     {'run':True, "xyt" :{"x": (  36.058, 36.133),   "y" : (  0.1791 ,0.3534) ,"time": (year1,year2)},"desc": "Lake Bogoria -- Tanzania"},
         }
 
      #Manyara is a shallow alkaline lake 10 feet deep. https://wildlifesafaritanzania.com/facts-about-lake-manyara-national-park/
