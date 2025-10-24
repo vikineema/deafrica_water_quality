@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ---------------- FHS micromamba shell ----------------
 ENV_NAME="deafrica-water-quality-env"
-PROD_YAML="docker/environment_prod.yaml"
-DEV_YAML="docker/environment_dev.yaml"
+# PROD_YAML="../docker/environment_prod.yaml"
+# DEV_YAML="docker/environment_dev.yaml"
 
 # Keep record of the env files hash files
 PROD_ENV_HASH=$(sha256sum "$PROD_YAML" | awk '{print $1}')
 DEV_ENV_HASH=$(sha256sum "$DEV_YAML" | awk '{print $1}')
 
-HASH_FILE=".tmp/${ENV_NAME}_hash.json"
+HASH_FILE="$TMPDIR/${ENV_NAME}_hash.json"
 mkdir -p "$(dirname "$HASH_FILE")"
 
 # Auto-create or update environment

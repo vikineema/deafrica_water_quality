@@ -14,9 +14,11 @@
   {
     devShells.${system}.default = pkgs.mkShell {
       buildInputs = [ micromamba-shell.packages.${system}.default pkgs.jq pkgs.moreutils ];
-
       shellHook = 
         ''
+          export TMPDIR=$HOME/.tmp
+          export PROD_YAML=${./docker/environment_prod.yaml}
+          export DEV_YAML=${./docker/environment_dev.yaml}
           if [ -z "$MICROMAMBA_EXE" ]; then
             echo "Entering default micromamba shell..."
             exec micromamba-shell --rcfile ${./micromamba_shell_hook.sh}
