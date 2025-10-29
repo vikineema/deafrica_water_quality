@@ -5,9 +5,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import gc   # garbage collection
 
-
-
-
+# --------------------------------------------------------------------------------------------------------
 def WQ_vars(ds,
             algorithms,              # a dictionary of  algorithms instruments, and bands
             instruments,             # a dictionary of the instruments that have been used to build the dataset
@@ -146,70 +144,72 @@ def geomedian_NDVI_percent_affected (ds_annual,agm_ndvi_cutoff=None,WAFT=None) :
 # ------------------------------------------------------------------------------------------------------------------------------------
 #     Values from different sensors are standardised using mean values developed empirically, with MSI taken as the reference becasue there are more msi data. 
 #     The FAI function needs to kmow the instrument because the bands used are instrunent-specific
+#     Revised version:
+#     - addresses a bug in taking the averaged fai value, 
+#     - uses an externally supplied water mask rather than an internal test,
+#     - applies a threshold for valid fai values (i.e., above zero)
+#     - includes multiple test l
 
-def geomedian_FAI (ds_annual,test=False):
+def geomedian_FAI (ds_annual,water_mask,test=False):
     reference_mean = {
         'fai'  : {'msi_agm': 0.0970, 'oli_agm' : 0.1015, 'tm_agm': 0.0962},
         }
-    cutoff = {
-        'fai' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
+    threshold = {
+        'fai' : {'msi_agm': 0.01   , 'oli_agm' : 0.01   , 'tm_agm': 0.01},
         }
-    WAFT = 0.45    # WAter Frequency Threshold. Higher than this loses some of the areas that are persistently infested with weeds; 
-                   # unlikely to be a problem in general but it slightly affects the results for Hartbeespoort Dam.
-    
+    if test : print('starting')
     count = 0   
     for inst in list(('msi','oli','tm')):
         inst_agm = inst+'_agm'
         if inst_agm in ds_annual.data_vars: 
             scale = reference_mean['fai']['msi_agm'] / reference_mean['fai'][inst_agm]
-            #ds[instrument+'_fai']        = ds_annual.wofs_ann_freq  * 0  # --- initiates the array with the correct dimension and VALUE ZERO 
+            if test: print('\n',inst_agm,scale)
+
+            # --- calculate the FAI for this sensor
             fai_data = FAI(ds_annual,inst_agm,test = False) * scale
+            #if test: print('\n',fai_data)
 
             # --- set nans to zero, and also in the agm_count variable
-            fai_data                    = np.where(~np.isnan(fai_data),fai_data,0)
-            ds_annual[inst_agm+'_count'] = (ds_annual[inst_agm+'_count'].dims), np.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+            fai_data                     = np.where(~np.isnan(fai_data),fai_data,0)
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+
+            if test: print('\n','fai data : ',fai_data)
+            if test: print('\n','agm count: ',ds_annual[inst_agm+'_count'])
 
             # --- this step must be done before thresholding for the instrument, since that brings in nans
             if count == 0: 
                 mean_fai  =  fai_data * ds_annual[inst_agm+'_count']
                 agm_count =             ds_annual[inst_agm+'_count']
+                if test: print('\n fai and agm count initial',mean_fai,agm_count)  
             else :    
-                mean_fai  = mean_fai  + fai_data
+                mean_fai  = mean_fai  + fai_data * ds_annual[inst_agm+'_count']
                 agm_count = agm_count + ds_annual[inst_agm+'_count']
+                if test: print('\n fai and agm count compounded',mean_fai,agm_count)
             count = count + 1
 
             # --- trim the fai values back to relevant areas and values
-            fai_data = np.where(fai_data > cutoff['fai']['msi_agm'],fai_data,np.nan)
-            fai_data = np.where(ds_annual.wofs_5yr_freq > WAFT,fai_data,np.nan)
+            fai_data = np.where(fai_data > threshold['fai']['msi_agm'],fai_data,np.nan)
+            
+            # fai_data = np.where(ds_annual.wofs_5yr_freq > WAFT,fai_data,np.nan) 
+            fai_data = np.where(~np.isnan(water_mask),fai_data,np.nan)   # new code with mask 
 
-            # --- this retains an ndvi for each instument, but that is not essential
+            # --- this retains an fai for each instument, but that is not essential
             ds_annual[inst_agm+'_fai'] = (ds_annual.wofs_ann_freq.dims),fai_data
+            if test: print('\n','instrument fai result:',ds_annual[inst_agm+'_fai'])
 
     # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
     mean_fai = mean_fai / agm_count
-    mean_fai = np.where(mean_fai > cutoff['fai']['msi_agm'] ,mean_fai,np.nan)
-    mean_fai = np.where(ds_annual.wofs_5yr_freq > WAFT      ,mean_fai,np.nan)
+    if test: print('\n','agm fai result:',mean_fai)
+    mean_fai = np.where(mean_fai > threshold['fai']['msi_agm'] ,mean_fai,np.nan)
+    if test: print('\n','agm fai result after thresholding:',mean_fai)
+    mean_fai = np.where(~np.isnan(water_mask)               ,mean_fai,np.nan)
+    if test: print('\n','agm fai result after water mask:',mean_fai)
 
     ds_annual['agm_fai'] = (ds_annual.wofs_ann_freq.dims), mean_fai
 
     return(ds_annual)
 
-def geomedian_FAI_percent_affected (ds_annual,agm_fai_cutoff=None,WAFT=None) :
-    # calculate the percent of the water area that is affected. For this to work it is important to take a longer term view of 
-    # the wofs frequency since the annual frequency is reduced due to the presence of water hyacinth etc. in affected areas.
-    # The wofs_5yr_frequency is used.
-
-    if agm_fai_cutoff == None: agm_fai_cutoff  = 0.01   #value above which FAI is considered to indicate cyanobacteria or plant material
-    if WAFT           == None: WAFT            = 0.45   #water frequency threshold for deciding water from non-water
-        
-    water_pixels    = ds_annual.where(ds_annual.wofs_5yr_freq > WAFT).wofs_5yr_freq.count(dim=('x','y'))
-    ds_annual['fai_percent_cover'] = ('time'), \
-            (ds_annual.where(ds_annual.wofs_5yr_freq > WAFT)\
-            .where(ds_annual.agm_fai > agm_fai_cutoff)\
-             .agm_fai\
-            .count(dim= ('x','y'))*100/water_pixels).data
-    return(ds_annual)
-    
+   
     
 # ------------------------------------------------------------------------------------------------------------------------------------
 # FAI algorithm depends on knowledge of the central wavelengths of the red, nir, and swir sensors. I include  a dictionary of those values here to keep the function self-contained
@@ -772,7 +772,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     #water surface especially in March, April, May and June. 
     #Most of the blooms were along the lake shore, giving a characteristic foul smell and foam 
     #https://www.researchgate.net/publication/266095025_Assessment_of_farming_practices_and_uses_of_agrochemicals_in_Lake_Manyara_basin_Tanzania
-    #(6) (PDF) Assessment of farming practices and uses of agrochemicals in Lake Manyara basin, Tanzania. Available from: https://www.researchgate.net/publication/266095025_Assessment_of_farming_practices_and_uses_of_agrochemicals_in_Lake_Manyara_basin_Tanzania [accessed Sep 07 2024]
+    #(6) (PDF) Assessment of farming practices and uses of agrochemicals in Lake Manyara basin, Tanzania. Available from:     https://www.researchgate.net/publication/266095025_Assessment_of_farming_practices_and_uses_of_agrochemicals_in_Lake_Manyara_basin_Tanzania [accessed Sep 07 2024]
 
     #Sulunga is a higly variable waterbody. annual wofs will be needed to work with this. 
     #'few_pixels' is useful for debugging and exploration
@@ -799,7 +799,7 @@ def set_spacetime_domain(myplace=None,year1='2000',year2='2024',max_cells=100000
     #establish a reasonable grid resolution between min and max based on the AOI
     cell_min = 10
     cell_max = 500
-    x0 = AOI["x"][0]        #the brackets here are not needed, but help me to keep track!
+    x0 = AOI["x"][0]        
     x1 = AOI["x"][1]
     y0 = AOI["y"][0]
     y1 = AOI["y"][1]
