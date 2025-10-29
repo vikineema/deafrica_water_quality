@@ -69,9 +69,20 @@ RUN useradd --no-log-init --create-home --shell /bin/bash --no-user-group --gid 
 # Copy python environment
 COPY --chown=$NB_UID:$NB_GID --from=micromamba /opt/conda $PYTHON_ENV
 
+# Install AWS CLI v2
+RUN if [ "$BUILD_ENV" = "dev" ]; then \
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+        && unzip awscliv2.zip \
+        && ./aws/install \ 
+        && rm awscliv2.zip \
+        && rm -rf ./aws/; \
+        fi
+
 ## Jupyter config
 COPY docker/assets/overrides.json $JUPYTERLAB_DIR/settings/
-COPY docker/assets/jupyter_lab_config.py $PYTHON_ENV/etc/jupyter/
+COPY docker/assets/jupyter_lab_config.py  $PYTHON_ENV/etc/jupyter/
+COPY docker/assets/jupyter_server_config.py $HOME/.jupyter/
+
 # Enable server extensions
 USER $NB_USER
 RUN if [ "$BUILD_ENV" = "dev" ]; then \

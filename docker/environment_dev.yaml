@@ -17,10 +17,14 @@ dependencies:
   - jupyterlab_iframe
   - jupyter-resource-usage
   - nodejs
+  # Jupyter Ai
+  - jupyter-ai
+  - langchain-google-genai
   # developer tools
+  - curl
   - make
   - wget
-  - curl
+  - unzip
   # packages requiring pip
   - pip:
     - memory-profiler

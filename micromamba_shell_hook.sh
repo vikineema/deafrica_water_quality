@@ -24,14 +24,14 @@ else
     # Update PROD_ENV_HASH if changed
     if [ ! -f "$HASH_FILE" ] || [ "$PROD_ENV_HASH" != "$(jq -r '.PROD_ENV_HASH' "$HASH_FILE")" ]; then
         echo "Updating PROD dependencies in micromamba environment '$ENV_NAME'..."
-        micromamba install -n "$ENV_NAME" -f "$PROD_YAML" -y
+        micromamba install -n "$ENV_NAME" -f "$PROD_YAML" -y --root-prefix "$MAMBA_ROOT_PREFIX"
         jq --arg new "$PROD_ENV_HASH" '.PROD_ENV_HASH = $new' "$HASH_FILE" | sponge "$HASH_FILE"
     fi
 
     # Update DEV_ENV_HASH if changed
     if [ ! -f "$HASH_FILE" ] || [ "$DEV_ENV_HASH" != "$(jq -r '.DEV_ENV_HASH' "$HASH_FILE")" ]; then
         echo "Updating DEV dependencies in micromamba environment '$ENV_NAME'..."
-        micromamba install -n "$ENV_NAME" -f "$DEV_YAML" -y
+        micromamba install -n "$ENV_NAME" -f "$DEV_YAML" -y --root-prefix "$MAMBA_ROOT_PREFIX"
         jq --arg new "$DEV_ENV_HASH" '.DEV_ENV_HASH = $new' "$HASH_FILE" | sponge "$HASH_FILE"
     fi
 fi
