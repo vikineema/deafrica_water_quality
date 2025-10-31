@@ -18,7 +18,10 @@
         ''
           export TMPDIR=$HOME/.tmp
           export PROD_YAML=${./docker/environment_prod.yaml}
+          export PROD_REQS=${./docker/requirements_prod.txt}
           export DEV_YAML=${./docker/environment_dev.yaml}
+          export DEV_REQS=${./docker/requirements_dev.txt}
+          
           if [ -z "$MICROMAMBA_EXE" ]; then
             echo "Entering default micromamba shell..."
             exec micromamba-shell --rcfile ${./micromamba_shell_hook.sh}

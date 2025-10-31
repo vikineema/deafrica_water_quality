@@ -60,8 +60,6 @@ dependencies:
   - yarl
   # required for building hdstats
   - compilers 
-  # packages requiring pip
-  - pip:
-    - assets/tflite_runtime-2.20.0-cp312-cp312-linux_x86_64.whl
-    - odc-stats==1.0.60
-    - deafrica-tools
+  # Do not use pip packages in environment file
+
+
