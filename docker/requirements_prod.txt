@@ -1,5 +1,4 @@
 # Use conda packages where possible; 
 # pip only for packages not available via conda
-assets/tflite_runtime-2.20.0-cp312-cp312-linux_x86_64.whl
-odc-stats==1.0.60
+odc-stats>=1.9.6
 deafrica-tools
