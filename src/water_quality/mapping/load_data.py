@@ -680,20 +680,17 @@ def build_wq_agm_dataset(
     """
     if dc is None:
         dc = Datacube(app="Build_wq_agm_dataset")
-    
+
     # Keep datasets lazy by setting compute=False
     loaded_data, input_datasets = load_composite_instruments_data(
-        dc_queries=dc_queries, 
-        tile_geobox=tile_geobox, 
-        dc=dc,
-        compute=False
+        dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc, compute=False
     )
-    
+
     # Merge while still lazy
     log.info("Merging instrument datasets (lazy) ...")
     combined = xr.merge(list(loaded_data.values()))
     combined = combined.drop_vars("quantile", errors="ignore")
-    
+
     # Compute only once at the very end
     log.info("Computing final merged dataset ...")
     combined = combined.compute()
