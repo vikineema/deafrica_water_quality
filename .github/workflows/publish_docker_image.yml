@@ -1,7 +1,7 @@
 name : Build and Push Image
 
 env:
-  IMAGE_NAME: digitalearthafrica/deafrica-water-quality
+  IMAGE_NAME: maritimleila/deafrica-water-quality
 
 on:
   workflow_dispatch:  # This makes it triggerable only manually
@@ -40,3 +40,8 @@ jobs:
           build-args: BUILD_ENV=prod
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+
+
+
+          
+
