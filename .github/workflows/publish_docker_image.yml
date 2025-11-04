@@ -40,3 +40,11 @@ jobs:
           build-args: BUILD_ENV=prod
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+<<<<<<< HEAD
+=======
+
+
+
+          
+
+>>>>>>> 371db7ee274c8e51d219fc563791f6b2cb9e2a2e
