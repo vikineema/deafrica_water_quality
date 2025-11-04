@@ -1,3 +1,4 @@
+import gc
 import json
 import os
 import sys
@@ -11,11 +12,9 @@ from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
-from odc.stats._text import split_and_check
 from odc.stats.model import DateTimeRange
-import gc
 
-from water_quality.grid import check_resolution, get_waterbodies_grid
+from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
@@ -23,14 +22,11 @@ from water_quality.io import (
     get_parent_dir,
     get_wq_cog_url,
     get_wq_csv_url,
-    get_wq_dataset_path,
-    get_wq_stac_url,
     join_url,
 )
 from water_quality.logs import setup_logging
 from water_quality.mapping.algorithms import (
     WQ_vars,
-    normalise_and_stack_wq_vars,
 )
 from water_quality.mapping.config import check_config
 from water_quality.mapping.hue import hue_calculation
@@ -76,24 +72,6 @@ def split_tasks(all_task_ids, max_parallel_steps, worker_idx):
     return task_chunks[worker_idx]
 
 
-def prepare_config(analysis_config):
-    """Validate and extract config values."""
-    cfg = check_config(analysis_config)
-    resolution_m = check_resolution(int(cfg["resolution"]))
-    product_info = cfg["product"]
-    return dict(
-        resolution=resolution_m,
-        WFTH=cfg["water_frequency_threshold_high"],
-        WFTL=cfg["water_frequency_threshold_low"],
-        PWT=cfg["permanent_water_threshold"],
-        SC=cfg["sigma_coefficient"],
-        product_info=product_info,
-        product_name=product_info["name"],
-        product_version=product_info["version"],
-        instruments_to_use=cfg["instruments_to_use"]
-    )
-
-
 def parse_task(task_id, gridspec):
     """Parse task ID into temporal + tile ID and build tile geobox."""
     temporal_id, tile_id = parse_task_id(task_id)
@@ -103,7 +81,9 @@ def parse_task(task_id, gridspec):
 
 def prepare_instruments(instruments_to_use, start_date, end_date):
     """Filter instruments by date and return valid instruments list."""
-    instruments_to_use = check_instrument_dates(instruments_to_use, start_date, end_date)
+    instruments_to_use = check_instrument_dates(
+        instruments_to_use, start_date, end_date
+    )
     instruments_list = get_instruments_list(instruments_to_use)
     return instruments_to_use, instruments_list
 
@@ -120,7 +100,9 @@ def prepare_queries(instruments_to_use, start_date, end_date):
 def setup_dask_if_needed():
     """Start local Dask cluster in Sandbox, else return None."""
     if bool(os.environ.get("JUPYTERHUB_USER", None)):
-        return create_local_dask_cluster(display_client=False, return_client=True)
+        return create_local_dask_cluster(
+            display_client=False, return_client=True
+        )
     return None
 
 
@@ -200,15 +182,15 @@ def cli(
     log = setup_logging()
 
     # Load and validate configuration
-    config = prepare_config(analysis_config)
-    resolution_m = config['resolution']
-    WFTH = config['WFTH']
-    WFTL = config['WFTL']
-    PWT = config['PWT']
-    SC = config['SC']
-    product_name = config['product_name']
-    product_version = config['product_version']
-    config_instruments_to_use = config['instruments_to_use']
+    config = check_config(analysis_config)
+    resolution = config["resolution"]
+    WFTH = config["WFTH"]
+    WFTL = config["WFTL"]
+    PWT = config["PWT"]
+    SC = config["SC"]
+    product_name = config["product_name"]
+    product_version = config["product_version"]
+    config_instruments_to_use = config["instruments_to_use"]
 
     # Load all tasks and split for this worker
     all_task_ids = load_tasks(tasks, tasks_file)
@@ -221,7 +203,7 @@ def cli(
     log.info(f"Worker {worker_idx} processing {len(my_tasks)} tasks")
 
     # Initialize grid and datacube
-    gridspec = get_waterbodies_grid(resolution_m)
+    gridspec = get_waterbodies_grid(resolution)
     dc = Datacube(app="ProcessAnnualWQVariables")
 
     failed_tasks = []
@@ -254,7 +236,9 @@ def cli(
             instruments_to_use, instruments_list = prepare_instruments(
                 config_instruments_to_use, start_date, end_date
             )
-            dc_queries = prepare_queries(instruments_to_use, start_date, end_date)
+            dc_queries = prepare_queries(
+                instruments_to_use, start_date, end_date
+            )
 
             # Setup Dask if needed
             client = setup_dask_if_needed()
@@ -287,7 +271,9 @@ def cli(
                     "Determining the open water type for each pixel "
                     "using the instrument msi_agm"
                 )
-                ds["owt_msi"] = OWT_pixel(ds, instrument="msi_agm", resample_rate=3)
+                ds["owt_msi"] = OWT_pixel(
+                    ds, instrument="msi_agm", resample_rate=3
+                )
 
             # OWT calculation for OLI
             if "oli_agm" in instruments_list.keys():
@@ -295,7 +281,9 @@ def cli(
                     "Determining the open water type for each pixel "
                     "using the instrument oli_agm"
                 )
-                ds["owt_oli"] = OWT_pixel(ds, instrument="oli_agm", resample_rate=3)
+                ds["owt_oli"] = OWT_pixel(
+                    ds, instrument="oli_agm", resample_rate=3
+                )
 
             # Mask dataset based on water frequency threshold
             mask = (ds.wofs_ann_freq >= WFTL).compute()
@@ -306,17 +294,21 @@ def cli(
             ds_out, wq_vars_df = WQ_vars(
                 ds_masked,
                 instruments_list=instruments_list,
-                stack_wq_vars=False
+                stack_wq_vars=False,
             )
 
             del ds_masked
             gc.collect()
 
             # Get list of WQ variables
-            wq_vars_list = list(chain.from_iterable([
-                wq_vars_df[col].dropna().to_list()
-                for col in wq_vars_df.columns
-            ]))
+            wq_vars_list = list(
+                chain.from_iterable(
+                    [
+                        wq_vars_df[col].dropna().to_list()
+                        for col in wq_vars_df.columns
+                    ]
+                )
+            )
 
             # Define variables to keep
             initial_keep_list = [
@@ -336,7 +328,7 @@ def cli(
                 # wq variables
                 "tss",
                 "chla",
-                "tsi"
+                "tsi",
             ]
 
             # Create drop list for unused variables
