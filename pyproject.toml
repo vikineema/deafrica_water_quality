@@ -35,7 +35,7 @@ dependencies = [
     "odc-cloud[ASYNC]",
     "odc-dscache",
     "odc-geo",
-    "odc-loader",
+    "odc-loader @ git+https://github.com/opendatacube/odc-loader.git@36e49d2277cfccbfb31ae51f6033aee18068aed1",
     "odc-stats",
     "pandas",
     "PyYAML",
