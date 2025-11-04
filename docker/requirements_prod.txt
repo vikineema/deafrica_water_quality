@@ -1,4 +1,5 @@
 # Use conda packages where possible; 
 # pip only for packages not available via conda
 odc-stats>=1.9.6
+git+https://github.com/opendatacube/odc-loader.git@36e49d2277cfccbfb31ae51f6033aee18068aed1
 deafrica-tools

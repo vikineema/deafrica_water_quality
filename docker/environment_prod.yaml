@@ -21,7 +21,6 @@ dependencies:
   - aiobotocore[boto3]
   - odc-dscache
   - odc-geo
-  - odc-loader
   # dask + extras
   - dask
   - distributed
