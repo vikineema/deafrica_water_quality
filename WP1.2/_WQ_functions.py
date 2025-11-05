@@ -83,7 +83,7 @@ def geomedian_NDVI(ds_annual,water_mask,test=False):
         'ndvi' : {'msi_agm': 0.2335, 'oli_agm' : 0.2225, 'tm_agm': 0.2000},
         }
     threshold = {
-        'ndvi' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
+        'ndvi' : {'msi_agm': 0.05, 'oli_agm' : 0.05, 'tm_agm': 0.05},
         }
     count = 0
     for inst in list(('msi','oli','tm')):
