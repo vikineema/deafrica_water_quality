@@ -5,6 +5,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import gc   # garbage collection
 
+
+
 # --------------------------------------------------------------------------------------------------------
 def WQ_vars(ds,
             algorithms,              # a dictionary of  algorithms instruments, and bands
@@ -68,8 +70,7 @@ def WQ_vars(ds,
 #     NDVI is calculated for each instrument in the series (tm, oli, msi).
 #     The overall NDVI is a weighted mean (weighted by the number of observations in each geomedian)
 
-def geomedian_NDVI(ds_annual,test=False):
-    WAFT = 0.45
+def geomedian_NDVI(ds_annual,water_mask,test=False):
     ndvi_bands = {}
     ndvi_bands['tm']  = ['tm04','tm03']
     ndvi_bands['oli'] = ['oli05','oli04']
@@ -81,7 +82,7 @@ def geomedian_NDVI(ds_annual,test=False):
     reference_mean = {
         'ndvi' : {'msi_agm': 0.2335, 'oli_agm' : 0.2225, 'tm_agm': 0.2000},
         }
-    cutoff = {
+    threshold = {
         'ndvi' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
         }
     count = 0
@@ -89,57 +90,41 @@ def geomedian_NDVI(ds_annual,test=False):
         inst_agm = inst+'_agm'
         if inst_agm in ds_annual.data_vars: 
             scale = reference_mean['ndvi']['msi_agm'] / reference_mean['ndvi'][inst_agm]
-            if test : print(inst_agm)
-                
+            # --- calculate the NDVI for this sensor ---
             ndvi_data = \
-                (ds_annual[ndvi_bands[inst][0]+'_agm'] - ds_annual[ndvi_bands[inst][1]+'_agm']) / \
-                (ds_annual[ndvi_bands[inst][0]+'_agm'] + ds_annual[ndvi_bands[inst][1]+'_agm']) * scale
+                ((ds_annual[ndvi_bands[inst][0]+'_agm'] - ds_annual[ndvi_bands[inst][1]+'_agm']) / \
+                 (ds_annual[ndvi_bands[inst][0]+'_agm'] + ds_annual[ndvi_bands[inst][1]+'_agm'])) * scale
+
 
             # --- set nans to zero, and also in the agm_count variable in the dataset which is more logically zero rather than nan
             ndvi_data                    = np.where(~np.isnan(ndvi_data),ndvi_data,0)
-            ds_annual[inst_agm+'_count'] = (ds_annual[inst_agm+'_count'].dims), np.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
 
             # --- this step must be done before thresholding for the instrument, since that brings in nans
             if count == 0: 
                 mean_ndvi = ndvi_data * ds_annual[inst_agm+'_count']
                 agm_count =             ds_annual[inst_agm+'_count']
             else :    
-                mean_ndvi = mean_ndvi + ndvi_data
+                mean_ndvi = mean_ndvi + ndvi_data * ds_annual[inst_agm+'_count']
                 agm_count = agm_count + ds_annual[inst_agm+'_count']
             count = count + 1
 
             # --- trim the ndvi values back to relevant areas and values
-            ndvi_data = np.where(ndvi_data > cutoff['ndvi']['msi_agm'],ndvi_data,np.nan)
-            ndvi_data = np.where(ds_annual.wofs_5yr_freq > WAFT,ndvi_data,np.nan)
+            ndvi_data = np.where(ndvi_data > threshold['ndvi']['msi_agm'],ndvi_data,np.nan)
+            ndvi_data = np.where(~np.isnan(water_mask),ndvi_data,np.nan)   # new code with mask 
 
             # --- this retains an ndvi for each instument, but that is not essential
             ds_annual[inst_agm+'_ndvi'] = (ds_annual.wofs_ann_freq.dims),ndvi_data
 
     # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
     mean_ndvi = mean_ndvi / agm_count
-    mean_ndvi = np.where(mean_ndvi > cutoff['ndvi']['msi_agm'],mean_ndvi,np.nan)
-    mean_ndvi = np.where(ds_annual.wofs_5yr_freq > WAFT       ,mean_ndvi,np.nan)
+    mean_ndvi = np.where(mean_ndvi > threshold['ndvi']['msi_agm'] ,mean_ndvi,np.nan)
+    mean_ndvi = np.where(~np.isnan(water_mask)                    ,mean_ndvi,np.nan)
 
     ds_annual['agm_ndvi'] = (ds_annual.wofs_ann_freq.dims), mean_ndvi
     return(ds_annual)
 
-def geomedian_NDVI_percent_affected (ds_annual,agm_ndvi_cutoff=None,WAFT=None) :
-    # calculate the percent of the water area that is affected. For this to work it is important to take a longer term view of 
-    # the wofs frequency since the annual frequency is reduced due to the presence of water hyacinth etc. in affected areas.
-    # The wofs_5yr_frequency is used.
-    if agm_ndvi_cutoff == None: agm_ndvi_cutoff  = 0.20   ## --- empirically determined; values over this are considered to be indicative of Surface photosynthetic material
-    if WAFT            == None: WAFT             = 0.45   #water frequency threshold for deciding water from non-water
-    
-    water_pixels     = ds_annual.where(ds_annual.wofs_5yr_freq > WAFT).wofs_5yr_freq.count(dim=('x','y'))
-
-    ds_annual['ndvi_percent_cover'] = ('time'), \
-            (ds_annual.where(ds_annual.wofs_5yr_freq > WAFT)\
-            .where(ds_annual.agm_ndvi > agm_ndvi_cutoff)\
-             .agm_ndvi\
-            .count(dim= ('x','y'))*100/water_pixels).data
-    
-    return(ds_annual)
-
+            
     
 # ------------------------------------------------------------------------------------------------------------------------------------
 #     Values from different sensors are standardised using mean values developed empirically, with MSI taken as the reference becasue there are more msi data. 
@@ -155,7 +140,7 @@ def geomedian_FAI (ds_annual,water_mask,test=False):
         'fai'  : {'msi_agm': 0.0970, 'oli_agm' : 0.1015, 'tm_agm': 0.0962},
         }
     threshold = {
-        'fai' : {'msi_agm': 0.01   , 'oli_agm' : 0.01   , 'tm_agm': 0.01},
+        'fai' : {'msi_agm': 0.05   , 'oli_agm' : 0.05   , 'tm_agm': 0.05},
         }
     if test : print('starting')
     count = 0   
@@ -163,18 +148,13 @@ def geomedian_FAI (ds_annual,water_mask,test=False):
         inst_agm = inst+'_agm'
         if inst_agm in ds_annual.data_vars: 
             scale = reference_mean['fai']['msi_agm'] / reference_mean['fai'][inst_agm]
-            if test: print('\n',inst_agm,scale)
 
             # --- calculate the FAI for this sensor
             fai_data = FAI(ds_annual,inst_agm,test = False) * scale
-            #if test: print('\n',fai_data)
 
             # --- set nans to zero, and also in the agm_count variable
             fai_data                     = np.where(~np.isnan(fai_data),fai_data,0)
             ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
-
-            if test: print('\n','fai data : ',fai_data)
-            if test: print('\n','agm count: ',ds_annual[inst_agm+'_count'])
 
             # --- this step must be done before thresholding for the instrument, since that brings in nans
             if count == 0: 
@@ -228,11 +208,6 @@ def FAI (ds, instrument, test=False):
     nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
     swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
 
-    if test: 
-        print('red : ',red,l_red)
-        print('nir : ',nir,l_nir)
-        print('swir: ',swir,l_swir)
-        print((l_nir - l_red )/(l_swir-l_red))
             
     # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
     return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
