@@ -4,6 +4,7 @@ import numpy  as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import gc   # garbage collection
+import pandas as pd
 
 
 
@@ -486,7 +487,34 @@ def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbos
     gc.collect()  #---not sure if this helps but worth a try---
     return da
 
-def hue_adjust(dataset) :
+def hue_adjust_parameters():
+    # --- a function to set the hue adjustment parameters; a quintic polynomial model ---
+    return(pd.DataFrame(
+            data = {
+                'label' :  ['Resolution','a5','a4' ,'a3' , 'a2',  'a', 'offset'],
+                'msi' :  [20, -161.23, 1117.08, -2950.14, 3612.17, -1943.57, 364.28],
+                'oli' :  [ 30, -52.16, 373.81,  -981.83, 1134.19, -533.61, 76.72],
+                'tm'  :  [ 30, -84.94, 594.17, -1559.86, 1852.50, -918.11, 151.49]
+            }))
+
+def hue_adjust(dataset,instrument='msi') :  # revised version a bit more compact and tidy 
+    # hue adjustment coefficients for MSI. This is the final step in calculating the hue value
+    # I am sure that there are more efficient ways to code this as a matrix multiplication but at least this is transparent! 
+    # ---- this function makes an adjustment to the hue to produce the final value ----
+    if instrument in ('msi_agm','oli_agm','tm_agm'): instrument = instrument[0:instrument.find('_agm')]
+    hap          = hue_adjust_parameters()
+    coefficients = hap[instrument][hap[np.isin(hap.label,['a5','a4','a3','a2','a','offset',])].index].values   
+    
+    dataset['hue_delta'] = (dataset['hue']/100)**5 * coefficients[0]  +   \
+               (dataset['hue']/100)**4 *coefficients[1] + \
+               (dataset['hue']/100)**3 *coefficients[2] + \
+               (dataset['hue']/100)**2 *coefficients[3] + \
+               (dataset['hue']/100)**1 *coefficients[4] + \
+               (dataset['hue']/100)**0 *coefficients[5]
+    dataset['hue'] = dataset['hue'] + dataset['hue_delta']
+    return(dataset.drop_vars('hue_delta'))
+    
+def hue_adjust_old_version(dataset) :
     # hue adjustment coefficients for MSI. This is the final step in calculating the hue value
     # I am sure that there are more efficient ways to code this as a matrix multiplication but at least this is transparent! 
     # ---- this function makes an adjustment to the hue to produce the final value ----
@@ -503,9 +531,105 @@ def hue_adjust(dataset) :
     dataset = dataset.drop_vars('hue_delta')
     return(dataset)
 
-def hue_calculation(dataset,instrument='msi_agm',test=False,verbose=False) : 
-    #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+def chromatic_coefficient_parameters():
+    msi = pd.DataFrame({
+        'nm'   : ['R400','R490'  ,'R560'  ,'R665'   ,'R705' ,'R710'],
+        'band' : [''    , '2'    , '3'    , '4'     , '5'   ,''],
+        'name' : [''    , 'msi02', 'msi03', 'msi04' , 'msi05'   ,''],
+        'X'    : [ 8.356 , 12.040 , 53.696 , 32.028 , 0.529 , 0.016 ],
+        'Y'    : [ 0.993 , 23.122 , 65.702 , 16.808 , 0.192 , 0.006 ],
+        'Z'    : [ 43.487, 61.055 , 1.778  , 0.015  , 0.000 , 0.000 ],
+    }, )
+
+    oli = pd.DataFrame({
+        'nm'   : ['R400' , 'R443' , 'R482' , 'R561' , 'R655' , 'R710'],
+        'band' : [  ''   ,    '1' ,   '2'  ,   '3'  ,   '4'  ,   ''  ],  
+        'name' : [  ''   , 'oli01' ,'oli02' ,'oli03', 'oli04',   ''  ],  
+        'X'    : [ 2.217 , 11.053 ,  6.950 , 51.135 , 34.457 , 0.852 ],
+        'Y'    : [ 0.082 , 1.320  , 21.053 , 66.023 , 18.034 , 0.311 ],
+        'Z'    : [ 10.745 , 58.038 , 34.931 , 2.606 ,  0.016 , 0.000 ]
+        })
+
+    tm = pd.DataFrame({
+        'nm'   : [ 'R400' ,  'R485', 'R565' , 'R660' , 'R710' ],
+        'band' : [  ''    ,    '1' ,  '2'   ,   '3'  , ''     ],
+        'name' : [  ''    ,  'tm01', 'tm02' ,  'tm03', ''     ],
+        'X'    : [ 7.8195 , 13.104 , 53.791 , 31.304 , 0.6463 ],
+        'Y'    : [ 0.807  , 24.097 , 65.801 , 15.883 , 0.235  ],
+        'Z'    : [ 40.336 , 63.845 , 2.142  , 0.013  , 0.000  ],
+        })
+
+    # --- put the parameters into a dictionary
+    return({'msi':msi,'oli':oli,'tm':tm})
+
+
+def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=False,verbose=False) : 
+    #---- Hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    #- Method is as per Van Der Woerd 2018.
+    #- More accurate hue angles are retrieved if more bands are used - but the visible bands are most important
+    #- results for ETM+ are therefore  less accurate than for MSI and OLI?
+    #- the OLI geomedian lacks band 1, so it cannot be used. This leaves a gap in the data.
+    #- examiation of a time series shows clear patterns. Oli data give lower values than msi and tm, which are in good agreement 
+
+    #enter the x,y,z msi chromatic coefficients...
+     #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    instr = instrument
+    if instr in ('msi_agm','oli_agm','tm_agm'):  
+        instr = instr[0:instr.find('_agm')]  
+        agm = True
+    else: agm = False
+      
+    ccs = chromatic_coefficient_parameters()[instr]
+
+    # determining the available bands gets a bit messy due to continengcies...
+    required_bands = ccs['name'][ccs['name']!=''].values         # pos
+    #    bands = bands[np.isin(available_bands,dataset.data_vars)]  # a list of available bands, but its not that simple
+    # --- make two lists of band names ---
+    dsbands = []
+    for name in required_bands:
+        if agm                     : name = name + '_agm'
+        if rayleigh_corrected_data : name = name + 'r'     
+        if name in dataset.data_vars    : dsbands.append(name)
+
+    if np.size(required_bands) != np.size(dsbands) : 
+        print('\n Aborting hue calculation for instrument ',instr,' due to lack of necessary data bands\n')
+        return()
     
+    for XYZ in 'X','Y','Z':
+        dataset[XYZ] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
+        dataset[XYZ] = dataset[XYZ]
+        for band in required_bands:
+            dsband       = dsbands[list(required_bands).index(band)] 
+            coeff        = ccs[ccs.name==band][XYZ].values
+            dataset[XYZ] = dataset[dsband] * coeff + dataset[XYZ]
+
+    dataset["XYZ"] = dataset['X'] + dataset['Y'] +  dataset['Z']
+    Xwhite =  Ywhite = 1 / 3.
+    
+    # ---- normalise the X and Y parameters and conver to a delta from white:
+    dataset["X"] = dataset['X'] / dataset['XYZ'] - Xwhite 
+    dataset["Y"] = dataset['Y'] / dataset['XYZ'] - Ywhite
+    dataset["Z"] = dataset['Z'] / dataset['XYZ']
+    
+    # ---- convert vector to angle ----
+    dataset['hue'] = np.mod(np.arctan2(dataset['Y'],dataset['X'])*(180.00/np.pi) +360.,360)  
+    dataset = hue_adjust(dataset,instr)
+
+    # ---- this gives the correct mathematical angle, ie. from 0 (=east), counter-clockwise as a positive number
+    # ---- note the 'arctan2' function, and that x and y are switched compared to expectations
+ 
+    return(dataset.hue)
+    
+
+def hue_calculation_old_version(dataset,instrument='msi_agm',test=False,verbose=False) : 
+    #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    ### Colour space transformation on MSI data.
+    #- Method is as per Van Der Woerd 2018.
+    #- More accurate hue angles are retrieved if more bands are used;
+    #- results for ETM+ are therefore  less accurate than for MSI and OLI
+    #- Cannot run for OLI at this point, because we don't have band1 in the geomedian
+    #- Results should in general be more accurate with more bands, but MSI, OLI and ETM are limited
+
     #enter the x,y,z msi chromatic coefficients...
     chrom_coeffs = {
         'X': {'msi01':8.356, 'msi02':12.040,'msi03': 53.696,'msi04':32.028,'msi05': 0.529}, #x msi chromaticity
