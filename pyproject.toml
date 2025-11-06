@@ -22,7 +22,7 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "click",
-    "datacube[performance,distributed,s3]",
+    "datacube[performance,distributed,s3]>=1.9.0",
     "dask[array,distributed]", 
     "deafrica-tools",
     "eodatasets3",
