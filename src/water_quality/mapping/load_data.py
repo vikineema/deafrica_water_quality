@@ -10,7 +10,11 @@ from datacube import Datacube
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject
 
-from water_quality.dates import year_to_dc_datetime
+from water_quality.dates import (
+    validate_end_date,
+    validate_start_date,
+    year_to_dc_datetime,
+)
 from water_quality.mapping.instruments import INSTRUMENTS_MEASUREMENTS
 from water_quality.tiling import reproject_tile_geobox
 
@@ -645,6 +649,54 @@ def load_composite_instruments_data(
     )
 
     return loaded_data, input_datasets
+
+
+def load_wofs_ann(
+    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+) -> xr.Dataset:
+    # Assumption here is that start and end date will
+    # always be covering a single year.
+    year_start = validate_start_date(dc_query["time"][0])
+    year_end = validate_end_date(dc_query["time"][1])
+    delta = (year_end - year_start).days
+    assert delta in [365, 366], (
+        f"Expected time in query to cover a single year, not {delta}"
+    )
+
+    # Expand date range to cover 5 years
+    five_year_start = f"{year_end.year - 4}-01-01"
+    dc_query.update({"time": (five_year_start, dc_query["time"][1])})
+
+    if dc is None:
+        dc = Datacube(app="LoadWofsAnn")
+
+    dask_chunks = {"x": 3200, "y": 3200}
+    ds = dc.load(**dc_query, like=tile_geobox, dask_chunks=dask_chunks)
+
+    # For each band mask no data values to np.nan
+    for band in ds.data_vars:
+        nodata = ds[band].attrs["nodata"]
+        ds[band] = ds[band].where(ds[band] != nodata)
+
+    # Calculate the ratio of clear wet observations to total clear
+    # observations for each pixel over the 5 year period.
+    clear_count_sum = ds["count_clear"].sum(dim="time")
+    wet_count_sum = ds["count_wet"].sum(dim="time")
+    frequency = np.divide(
+        wet_count_sum, clear_count_sum, where=(clear_count_sum > 0)
+    )
+
+    # Generate a water mask  by thresholding the frequency.
+    water_mask = frequency > 0.45
+    water_mask.name = "water_mask"
+
+    if compute:
+        log.info("Computing wofs_ann dataset ...")
+        water_mask = water_mask.compute()
+
+    del ds, clear_count_sum, wet_count_sum, frequency
+
+    return water_mask
 
 
 def build_wq_agm_dataset(
