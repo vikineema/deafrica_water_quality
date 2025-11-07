@@ -1,6 +1,6 @@
 
 [build-system]
-requires = ["setuptools"] 
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -23,7 +23,7 @@ requires-python = ">=3.9"
 dependencies = [
     "click",
     "datacube[performance,distributed,s3]>=1.9.0",
-    "dask[array,distributed]", 
+    "dask[array,distributed]",
     "deafrica-tools",
     "eodatasets3",
     "fsspec",
@@ -54,7 +54,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff",
-    "yamlint", 
+    "yamlint",
  ]
 test = [
     "pytest",

@@ -57,7 +57,5 @@ dependencies:
   - tqdm
   - yarl
   # required for building hdstats
-  - compilers 
+  - compilers
   # Do not use pip packages in environment file
-
-
