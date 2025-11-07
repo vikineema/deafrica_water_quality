@@ -501,6 +501,10 @@ def hue_adjust(dataset,instrument='msi') :  # revised version a bit more compact
     # hue adjustment coefficients for MSI. This is the final step in calculating the hue value
     # I am sure that there are more efficient ways to code this as a matrix multiplication but at least this is transparent! 
     # ---- this function makes an adjustment to the hue to produce the final value ----
+    #      These quintic functions run off the scale if the hue value is less than about 25 or greater than about 240.
+    #      It may be necessary to put a condition on the adjustment to avoid invalid results.
+    #      However, provided only water pixels are included, results seem okay
+    
     if instrument in ('msi_agm','oli_agm','tm_agm'): instrument = instrument[0:instrument.find('_agm')]
     hap          = hue_adjust_parameters()
     coefficients = hap[instrument][hap[np.isin(hap.label,['a5','a4','a3','a2','a','offset',])].index].values   
@@ -583,7 +587,7 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
 
     # determining the available bands gets a bit messy due to continengcies...
     required_bands = ccs['name'][ccs['name']!=''].values         # pos
-    #    bands = bands[np.isin(available_bands,dataset.data_vars)]  # a list of available bands, but its not that simple
+
     # --- make two lists of band names ---
     dsbands = []
     for name in required_bands:
@@ -593,11 +597,12 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
 
     if np.size(required_bands) != np.size(dsbands) : 
         print('\n Aborting hue calculation for instrument ',instr,' due to lack of necessary data bands\n')
-        return()
+        dataset['hue'] = \
+            ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))*np.nan
+        return(dataset.hue)
     
     for XYZ in 'X','Y','Z':
         dataset[XYZ] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
-        dataset[XYZ] = dataset[XYZ]
         for band in required_bands:
             dsband       = dsbands[list(required_bands).index(band)] 
             coeff        = ccs[ccs.name==band][XYZ].values
