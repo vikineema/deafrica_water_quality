@@ -581,8 +581,9 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
     if instr in ('msi_agm','oli_agm','tm_agm'):  
         instr = instr[0:instr.find('_agm')]  
         agm = True
-    else: agm = False
-      
+    else: 
+        agm = False
+    
     ccs = chromatic_coefficient_parameters()[instr]
 
     # determining the available bands gets a bit messy due to continengcies...
@@ -595,37 +596,82 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
         if rayleigh_corrected_data : name = name + 'r'     
         if name in dataset.data_vars    : dsbands.append(name)
 
+    Cdata         = xr.zeros_like(dataset).drop_vars(dataset.data_vars)
+    Cdata['hue'] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
+
     if np.size(required_bands) != np.size(dsbands) : 
         print('\n Aborting hue calculation for instrument ',instr,' due to lack of necessary data bands\n')
-        dataset['hue'] = \
-            ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))*np.nan
-        return(dataset.hue)
+        Cdata['hue'] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))*np.nan
+        return(Cdata['hue'])
     
     for XYZ in 'X','Y','Z':
-        dataset[XYZ] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
+        Cdata[XYZ] =  ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
         for band in required_bands:
             dsband       = dsbands[list(required_bands).index(band)] 
             coeff        = ccs[ccs.name==band][XYZ].values
-            dataset[XYZ] = dataset[dsband] * coeff + dataset[XYZ]
+            Cdata[XYZ]   = dataset[dsband] * coeff + Cdata[XYZ]
 
-    dataset["XYZ"] = dataset['X'] + dataset['Y'] +  dataset['Z']
+    Cdata["XYZ"] = Cdata['X'] + Cdata['Y'] +  Cdata['Z']
     Xwhite =  Ywhite = 1 / 3.
     
     # ---- normalise the X and Y parameters and conver to a delta from white:
-    dataset["X"] = dataset['X'] / dataset['XYZ'] - Xwhite 
-    dataset["Y"] = dataset['Y'] / dataset['XYZ'] - Ywhite
-    dataset["Z"] = dataset['Z'] / dataset['XYZ']
-    
+    Cdata["X"] = Cdata['X'] / Cdata['XYZ'] - Xwhite 
+    Cdata["Y"] = Cdata['Y'] / Cdata['XYZ'] - Ywhite
+    Cdata["Z"] = Cdata['Z'] / Cdata['XYZ']
     # ---- convert vector to angle ----
-    dataset['hue'] = np.mod(np.arctan2(dataset['Y'],dataset['X'])*(180.00/np.pi) +360.,360)  
-    dataset = hue_adjust(dataset,instr)
-
+    Cdata['hue'] = np.mod(np.arctan2(Cdata['Y'],Cdata['X'])*(180.00/np.pi) +360.,360)  
+    Cdata = hue_adjust(Cdata,instr)
+    
     # ---- this gives the correct mathematical angle, ie. from 0 (=east), counter-clockwise as a positive number
     # ---- note the 'arctan2' function, and that x and y are switched compared to expectations
- 
-    return(dataset.hue)
     
+    return(Cdata.hue)
+    
+def geomedian_hue (ds_annual,water_mask,test=False):
+    # --- a function to calculate the hue value of the geomedian, allowing for the possibility of multiple sensors at each time point
+    # (band one is missing from the oli agm, but perhaps we will be able to do without it)
+    # To combine the hue from multiple sensors we take a weighted mean. 
+    count = 0   
+    for inst in list(('msi','oli','tm')):
+        inst_agm = inst+'_agm'
+        if inst_agm in ds_annual.data_vars: 
 
+            # --- calculate the HUE for this sensor
+            hue_data = hue_calculation(ds_annual,inst_agm,rayleigh_corrected_data = True,test=True)
+            
+            # --- set nans to zero, and also in the agm_count variable
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+            #negate the counts where there is no data produced 
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(hue_data)                    ,ds_annual[inst_agm+'_count'],0)
+            hue_data                     = np.where(~np.isnan(hue_data)                    ,hue_data                    ,0)
+                      
+            if count == 0: 
+                mean_hue  =  hue_data * ds_annual[inst_agm+'_count']
+                agm_count =             ds_annual[inst_agm+'_count']
+            else :    
+                mean_hue  = mean_hue  + hue_data * ds_annual[inst_agm+'_count']
+                agm_count = agm_count + ds_annual[inst_agm+'_count']
+            count = count + 1
+         
+            #hue_data = np.where(~np.isnan(water_mask),hue_data,np.nan)   # new code with mask 
+
+            # --- this retains a value for each instument, not essential but useful during developement
+            ds_annual[inst_agm+'_hue'] = ('time','y','x'),hue_data
+            ds_annual[inst_agm+'_hue'] = xr.where(water_mask,ds_annual[inst_agm+'_hue'],np.nan)
+
+            #ds_annual[inst_agm+'_hue'] = xr.where(water_mask ,ds_annual[inst_agm+'_hue'] , hue_data)
+
+    # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
+    mean_hue = mean_hue / agm_count
+    ds_annual['agm_hue'] = (ds_annual.wofs_ann_freq.dims), mean_hue.data
+    ds_annual['agm_hue'] = xr.where(water_mask,ds_annual['agm_hue'],np.nan)
+    # ---- trim extreme values that can arise 
+    ds_annual['agm_hue'] = xr.where(ds_annual['agm_hue']>25,
+                                    xr.where(ds_annual['agm_hue'] < 100,ds_annual['agm_hue'],
+                                             np.nan),np.nan)
+    return(ds_annual)
+
+    
 def hue_calculation_old_version(dataset,instrument='msi_agm',test=False,verbose=False) : 
     #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
     ### Colour space transformation on MSI data.
@@ -697,7 +743,87 @@ def hue_calculation_old_version(dataset,instrument='msi_agm',test=False,verbose=
         if test:Cdata['Ynd'].sel(time=slice('2019','2020')).plot(col='time',robust=True,vmin=0)#,vmax=360,cmap='hsv')
     return Cdata['hue'],Cdata_summary['hue']  #the second output is not required for pixel-level processing, but is used by some of my code. 
 
-def R_correction(ds,dp_adjust,instruments,water_frequency_threshold=0.9,verbose=False,test=True):
+# --- Dark pixel correction - preparing inputs 
+#    'dp_adjust_parameters' dictionary controls which variables are used as a reference, 
+#     and which are changed, in the dark-pixel correction.
+
+#     Revised code 2025-10-07 to cater for non-geomedian situations. 
+
+def apply_R_correction(ds,
+                       instr_list,
+                       water_mask, test=False,verbose=False) :
+        
+    dp_adjust_parameters = { 
+        'msi': {'ref_var':'msi12' , 'var_list': ['msi04','msi03','msi02','msi01','msi05','msi06', 'msi07']},
+        'oli': {'ref_var':'oli07' , 'var_list': ['oli04','oli03','oli02','oli01']},
+        'tm' : {'ref_var': 'tm07' , 'var_list': [ 'tm04', 'tm03', 'tm02', 'tm01']}
+        }
+    # --- check the instrument list against the dataset  --- 
+    instr_list = list(set(instr_list) & set(ds.data_vars))    
+    # ---- check the reference variables against the dataset --- 
+    templist  = instr_list
+    for instr in templist:
+        item_number = templist == instr
+        agm        = False ; suffix = ''
+        if instr.find('_agm') > 0:
+            agm     = True; suffix = instr[instr.find('_agm'):]
+            instr   = instr[0:instr.find('_agm')]
+            if not    dp_adjust_parameters[instr]['ref_var']+suffix in ds.data_vars:
+                instr_list.pop(item_number)    
+
+    ds = R_correction(ds=ds,
+                      instr_list=instr_list,
+                      dp_adjust_parameters=dp_adjust_parameters,
+                      water_mask = water_mask,
+                      verbose=verbose,
+                      test=test)
+    return(ds)
+
+
+def R_correction(ds,instr_list,dp_adjust_parameters,water_mask,verbose=False,test=True):
+    #--- Rayleigh correction - dark pixel adjustment ---
+    #--- for each variable in the list, reduce by the value of the ref_variable, over target areas ---
+    #--- target areas are areas withing the provided water mask 
+    #-------------------------------------------------------------------------------------------------------------
+    # --- the 'dp_adjust' dictionary passed in as an argument controls which variables are used as a reference, and which are changed 
+    # --- it is assumed at this point that the relvant variables are in the dataset.  (Checks are done in the calling function).
+    
+    for instr in instr_list:
+        agm = False;  suffix = ''
+        if  instr.find('_agm') > 0 :    
+            suffix = instr[instr.find('_agm'):]
+            agm = True; 
+            instr = instr[0:instr.find('_agm')]
+       
+        reference_var = dp_adjust_parameters[instr]['ref_var']+suffix
+        for target_var in dp_adjust_parameters[instr]['var_list']:
+            target_var = target_var+suffix
+            new_var    = target_var+'r'
+            if new_var in ds.data_vars: ds=ds.drop_vars(new_var)
+            if not target_var in ds.data_vars :
+                print('---variable -->  ',target_var,'  <-- anticipated but not found in the dataset (non-fatal)')
+            else:
+                ds[new_var] = ds[reference_var]*0.0
+                ds[new_var] = xr.where(ds[target_var]>0,xr.where(ds[target_var] > ds[reference_var] ,ds[target_var] - ds[reference_var] , ds[target_var]),np.nan)
+                
+                ds[new_var] = xr.where(water_mask,ds[new_var],ds[target_var]) 
+                #print('stopping')
+                #return(ds)
+                
+    if test or verbose : #plot graphs illustrating the shift in the cumulative distribution
+        
+            quantiles = np.arange(0,1,.01)
+            plt.plot(ds['msi02_agmr'].quantile(quantiles),quantiles,"b-")
+            plt.plot(ds['msi02_agm'].quantile(quantiles),quantiles,"b--")
+            plt.plot(ds['msi03_agmr'].quantile(quantiles),quantiles,"g-")
+            plt.plot(ds['msi03_agm'].quantile(quantiles),quantiles,"g--")
+            plt.plot(ds['msi04_agmr'].quantile(quantiles),quantiles,"r-")
+            plt.plot(ds['msi04_agm'].quantile(quantiles),quantiles,"r--")
+   
+    if verbose : print('R_correction completed normally')
+    return(ds)
+    
+def R_correction_old(ds,dp_adjust,instruments,water_frequency_threshold=0.9,verbose=False,test=True):
     #--- Rayleigh correction - dark pixel adjustment ---
     #--- for each variable in the list, reduce by the value of the ref_variable, over target areas ---
     #--- target areas are areas where the frequency of water is ge than the water frequency threshold parameter
