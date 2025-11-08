@@ -9,6 +9,7 @@ import xarray as xr
 from datacube import Datacube
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject
+import copy
 
 from water_quality.dates import (
     validate_end_date,
@@ -654,6 +655,8 @@ def load_composite_instruments_data(
 def load_wofs_ann(
     dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
+    query = copy.deepcopy(dc_query)
+
     # Assumption here is that start and end date will
     # always be covering a single year.
     year_start = validate_start_date(dc_query["time"][0])
@@ -665,13 +668,13 @@ def load_wofs_ann(
 
     # Expand date range to cover 5 years
     five_year_start = f"{year_end.year - 4}-01-01"
-    dc_query.update({"time": (five_year_start, dc_query["time"][1])})
+    query.update({"time": (five_year_start, dc_query["time"][1])})
 
     if dc is None:
         dc = Datacube(app="LoadWofsAnn")
 
     dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**dc_query, like=tile_geobox, dask_chunks=dask_chunks)
+    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
 
     # For each band mask no data values to np.nan
     for band in ds.data_vars:
