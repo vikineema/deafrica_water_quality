@@ -5,6 +5,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 import dask
+import dask.array as da
 import numpy as np
 import xarray as xr
 from datacube import Datacube
@@ -687,24 +688,34 @@ def load_wofs_ann(
     clear_count_sum = ds["count_clear"].sum(dim="time")
     wet_count_sum = ds["count_wet"].sum(dim="time")
 
-    frequency = xr.where(
-        clear_count_sum > 0, wet_count_sum / clear_count_sum, -999
+    frequency = da.divide(
+        wet_count_sum,
+        clear_count_sum,
+        out=da.full_like(wet_count_sum, np.nan, dtype=np.float32),
+        where=(clear_count_sum > 0),
     )
+    frequency.name = "frequency"
 
     # Generate a water mask  by thresholding the frequency.
-    water_mask = xr.where(
-        frequency == -999,  # where nodata
-        -999,  # keep as -999
-        frequency > 0.45,  # else threshold
-    )
+    water_mask = frequency > 0.45
+    water_mask_nodata = 255
+    water_mask = water_mask.where(
+        ~np.isnan(frequency), other=water_mask_nodata
+    ).astype(np.int8)
     water_mask.name = "water_mask"
-    water_mask = water_mask.astype(np.int8)
 
     if compute:
         log.info("Computing wofs_ann dataset ...")
         water_mask = water_mask.compute()
         log.info("Done.")
     del ds, clear_count_sum, wet_count_sum, frequency
+
+    # Add attributes
+    water_mask.attrs = dict(
+        nodata=water_mask_nodata,
+        scales=1,
+        offsets=0,
+    )
 
     return water_mask
 
