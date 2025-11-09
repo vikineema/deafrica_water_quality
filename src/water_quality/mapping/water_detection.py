@@ -90,7 +90,9 @@ def water_analysis(
         )
         # A variable called watermask is used in places.
         # I set the value of the mask as sigma or nan
-        ds["watermask"] = ds["wofs_ann_freq_sigma"].where(
+        # Renamed this from watermask to wofs_ann_watermask prevent
+        # confusion with the 5 year summary watermask
+        ds["wofs_ann_watermask"] = ds["wofs_ann_freq_sigma"].where(
             ds[wofs_varname] > water_frequency_threshold
         )
     else:
