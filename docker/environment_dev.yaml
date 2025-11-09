@@ -6,13 +6,14 @@ dependencies:
   - odc-loader
   - odc-stac
   # Code formatting
+  - pre-commit
   - ruff
   - yamllint
   # Tests
   - coverage
   - pytest
   # Jupyter
-  - jupytergis 
+  - jupytergis
   - qgis
   - jupyterlab_iframe
   - jupyter-resource-usage
@@ -25,6 +26,4 @@ dependencies:
   - make
   - wget
   - unzip
-  # packages requiring pip
-  - pip:
-    - memory-profiler
+  # Do not use pip packages in environment file

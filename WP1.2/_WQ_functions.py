@@ -4,6 +4,9 @@ import numpy  as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import gc   # garbage collection
+import pandas as pd
+
+
 
 # --------------------------------------------------------------------------------------------------------
 def WQ_vars(ds,
@@ -68,8 +71,7 @@ def WQ_vars(ds,
 #     NDVI is calculated for each instrument in the series (tm, oli, msi).
 #     The overall NDVI is a weighted mean (weighted by the number of observations in each geomedian)
 
-def geomedian_NDVI(ds_annual,test=False):
-    WAFT = 0.45
+def geomedian_NDVI(ds_annual,water_mask,test=False):
     ndvi_bands = {}
     ndvi_bands['tm']  = ['tm04','tm03']
     ndvi_bands['oli'] = ['oli05','oli04']
@@ -81,65 +83,49 @@ def geomedian_NDVI(ds_annual,test=False):
     reference_mean = {
         'ndvi' : {'msi_agm': 0.2335, 'oli_agm' : 0.2225, 'tm_agm': 0.2000},
         }
-    cutoff = {
-        'ndvi' : {'msi_agm': 0.0000, 'oli_agm' : 0.0000, 'tm_agm': 0.0000},
+    threshold = {
+        'ndvi' : {'msi_agm': 0.05, 'oli_agm' : 0.05, 'tm_agm': 0.05},
         }
     count = 0
     for inst in list(('msi','oli','tm')):
         inst_agm = inst+'_agm'
         if inst_agm in ds_annual.data_vars: 
             scale = reference_mean['ndvi']['msi_agm'] / reference_mean['ndvi'][inst_agm]
-            if test : print(inst_agm)
-                
+            # --- calculate the NDVI for this sensor ---
             ndvi_data = \
-                (ds_annual[ndvi_bands[inst][0]+'_agm'] - ds_annual[ndvi_bands[inst][1]+'_agm']) / \
-                (ds_annual[ndvi_bands[inst][0]+'_agm'] + ds_annual[ndvi_bands[inst][1]+'_agm']) * scale
+                ((ds_annual[ndvi_bands[inst][0]+'_agm'] - ds_annual[ndvi_bands[inst][1]+'_agm']) / \
+                 (ds_annual[ndvi_bands[inst][0]+'_agm'] + ds_annual[ndvi_bands[inst][1]+'_agm'])) * scale
+
 
             # --- set nans to zero, and also in the agm_count variable in the dataset which is more logically zero rather than nan
             ndvi_data                    = np.where(~np.isnan(ndvi_data),ndvi_data,0)
-            ds_annual[inst_agm+'_count'] = (ds_annual[inst_agm+'_count'].dims), np.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
 
             # --- this step must be done before thresholding for the instrument, since that brings in nans
             if count == 0: 
                 mean_ndvi = ndvi_data * ds_annual[inst_agm+'_count']
                 agm_count =             ds_annual[inst_agm+'_count']
             else :    
-                mean_ndvi = mean_ndvi + ndvi_data
+                mean_ndvi = mean_ndvi + ndvi_data * ds_annual[inst_agm+'_count']
                 agm_count = agm_count + ds_annual[inst_agm+'_count']
             count = count + 1
 
             # --- trim the ndvi values back to relevant areas and values
-            ndvi_data = np.where(ndvi_data > cutoff['ndvi']['msi_agm'],ndvi_data,np.nan)
-            ndvi_data = np.where(ds_annual.wofs_5yr_freq > WAFT,ndvi_data,np.nan)
+            ndvi_data = np.where(ndvi_data > threshold['ndvi']['msi_agm'],ndvi_data,np.nan)
+            ndvi_data = np.where(~np.isnan(water_mask),ndvi_data,np.nan)   # new code with mask 
 
             # --- this retains an ndvi for each instument, but that is not essential
             ds_annual[inst_agm+'_ndvi'] = (ds_annual.wofs_ann_freq.dims),ndvi_data
 
     # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
     mean_ndvi = mean_ndvi / agm_count
-    mean_ndvi = np.where(mean_ndvi > cutoff['ndvi']['msi_agm'],mean_ndvi,np.nan)
-    mean_ndvi = np.where(ds_annual.wofs_5yr_freq > WAFT       ,mean_ndvi,np.nan)
+    mean_ndvi = np.where(mean_ndvi > threshold['ndvi']['msi_agm'] ,mean_ndvi,np.nan)
+    mean_ndvi = np.where(~np.isnan(water_mask)                    ,mean_ndvi,np.nan)
 
     ds_annual['agm_ndvi'] = (ds_annual.wofs_ann_freq.dims), mean_ndvi
     return(ds_annual)
 
-def geomedian_NDVI_percent_affected (ds_annual,agm_ndvi_cutoff=None,WAFT=None) :
-    # calculate the percent of the water area that is affected. For this to work it is important to take a longer term view of 
-    # the wofs frequency since the annual frequency is reduced due to the presence of water hyacinth etc. in affected areas.
-    # The wofs_5yr_frequency is used.
-    if agm_ndvi_cutoff == None: agm_ndvi_cutoff  = 0.20   ## --- empirically determined; values over this are considered to be indicative of Surface photosynthetic material
-    if WAFT            == None: WAFT             = 0.45   #water frequency threshold for deciding water from non-water
-    
-    water_pixels     = ds_annual.where(ds_annual.wofs_5yr_freq > WAFT).wofs_5yr_freq.count(dim=('x','y'))
-
-    ds_annual['ndvi_percent_cover'] = ('time'), \
-            (ds_annual.where(ds_annual.wofs_5yr_freq > WAFT)\
-            .where(ds_annual.agm_ndvi > agm_ndvi_cutoff)\
-             .agm_ndvi\
-            .count(dim= ('x','y'))*100/water_pixels).data
-    
-    return(ds_annual)
-
+            
     
 # ------------------------------------------------------------------------------------------------------------------------------------
 #     Values from different sensors are standardised using mean values developed empirically, with MSI taken as the reference becasue there are more msi data. 
@@ -155,7 +141,7 @@ def geomedian_FAI (ds_annual,water_mask,test=False):
         'fai'  : {'msi_agm': 0.0970, 'oli_agm' : 0.1015, 'tm_agm': 0.0962},
         }
     threshold = {
-        'fai' : {'msi_agm': 0.01   , 'oli_agm' : 0.01   , 'tm_agm': 0.01},
+        'fai' : {'msi_agm': 0.05   , 'oli_agm' : 0.05   , 'tm_agm': 0.05},
         }
     if test : print('starting')
     count = 0   
@@ -163,18 +149,13 @@ def geomedian_FAI (ds_annual,water_mask,test=False):
         inst_agm = inst+'_agm'
         if inst_agm in ds_annual.data_vars: 
             scale = reference_mean['fai']['msi_agm'] / reference_mean['fai'][inst_agm]
-            if test: print('\n',inst_agm,scale)
 
             # --- calculate the FAI for this sensor
             fai_data = FAI(ds_annual,inst_agm,test = False) * scale
-            #if test: print('\n',fai_data)
 
             # --- set nans to zero, and also in the agm_count variable
             fai_data                     = np.where(~np.isnan(fai_data),fai_data,0)
             ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
-
-            if test: print('\n','fai data : ',fai_data)
-            if test: print('\n','agm count: ',ds_annual[inst_agm+'_count'])
 
             # --- this step must be done before thresholding for the instrument, since that brings in nans
             if count == 0: 
@@ -228,11 +209,6 @@ def FAI (ds, instrument, test=False):
     nir, l_nir   = ib[instrument]['nir'][0], ib[instrument]['nir'] [1]
     swir,l_swir  = ib[instrument]['swir'][0],ib[instrument]['swir'][1]
 
-    if test: 
-        print('red : ',red,l_red)
-        print('nir : ',nir,l_nir)
-        print('swir: ',swir,l_swir)
-        print((l_nir - l_red )/(l_swir-l_red))
             
     # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
     return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
@@ -358,7 +334,148 @@ def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verb
     return  (14.44* X)      #the distribution of results is exponential; this measure will be more stable without raising to the power.
 
 
-def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbose=True, test=True):
+def create_OWT_response_models(path='/home/jovyan/dev/deafrica_water_quality/reference_data/',agm=False):   
+    # --- A function to read in Vagelis' reference spectra for Optical Water Types and return 
+    #     the expected response (vector) of each sensor to each OWT.
+    #     
+    #     All water types are included, but inland water types are 1-13
+    #     The data are spectral response curves for each OWT, with a 1-nm step
+    #     The longest wavelength is 800nm
+    #     The response for a specific instrument/band, say oli01, is estimated by integrating the spectrum over the instrument response 
+    #     - ideally that is a convolution, using  the instrument response functions, however   
+    #     - I settle for an average over the central range
+    # --- read in the data ---
+    
+    name = 'Vagelis_OWT_allwaters_mean_standardised.csv'
+    suffix = ''
+    if agm          : suffix = '_agm'
+    # --- read the spectral reflectance models for the optial water types ---
+    filename = path+name
+    with open(filename,'r') as f:
+        OWT_spectra = pd.read_csv(f)
+        OWT_spectra = OWT_spectra[OWT_spectra.index < 13]    # --- limit to the inland water types --
+
+    # --- read in the wavelengths for the bands in oli, tm and msi (spectal response models) ---
+    data = {}
+    for sensor in 'msi','tm','oli':
+        name = 'sensor bands-'+sensor+'.csv'
+        filename = path+name
+        with open(filename,'r') as f:
+             sensor_data = pd.read_csv(f)
+             # rename columns to avoid clashes with reserved words
+             sensor_data.rename(columns={'max': 'l_max','min': 'l_min'}, inplace=True)
+    
+        a = sensor_data
+        # list the bands  that are going to be relevant , ie., less than 800nm
+        band_list = (a[a['l_max']<800].band_name).values # & set(ds.data_vars) 
+        # --- set up a  dataframe to take results for this instrument ---
+        labels = [] 
+        for i in np.arange(1,14): labels = np.append(labels,'OWT-'+str(i))
+
+        inst_OWT = pd.DataFrame(
+            data = {'OWT' : np.arange(1,14,1)}, 
+            index = labels
+            )
+        # --- run through the bands ...
+        for band_name in band_list :
+            # determine the integration interval based on the central wavlength and the width; extract these as integers
+            delta =      a[a['band_name']==band_name]['width'].values * 0.8 *0.5
+            start = int((a[a['band_name']==band_name]['central'].values - delta)[0]) 
+            end   = int((a[a['band_name']==band_name]['central'].values + delta)[0]) 
+            #print(sensor,band_name, start,end)
+
+            # find the start and end column numbers in the response functions and sum over those for each OWT
+            b = OWT_spectra.loc[:,str(start):str(end)].T.sum()
+            # add to the data frame
+            inst_OWT.insert(inst_OWT.columns.size,band_name+suffix,(b.values))
+        # --- add this data frame to the data dictionary ---
+        data[sensor] = inst_OWT
+        # --- write to a csv file in the current location --- 
+        inst_OWT.to_csv(sensor+'_OWT_vectors.csv')
+    return(data)
+    
+def OWT (ds,instrument,OWT_vectors,agm=False,dp_corrected = False, verbose=True,test=True):
+    # --- this version uses a long-hand approch to calculating the dot product. Inelegant but simple.
+    # --- identify the instrument bands that are relevant and in the dataset
+    resample_rate=1  #legacy stuff
+    if verbose or test : print('\n calculating optical water type (OWT), sensor = ',instrument,' ....\n')
+    agm          = False
+    dp_corrected = False
+    suffix=''
+    if agm          : suffix = suffix + '_agm'
+    if dp_corrected : suffix = suffix + 'r'
+    for col in OWT_vectors.columns.values:     #--- this loop renames the columns so that we can match them with the data variables
+        if col.find(instrument)>-1:
+            OWT_vectors = OWT_vectors.rename(columns={col:col+suffix})  
+    band_list = list(set(ds.data_vars) & set(OWT_vectors.columns.values))
+    band_list.sort()
+    # --- ditch unnecessary columns and rows in the vectors table and calculate the magnitude of each vector
+    OWT_vectors           =  OWT_vectors.drop(columns=list(set(OWT_vectors.columns.values) - set(band_list)))
+    OWT_vectors['length'] = ((OWT_vectors**2).sum(axis=1))**0.5  # calculate the length of each vector  
+    OWT_vectors = OWT_vectors.reset_index().rename(columns={'index':'OWT'})    # brings the OWT labels in as a normal column,'OWT'
+
+    #--- loop through the Optical water types ---
+    start     = True
+    for OWT in OWT_vectors['OWT']:
+        vec = OWT_vectors[OWT_vectors['OWT'] == OWT]  # the vector for this OWT
+        OWT_index = int(OWT[OWT.find('-')+1:])  # the OWT numnber
+        if test: print('OWT number:',OWT_index)
+        #print(OWT_vectors[OWT_vectors['OWT']==OWT])
+        # --- create a dataset for this OWT based on one of he instrument bands ---
+        varname   = band_list[0]
+        if start:
+            start     = False
+            # working variiables
+            mydataset = xr.Dataset({'owt_current' : ds[varname]})
+#            mydataset = xr.Dataset({'owt_current' : ds[varname][:,::resample_rate,::resample_rate]})
+            mydataset['owt_cos_max']        = mydataset['owt_current']*0 + -2  #a number smaller than any cosine
+            mydataset['owt_cos'    ]        = mydataset['owt_current']*0 
+            mydataset['owt_closest']        = mydataset['owt_current']*0 + OWT_index
+            mydataset['self_product']       = mydataset['owt_current']*0 
+            mydataset['vector_product']     = mydataset['owt_current']*0 
+            if test: print('prevailing owt is :',mydataset.owt_closest.median())        
+
+
+        mydataset['self_product'  ] = 0                      
+        mydataset['vector_product'] = 0                      
+        for band in band_list:
+            if test: print('processing band: ',band)
+            mydataset['self_product'  ]  = mydataset['self_product'  ] + ds[band]**2
+            mydataset['vector_product']  = mydataset['vector_product'] + ds[band]*vec[band].item()
+            
+        mydataset['self_product'] = mydataset['self_product'  ] ** 0.5
+        mydataset['owt_cos'     ] = mydataset['vector_product'] \
+                     / (mydataset['self_product'] * vec['length'].values)
+        mydataset['owt_closest'] = xr.where(mydataset['owt_cos'] > mydataset['owt_cos_max'] , OWT_index ,            mydataset['owt_closest'])
+        mydataset['owt_cos_max'] = xr.where(mydataset['owt_cos'] > mydataset['owt_cos_max'] , mydataset['owt_cos'] , mydataset['owt_cos_max'])
+        if test: print('prevailing owt is :',mydataset.owt_closest.median())        
+        
+    
+    if verbose or test : print('....done')
+    if verbose         : 
+        data = [[3,'oligotrophic (clear)'],
+                [9,'oligotrophic (clear)'],
+                [13,'oligotrophic (clear)'],
+                [1,'eutrophic and blue-green'],
+                [2,'eutrophic and blue-green'],
+                [4,'eutrophic and blue-green'],
+                [5,'eutrophic and blue-green'],
+                [11,'eutrophic and blue-green'],
+                [12,'eutrophic and blue-green'],
+                [6,'hyper-eutrophic and green-brown'],
+                [7,'hyper-eutrophic and green-brown'],
+                [8,'hyper-eutrophic and green-brown'],
+                [10,'hyper-eutrophic and green-brown']]
+        data.sort()
+        columns = ['OWT','description']
+        
+        df   = pd.DataFrame(data=data,columns=columns)
+        owt  = mydataset.owt_closest.median().item()
+        desc = df[df['OWT']==owt]['description'].item()
+        print('Prevailng water type is ',owt,' :  ',desc)
+    return(mydataset['owt_closest'])
+
+def OWT_pixel_deprecated (ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbose=True, test=True):
     # --- Determine the Open Water Type for each pixel, over areas that are usually water. 
     # --- 'instrument' is a dictionary established while building the dataset
     # --- 'resample_rate' is the spatial resample step to reduce the memory required
@@ -511,7 +628,38 @@ def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbos
     gc.collect()  #---not sure if this helps but worth a try---
     return da
 
-def hue_adjust(dataset) :
+def hue_adjust_parameters():
+    # --- a function to set the hue adjustment parameters; a quintic polynomial model ---
+    return(pd.DataFrame(
+            data = {
+                'label' :  ['Resolution','a5','a4' ,'a3' , 'a2',  'a', 'offset'],
+                'msi' :  [20, -161.23, 1117.08, -2950.14, 3612.17, -1943.57, 364.28],
+                'oli' :  [ 30, -52.16, 373.81,  -981.83, 1134.19, -533.61, 76.72],
+                'tm'  :  [ 30, -84.94, 594.17, -1559.86, 1852.50, -918.11, 151.49]
+            }))
+
+def hue_adjust(dataset,instrument='msi') :  # revised version a bit more compact and tidy 
+    # hue adjustment coefficients for MSI. This is the final step in calculating the hue value
+    # I am sure that there are more efficient ways to code this as a matrix multiplication but at least this is transparent! 
+    # ---- this function makes an adjustment to the hue to produce the final value ----
+    #      These quintic functions run off the scale if the hue value is less than about 25 or greater than about 240.
+    #      It may be necessary to put a condition on the adjustment to avoid invalid results.
+    #      However, provided only water pixels are included, results seem okay
+    
+    if instrument in ('msi_agm','oli_agm','tm_agm'): instrument = instrument[0:instrument.find('_agm')]
+    hap          = hue_adjust_parameters()
+    coefficients = hap[instrument][hap[np.isin(hap.label,['a5','a4','a3','a2','a','offset',])].index].values   
+    
+    dataset['hue_delta'] = (dataset['hue']/100)**5 * coefficients[0]  +   \
+               (dataset['hue']/100)**4 *coefficients[1] + \
+               (dataset['hue']/100)**3 *coefficients[2] + \
+               (dataset['hue']/100)**2 *coefficients[3] + \
+               (dataset['hue']/100)**1 *coefficients[4] + \
+               (dataset['hue']/100)**0 *coefficients[5]
+    dataset['hue'] = dataset['hue'] + dataset['hue_delta']
+    return(dataset.drop_vars('hue_delta'))
+    
+def hue_adjust_old_version(dataset) :
     # hue adjustment coefficients for MSI. This is the final step in calculating the hue value
     # I am sure that there are more efficient ways to code this as a matrix multiplication but at least this is transparent! 
     # ---- this function makes an adjustment to the hue to produce the final value ----
@@ -528,9 +676,152 @@ def hue_adjust(dataset) :
     dataset = dataset.drop_vars('hue_delta')
     return(dataset)
 
-def hue_calculation(dataset,instrument='msi_agm',test=False,verbose=False) : 
-    #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+def chromatic_coefficient_parameters():
+    msi = pd.DataFrame({
+        'nm'   : ['R400','R490'  ,'R560'  ,'R665'   ,'R705' ,'R710'],
+        'band' : [''    , '2'    , '3'    , '4'     , '5'   ,''],
+        'name' : [''    , 'msi02', 'msi03', 'msi04' , 'msi05'   ,''],
+        'X'    : [ 8.356 , 12.040 , 53.696 , 32.028 , 0.529 , 0.016 ],
+        'Y'    : [ 0.993 , 23.122 , 65.702 , 16.808 , 0.192 , 0.006 ],
+        'Z'    : [ 43.487, 61.055 , 1.778  , 0.015  , 0.000 , 0.000 ],
+    }, )
+
+    oli = pd.DataFrame({
+        'nm'   : ['R400' , 'R443' , 'R482' , 'R561' , 'R655' , 'R710'],
+        'band' : [  ''   ,    '1' ,   '2'  ,   '3'  ,   '4'  ,   ''  ],  
+        'name' : [  ''   , 'oli01' ,'oli02' ,'oli03', 'oli04',   ''  ],  
+        'X'    : [ 2.217 , 11.053 ,  6.950 , 51.135 , 34.457 , 0.852 ],
+        'Y'    : [ 0.082 , 1.320  , 21.053 , 66.023 , 18.034 , 0.311 ],
+        'Z'    : [ 10.745 , 58.038 , 34.931 , 2.606 ,  0.016 , 0.000 ]
+        })
+
+    tm = pd.DataFrame({
+        'nm'   : [ 'R400' ,  'R485', 'R565' , 'R660' , 'R710' ],
+        'band' : [  ''    ,    '1' ,  '2'   ,   '3'  , ''     ],
+        'name' : [  ''    ,  'tm01', 'tm02' ,  'tm03', ''     ],
+        'X'    : [ 7.8195 , 13.104 , 53.791 , 31.304 , 0.6463 ],
+        'Y'    : [ 0.807  , 24.097 , 65.801 , 15.883 , 0.235  ],
+        'Z'    : [ 40.336 , 63.845 , 2.142  , 0.013  , 0.000  ],
+        })
+
+    # --- put the parameters into a dictionary
+    return({'msi':msi,'oli':oli,'tm':tm})
+
+
+def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=False,verbose=False) : 
+    #---- Hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    #- Method is as per Van Der Woerd 2018.
+    #- More accurate hue angles are retrieved if more bands are used - but the visible bands are most important
+    #- results for ETM+ are therefore  less accurate than for MSI and OLI?
+    #- the OLI geomedian lacks band 1, so it cannot be used. This leaves a gap in the data.
+    #- examiation of a time series shows clear patterns. Oli data give lower values than msi and tm, which are in good agreement 
+
+    #enter the x,y,z msi chromatic coefficients...
+     #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    instr = instrument
+    if instr in ('msi_agm','oli_agm','tm_agm'):  
+        instr = instr[0:instr.find('_agm')]  
+        agm = True
+    else: 
+        agm = False
     
+    ccs = chromatic_coefficient_parameters()[instr]
+
+    # determining the available bands gets a bit messy due to continengcies...
+    required_bands = ccs['name'][ccs['name']!=''].values         # pos
+
+    # --- make two lists of band names ---
+    dsbands = []
+    for name in required_bands:
+        if agm                     : name = name + '_agm'
+        if rayleigh_corrected_data : name = name + 'r'     
+        if name in dataset.data_vars    : dsbands.append(name)
+
+    Cdata         = xr.zeros_like(dataset).drop_vars(dataset.data_vars)
+    Cdata['hue'] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
+
+    if np.size(required_bands) != np.size(dsbands) : 
+        print('\n Aborting hue calculation for instrument ',instr,' due to lack of necessary data bands\n')
+        Cdata['hue'] = ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))*np.nan
+        return(Cdata['hue'])
+    
+    for XYZ in 'X','Y','Z':
+        Cdata[XYZ] =  ('time','y','x'), np.zeros((dataset.sizes['time'],dataset.sizes['y'],dataset.sizes['x']))
+        for band in required_bands:
+            dsband       = dsbands[list(required_bands).index(band)] 
+            coeff        = ccs[ccs.name==band][XYZ].values
+            Cdata[XYZ]   = dataset[dsband] * coeff + Cdata[XYZ]
+
+    Cdata["XYZ"] = Cdata['X'] + Cdata['Y'] +  Cdata['Z']
+    Xwhite =  Ywhite = 1 / 3.
+    
+    # ---- normalise the X and Y parameters and conver to a delta from white:
+    Cdata["X"] = Cdata['X'] / Cdata['XYZ'] - Xwhite 
+    Cdata["Y"] = Cdata['Y'] / Cdata['XYZ'] - Ywhite
+    Cdata["Z"] = Cdata['Z'] / Cdata['XYZ']
+    # ---- convert vector to angle ----
+    Cdata['hue'] = np.mod(np.arctan2(Cdata['Y'],Cdata['X'])*(180.00/np.pi) +360.,360)  
+    Cdata = hue_adjust(Cdata,instr)
+    
+    # ---- this gives the correct mathematical angle, ie. from 0 (=east), counter-clockwise as a positive number
+    # ---- note the 'arctan2' function, and that x and y are switched compared to expectations
+    
+    return(Cdata.hue)
+    
+def geomedian_hue (ds_annual,water_mask,test=False):
+    # --- a function to calculate the hue value of the geomedian, allowing for the possibility of multiple sensors at each time point
+    # (band one is missing from the oli agm, but perhaps we will be able to do without it)
+    # To combine the hue from multiple sensors we take a weighted mean. 
+    count = 0   
+    for inst in list(('msi','oli','tm')):
+        inst_agm = inst+'_agm'
+        if inst_agm in ds_annual.data_vars: 
+
+            # --- calculate the HUE for this sensor
+            hue_data = hue_calculation(ds_annual,inst_agm,rayleigh_corrected_data = True,test=True)
+            
+            # --- set nans to zero, and also in the agm_count variable
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
+            #negate the counts where there is no data produced 
+            ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(hue_data)                    ,ds_annual[inst_agm+'_count'],0)
+            hue_data                     = np.where(~np.isnan(hue_data)                    ,hue_data                    ,0)
+                      
+            if count == 0: 
+                mean_hue  =  hue_data * ds_annual[inst_agm+'_count']
+                agm_count =             ds_annual[inst_agm+'_count']
+            else :    
+                mean_hue  = mean_hue  + hue_data * ds_annual[inst_agm+'_count']
+                agm_count = agm_count + ds_annual[inst_agm+'_count']
+            count = count + 1
+         
+            #hue_data = np.where(~np.isnan(water_mask),hue_data,np.nan)   # new code with mask 
+
+            # --- this retains a value for each instument, not essential but useful during developement
+            ds_annual[inst_agm+'_hue'] = ('time','y','x'),hue_data
+            ds_annual[inst_agm+'_hue'] = xr.where(water_mask,ds_annual[inst_agm+'_hue'],np.nan)
+
+            #ds_annual[inst_agm+'_hue'] = xr.where(water_mask ,ds_annual[inst_agm+'_hue'] , hue_data)
+
+    # --- divide by the total count to get the actual mean, then trim back to relevant values and areas
+    mean_hue = mean_hue / agm_count
+    ds_annual['agm_hue'] = (ds_annual.wofs_ann_freq.dims), mean_hue.data
+    ds_annual['agm_hue'] = xr.where(water_mask,ds_annual['agm_hue'],np.nan)
+    # ---- trim extreme values that can arise 
+    ds_annual['agm_hue'] = xr.where(ds_annual['agm_hue']>25,
+                                    xr.where(ds_annual['agm_hue'] < 100,ds_annual['agm_hue'],
+                                             np.nan),np.nan)
+    return(ds_annual)
+
+    
+def hue_calculation_old_version(dataset,instrument='msi_agm',test=False,verbose=False) : 
+    #---- the hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
+    ### Colour space transformation on MSI data.
+    #- Method is as per Van Der Woerd 2018.
+    #- More accurate hue angles are retrieved if more bands are used;
+    #- results for ETM+ are therefore  less accurate than for MSI and OLI
+    #- Cannot run for OLI at this point, because we don't have band1 in the geomedian
+    #- Results should in general be more accurate with more bands, but MSI, OLI and ETM are limited
+
     #enter the x,y,z msi chromatic coefficients...
     chrom_coeffs = {
         'X': {'msi01':8.356, 'msi02':12.040,'msi03': 53.696,'msi04':32.028,'msi05': 0.529}, #x msi chromaticity
@@ -593,7 +884,92 @@ def hue_calculation(dataset,instrument='msi_agm',test=False,verbose=False) :
         if test:Cdata['Ynd'].sel(time=slice('2019','2020')).plot(col='time',robust=True,vmin=0)#,vmax=360,cmap='hsv')
     return Cdata['hue'],Cdata_summary['hue']  #the second output is not required for pixel-level processing, but is used by some of my code. 
 
-def R_correction(ds,dp_adjust,instruments,water_frequency_threshold=0.9,verbose=False,test=True):
+# --- Dark pixel correction - preparing inputs 
+#    'dp_adjust_parameters' dictionary controls which variables are used as a reference, 
+#     and which are changed, in the dark-pixel correction.
+
+#     Revised code 2025-10-07 to cater for non-geomedian situations. 
+
+def apply_R_correction(ds,
+                       instr_list,
+                       water_mask, drop = True,test=False,verbose=False) :
+        
+    dp_adjust_parameters = { 
+        'msi': {'ref_var':'msi12' , 'var_list': ['msi04','msi03','msi02','msi01','msi05','msi06', 'msi07']},
+        'oli': {'ref_var':'oli07' , 'var_list': ['oli04','oli03','oli02','oli01']},
+        'tm' : {'ref_var': 'tm07' , 'var_list': [ 'tm04', 'tm03', 'tm02', 'tm01']}
+        }
+    # --- check the instrument list against the dataset  --- 
+    instr_list = list(set(instr_list) & set(ds.data_vars))    
+    # ---- check the reference variables against the dataset --- 
+    templist  = instr_list
+    for instr in templist:
+        # item_number = templist == instr #  # --- this seemed like a mistake... does not always work... 
+        item_number = np.where(np.isin(templist,instr))[0].item()  
+        agm        = False ; suffix = ''
+        if instr.find('_agm') > 0:
+            agm     = True; suffix = instr[instr.find('_agm'):]
+            instr   = instr[0:instr.find('_agm')]
+        if not    dp_adjust_parameters[instr]['ref_var']+suffix in ds.data_vars:
+            instr_list.pop(item_number)    
+
+    ds = R_correction(ds=ds,
+                      instr_list=instr_list,
+                      dp_adjust_parameters=dp_adjust_parameters,
+                      water_mask = water_mask,
+                      drop = drop,
+                      verbose=verbose,
+                      test=test)
+    return(ds)
+
+
+def R_correction(ds,instr_list,dp_adjust_parameters,water_mask,drop=True,verbose=False,test=True):
+    #--- Rayleigh correction - dark pixel adjustment ---
+    #--- for each variable in the list, reduce by the value of the ref_variable, over target areas ---
+    #--- target areas are areas withing the provided water mask 
+    #-------------------------------------------------------------------------------------------------------------
+    # --- the 'dp_adjust' dictionary passed in as an argument controls which variables are used as a reference, and which are changed 
+    # --- it is assumed at this point that the relvant variables are in the dataset.  (Checks are done in the calling function).
+    
+    for instr in instr_list:
+        agm = False;  suffix = ''
+        if  instr.find('_agm') > 0 :    
+            suffix = instr[instr.find('_agm'):]
+            agm = True; 
+            instr = instr[0:instr.find('_agm')]
+       
+        reference_var = dp_adjust_parameters[instr]['ref_var']+suffix
+        for target_var in dp_adjust_parameters[instr]['var_list']:
+            target_var = target_var+suffix
+            new_var    = target_var+'r'
+            if new_var in ds.data_vars: ds=ds.drop_vars(new_var)
+            if not target_var in ds.data_vars :
+                print('---variable -->  ',target_var,'  <-- anticipated but not found in the dataset (non-fatal)')
+            else:
+                ds[new_var] = ds[reference_var]*0.0
+                ds[new_var] = xr.where(ds[target_var]>0,xr.where(ds[target_var] > ds[reference_var] ,ds[target_var] - ds[reference_var] , ds[target_var]),np.nan)
+                
+                ds[new_var] = xr.where(water_mask,ds[new_var],ds[target_var]) 
+                #print('stopping')
+                #return(ds)
+                if drop :
+                    ds = ds.drop_vars(target_var)
+                    ds = ds.rename   ({new_var : target_var})
+
+    if test or verbose and not drop : #plot graphs illustrating the shift in the cumulative distribution
+        
+            quantiles = np.arange(0,1,.01)
+            plt.plot(ds['msi02_agmr'].quantile(quantiles),quantiles,"b-")
+            plt.plot(ds['msi02_agm'].quantile(quantiles),quantiles,"b--")
+            plt.plot(ds['msi03_agmr'].quantile(quantiles),quantiles,"g-")
+            plt.plot(ds['msi03_agm'].quantile(quantiles),quantiles,"g--")
+            plt.plot(ds['msi04_agmr'].quantile(quantiles),quantiles,"r-")
+            plt.plot(ds['msi04_agm'].quantile(quantiles),quantiles,"r--")
+   
+    if verbose : print('R_correction completed normally')
+    return(ds)
+    
+def R_correction_old(ds,dp_adjust,instruments,water_frequency_threshold=0.9,verbose=False,test=True):
     #--- Rayleigh correction - dark pixel adjustment ---
     #--- for each variable in the list, reduce by the value of the ref_variable, over target areas ---
     #--- target areas are areas where the frequency of water is ge than the water frequency threshold parameter
