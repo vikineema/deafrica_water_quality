@@ -79,24 +79,6 @@ def parse_task(task_id, gridspec):
     return temporal_id, tile_id, tile_geobox
 
 
-def prepare_instruments(instruments_to_use, start_date, end_date):
-    """Filter instruments by date and return valid instruments list."""
-    instruments_to_use = check_instrument_dates(
-        instruments_to_use, start_date, end_date
-    )
-    instruments_list = get_instruments_list(instruments_to_use)
-    return instruments_to_use, instruments_list
-
-
-def prepare_queries(instruments_to_use, start_date, end_date):
-    """Build datacube queries for given instruments and dates."""
-    return build_dc_queries(
-        instruments_to_use=instruments_to_use,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-
 def setup_dask_if_needed():
     """Start local Dask cluster in Sandbox, else return None."""
     if bool(os.environ.get("JUPYTERHUB_USER", None)):
@@ -104,13 +86,6 @@ def setup_dask_if_needed():
             display_client=False, return_client=True
         )
     return None
-
-
-def load_data(dc_queries, tile_geobox, dc):
-    """Load multi-sensor dataset from datacube."""
-    return build_wq_agm_dataset(
-        dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
-    )
 
 
 @click.command(
@@ -194,13 +169,13 @@ def cli(
 
     # Load all tasks and split for this worker
     all_task_ids = load_tasks(tasks, tasks_file)
-    my_tasks = split_tasks(all_task_ids, max_parallel_steps, worker_idx)
+    tasks_to_run = split_tasks(all_task_ids, max_parallel_steps, worker_idx)
 
-    if not my_tasks:
+    if not tasks_to_run:
         log.warning(f"Worker {worker_idx} has no tasks to process. Exiting.")
         sys.exit(0)
 
-    log.info(f"Worker {worker_idx} processing {len(my_tasks)} tasks")
+    log.info(f"Worker {worker_idx} processing {len(tasks_to_run)} tasks")
 
     # Initialize grid and datacube
     gridspec = get_waterbodies_grid(resolution)
@@ -209,9 +184,11 @@ def cli(
     failed_tasks = []
 
     # Process each task
-    for task_id in my_tasks:
+    for idx, task_id in enumerate(tasks_to_run):
         try:
-            log.info(f"Processing task: {task_id}")
+            log.info(
+                f"Processing task {idx + 1} of {len(tasks_to_run)}: {task_id} "
+            )
 
             # Parse task information
             temporal_id, tile_id, tile_geobox = parse_task(task_id, gridspec)
@@ -232,32 +209,40 @@ def cli(
                     log.info(f"Task {task_id} already processed. Skipping.")
                     continue
 
-            # Prepare instruments and queries
-            instruments_to_use, instruments_list = prepare_instruments(
+            # Filter instruments by date and return valid instruments list.
+            instruments_to_use = check_instrument_dates(
                 config_instruments_to_use, start_date, end_date
             )
-            dc_queries = prepare_queries(
-                instruments_to_use, start_date, end_date
+            instruments_list = get_instruments_list(instruments_to_use)
+
+            # Prepare datacube queries
+            dc_queries = build_dc_queries(
+                instruments_to_use=instruments_to_use,
+                start_date=start_date,
+                end_date=end_date,
             )
 
             # Setup Dask if needed
             client = setup_dask_if_needed()
 
             # Load data
-            ds, source_datasets_uuids = load_data(dc_queries, tile_geobox, dc)
+            ds = build_wq_agm_dataset(
+                dc_queries=dc_queries, tile_geobox=tile_geobox, dc=dc
+            )
 
             # Close Dask client if it was created
             if client is not None:
                 client.close()
 
-            # Water analysis
-            ds = water_analysis(
-                ds,
-                water_frequency_threshold=WFTH,
-                wofs_varname="wofs_ann_freq",
-                permanent_water_threshold=PWT,
-                sigma_coefficient=SC,
-            )
+            # Turned off water analysis using wofs_annual_summary
+            # to use the water mask from the 5year wofs summary
+            # ds = water_analysis(
+            #     ds,
+            #     water_frequency_threshold=WFTH,
+            #     wofs_varname="wofs_ann_freq",
+            #     permanent_water_threshold=PWT,
+            #     sigma_coefficient=SC,
+            # )
 
             # Reflectance correction
             ds = R_correction(ds, instruments_to_use, WFTL)
@@ -310,18 +295,20 @@ def cli(
                 )
             )
 
-            # Define variables to keep
+            # TODO: Refine list of expected water quality variables
+            # to keep in final output dataset.
             initial_keep_list = [
                 # wofs_ann instrument
                 "wofs_ann_freq",
                 "wofs_ann_clearcount",
                 "wofs_ann_wetcount",
+                "watermask",
                 # water_analysis
                 "wofs_ann_freq_sigma",
                 "wofs_ann_confidence",
                 "wofs_pw_threshold",
                 "wofs_ann_pwater",
-                "watermask",
+                "wofs_ann_watermask",
                 # optical water type
                 "owt_msi",
                 "owt_oli",
@@ -405,7 +392,7 @@ def cli(
                 log.info("Creating metadata STAC file ...")
                 stac_file_url = prepare_dataset(
                     dataset_path=get_parent_dir(output_csv_url),
-                    source_datasets_uuids=source_datasets_uuids,
+                    #  source_datasets_uuids=source_datasets_uuids,
                 )
 
             log.info(f"Successfully processed task: {task_id}")
