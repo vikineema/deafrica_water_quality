@@ -334,7 +334,148 @@ def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verb
     return  (14.44* X)      #the distribution of results is exponential; this measure will be more stable without raising to the power.
 
 
-def OWT_pixel(ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbose=True, test=True):
+def create_OWT_response_models(path='/home/jovyan/dev/deafrica_water_quality/reference_data/',agm=False):   
+    # --- A function to read in Vagelis' reference spectra for Optical Water Types and return 
+    #     the expected response (vector) of each sensor to each OWT.
+    #     
+    #     All water types are included, but inland water types are 1-13
+    #     The data are spectral response curves for each OWT, with a 1-nm step
+    #     The longest wavelength is 800nm
+    #     The response for a specific instrument/band, say oli01, is estimated by integrating the spectrum over the instrument response 
+    #     - ideally that is a convolution, using  the instrument response functions, however   
+    #     - I settle for an average over the central range
+    # --- read in the data ---
+    
+    name = 'Vagelis_OWT_allwaters_mean_standardised.csv'
+    suffix = ''
+    if agm          : suffix = '_agm'
+    # --- read the spectral reflectance models for the optial water types ---
+    filename = path+name
+    with open(filename,'r') as f:
+        OWT_spectra = pd.read_csv(f)
+        OWT_spectra = OWT_spectra[OWT_spectra.index < 13]    # --- limit to the inland water types --
+
+    # --- read in the wavelengths for the bands in oli, tm and msi (spectal response models) ---
+    data = {}
+    for sensor in 'msi','tm','oli':
+        name = 'sensor bands-'+sensor+'.csv'
+        filename = path+name
+        with open(filename,'r') as f:
+             sensor_data = pd.read_csv(f)
+             # rename columns to avoid clashes with reserved words
+             sensor_data.rename(columns={'max': 'l_max','min': 'l_min'}, inplace=True)
+    
+        a = sensor_data
+        # list the bands  that are going to be relevant , ie., less than 800nm
+        band_list = (a[a['l_max']<800].band_name).values # & set(ds.data_vars) 
+        # --- set up a  dataframe to take results for this instrument ---
+        labels = [] 
+        for i in np.arange(1,14): labels = np.append(labels,'OWT-'+str(i))
+
+        inst_OWT = pd.DataFrame(
+            data = {'OWT' : np.arange(1,14,1)}, 
+            index = labels
+            )
+        # --- run through the bands ...
+        for band_name in band_list :
+            # determine the integration interval based on the central wavlength and the width; extract these as integers
+            delta =      a[a['band_name']==band_name]['width'].values * 0.8 *0.5
+            start = int((a[a['band_name']==band_name]['central'].values - delta)[0]) 
+            end   = int((a[a['band_name']==band_name]['central'].values + delta)[0]) 
+            #print(sensor,band_name, start,end)
+
+            # find the start and end column numbers in the response functions and sum over those for each OWT
+            b = OWT_spectra.loc[:,str(start):str(end)].T.sum()
+            # add to the data frame
+            inst_OWT.insert(inst_OWT.columns.size,band_name+suffix,(b.values))
+        # --- add this data frame to the data dictionary ---
+        data[sensor] = inst_OWT
+        # --- write to a csv file in the current location --- 
+        inst_OWT.to_csv(sensor+'_OWT_vectors.csv')
+    return(data)
+    
+def OWT (ds,instrument,OWT_vectors,agm=False,dp_corrected = False, verbose=True,test=True):
+    # --- this version uses a long-hand approch to calculating the dot product. Inelegant but simple.
+    # --- identify the instrument bands that are relevant and in the dataset
+    resample_rate=1  #legacy stuff
+    if verbose or test : print('\n calculating optical water type (OWT), sensor = ',instrument,' ....\n')
+    agm          = False
+    dp_corrected = False
+    suffix=''
+    if agm          : suffix = suffix + '_agm'
+    if dp_corrected : suffix = suffix + 'r'
+    for col in OWT_vectors.columns.values:     #--- this loop renames the columns so that we can match them with the data variables
+        if col.find(instrument)>-1:
+            OWT_vectors = OWT_vectors.rename(columns={col:col+suffix})  
+    band_list = list(set(ds.data_vars) & set(OWT_vectors.columns.values))
+    band_list.sort()
+    # --- ditch unnecessary columns and rows in the vectors table and calculate the magnitude of each vector
+    OWT_vectors           =  OWT_vectors.drop(columns=list(set(OWT_vectors.columns.values) - set(band_list)))
+    OWT_vectors['length'] = ((OWT_vectors**2).sum(axis=1))**0.5  # calculate the length of each vector  
+    OWT_vectors = OWT_vectors.reset_index().rename(columns={'index':'OWT'})    # brings the OWT labels in as a normal column,'OWT'
+
+    #--- loop through the Optical water types ---
+    start     = True
+    for OWT in OWT_vectors['OWT']:
+        vec = OWT_vectors[OWT_vectors['OWT'] == OWT]  # the vector for this OWT
+        OWT_index = int(OWT[OWT.find('-')+1:])  # the OWT numnber
+        if test: print('OWT number:',OWT_index)
+        #print(OWT_vectors[OWT_vectors['OWT']==OWT])
+        # --- create a dataset for this OWT based on one of he instrument bands ---
+        varname   = band_list[0]
+        if start:
+            start     = False
+            # working variiables
+            mydataset = xr.Dataset({'owt_current' : ds[varname]})
+#            mydataset = xr.Dataset({'owt_current' : ds[varname][:,::resample_rate,::resample_rate]})
+            mydataset['owt_cos_max']        = mydataset['owt_current']*0 + -2  #a number smaller than any cosine
+            mydataset['owt_cos'    ]        = mydataset['owt_current']*0 
+            mydataset['owt_closest']        = mydataset['owt_current']*0 + OWT_index
+            mydataset['self_product']       = mydataset['owt_current']*0 
+            mydataset['vector_product']     = mydataset['owt_current']*0 
+            if test: print('prevailing owt is :',mydataset.owt_closest.median())        
+
+
+        mydataset['self_product'  ] = 0                      
+        mydataset['vector_product'] = 0                      
+        for band in band_list:
+            if test: print('processing band: ',band)
+            mydataset['self_product'  ]  = mydataset['self_product'  ] + ds[band]**2
+            mydataset['vector_product']  = mydataset['vector_product'] + ds[band]*vec[band].item()
+            
+        mydataset['self_product'] = mydataset['self_product'  ] ** 0.5
+        mydataset['owt_cos'     ] = mydataset['vector_product'] \
+                     / (mydataset['self_product'] * vec['length'].values)
+        mydataset['owt_closest'] = xr.where(mydataset['owt_cos'] > mydataset['owt_cos_max'] , OWT_index ,            mydataset['owt_closest'])
+        mydataset['owt_cos_max'] = xr.where(mydataset['owt_cos'] > mydataset['owt_cos_max'] , mydataset['owt_cos'] , mydataset['owt_cos_max'])
+        if test: print('prevailing owt is :',mydataset.owt_closest.median())        
+        
+    
+    if verbose or test : print('....done')
+    if verbose         : 
+        data = [[3,'oligotrophic (clear)'],
+                [9,'oligotrophic (clear)'],
+                [13,'oligotrophic (clear)'],
+                [1,'eutrophic and blue-green'],
+                [2,'eutrophic and blue-green'],
+                [4,'eutrophic and blue-green'],
+                [5,'eutrophic and blue-green'],
+                [11,'eutrophic and blue-green'],
+                [12,'eutrophic and blue-green'],
+                [6,'hyper-eutrophic and green-brown'],
+                [7,'hyper-eutrophic and green-brown'],
+                [8,'hyper-eutrophic and green-brown'],
+                [10,'hyper-eutrophic and green-brown']]
+        data.sort()
+        columns = ['OWT','description']
+        
+        df   = pd.DataFrame(data=data,columns=columns)
+        owt  = mydataset.owt_closest.median().item()
+        desc = df[df['OWT']==owt]['description'].item()
+        print('Prevailng water type is ',owt,' :  ',desc)
+    return(mydataset['owt_closest'])
+
+def OWT_pixel_deprecated (ds,instrument,water_frequency_threshold=0.8,resample_rate=3,verbose=True, test=True):
     # --- Determine the Open Water Type for each pixel, over areas that are usually water. 
     # --- 'instrument' is a dictionary established while building the dataset
     # --- 'resample_rate' is the spatial resample step to reduce the memory required
@@ -751,7 +892,7 @@ def hue_calculation_old_version(dataset,instrument='msi_agm',test=False,verbose=
 
 def apply_R_correction(ds,
                        instr_list,
-                       water_mask, test=False,verbose=False) :
+                       water_mask, drop = True,test=False,verbose=False) :
         
     dp_adjust_parameters = { 
         'msi': {'ref_var':'msi12' , 'var_list': ['msi04','msi03','msi02','msi01','msi05','msi06', 'msi07']},
@@ -763,24 +904,26 @@ def apply_R_correction(ds,
     # ---- check the reference variables against the dataset --- 
     templist  = instr_list
     for instr in templist:
-        item_number = templist == instr
+        # item_number = templist == instr #  # --- this seemed like a mistake... does not always work... 
+        item_number = np.where(np.isin(templist,instr))[0].item()  
         agm        = False ; suffix = ''
         if instr.find('_agm') > 0:
             agm     = True; suffix = instr[instr.find('_agm'):]
             instr   = instr[0:instr.find('_agm')]
-            if not    dp_adjust_parameters[instr]['ref_var']+suffix in ds.data_vars:
-                instr_list.pop(item_number)    
+        if not    dp_adjust_parameters[instr]['ref_var']+suffix in ds.data_vars:
+            instr_list.pop(item_number)    
 
     ds = R_correction(ds=ds,
                       instr_list=instr_list,
                       dp_adjust_parameters=dp_adjust_parameters,
                       water_mask = water_mask,
+                      drop = drop,
                       verbose=verbose,
                       test=test)
     return(ds)
 
 
-def R_correction(ds,instr_list,dp_adjust_parameters,water_mask,verbose=False,test=True):
+def R_correction(ds,instr_list,dp_adjust_parameters,water_mask,drop=True,verbose=False,test=True):
     #--- Rayleigh correction - dark pixel adjustment ---
     #--- for each variable in the list, reduce by the value of the ref_variable, over target areas ---
     #--- target areas are areas withing the provided water mask 
@@ -809,8 +952,11 @@ def R_correction(ds,instr_list,dp_adjust_parameters,water_mask,verbose=False,tes
                 ds[new_var] = xr.where(water_mask,ds[new_var],ds[target_var]) 
                 #print('stopping')
                 #return(ds)
-                
-    if test or verbose : #plot graphs illustrating the shift in the cumulative distribution
+                if drop :
+                    ds = ds.drop_vars(target_var)
+                    ds = ds.rename   ({new_var : target_var})
+
+    if test or verbose and not drop : #plot graphs illustrating the shift in the cumulative distribution
         
             quantiles = np.arange(0,1,.01)
             plt.plot(ds['msi02_agmr'].quantile(quantiles),quantiles,"b-")
