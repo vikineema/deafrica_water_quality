@@ -13,6 +13,7 @@ import xarray as xr
 
 log = logging.getLogger(__name__)
 
+
 # =============================================================================
 # Helper to create algorithm entries
 # =============================================================================
@@ -24,49 +25,105 @@ def create_wq_entry(func, wq_varname, **band_args):
 # =============================================================================
 # Water Quality Algorithms
 # =============================================================================
-def NDCI_NIR_R(dataset: xr.Dataset, NIR_band: str, red_band: str) -> xr.DataArray:
+def NDCI_NIR_R(
+    dataset: xr.Dataset, NIR_band: str, red_band: str
+) -> xr.DataArray:
     """Normalized Difference Chlorophyll Index (NDCI)."""
-    return (dataset[NIR_band] - dataset[red_band]) / (dataset[NIR_band] + dataset[red_band])
+    return (dataset[NIR_band] - dataset[red_band]) / (
+        dataset[NIR_band] + dataset[red_band]
+    )
 
-def ChlA_MERIS2B(dataset: xr.Dataset, band_708: str, band_665: str) -> xr.DataArray:
+
+def ChlA_MERIS2B(
+    dataset: xr.Dataset, band_708: str, band_665: str
+) -> xr.DataArray:
     """MERIS two-band chlorophyll-a estimation."""
     X = dataset[band_708] / dataset[band_665]
-    return (25.28 * (X ** 2)) + 14.85 * X - 15.18
+    return (25.28 * (X**2)) + 14.85 * X - 15.18
 
-def ChlA_MODIS2B(dataset: xr.Dataset, band_748: str, band_667: str) -> xr.DataArray:
+
+def ChlA_MODIS2B(
+    dataset: xr.Dataset, band_748: str, band_667: str
+) -> xr.DataArray:
     """MODIS two-band chlorophyll-a estimation."""
     X = dataset[band_748] / dataset[band_667]
     return 190.34 * X - 32.45
 
-def NDSSI_RG(dataset: xr.Dataset, red_band: str, green_band: str) -> xr.DataArray:
+
+def NDSSI_RG(
+    dataset: xr.Dataset, red_band: str, green_band: str
+) -> xr.DataArray:
     """Normalized Difference Suspended Sediment Index (Red-Green)."""
-    return (dataset[red_band] - dataset[green_band]) / (dataset[red_band] + dataset[green_band])
+    return (dataset[red_band] - dataset[green_band]) / (
+        dataset[red_band] + dataset[green_band]
+    )
 
-def NDSSI_BNIR(dataset: xr.Dataset, blue_band: str, NIR_band: str) -> xr.DataArray:
+
+def NDSSI_BNIR(
+    dataset: xr.Dataset, blue_band: str, NIR_band: str
+) -> xr.DataArray:
     """Normalized Difference Suspended Sediment Index (Blue-NIR)."""
-    return (dataset[blue_band] - dataset[NIR_band]) / (dataset[blue_band] + dataset[NIR_band])
+    return (dataset[blue_band] - dataset[NIR_band]) / (
+        dataset[blue_band] + dataset[NIR_band]
+    )
 
-def TI_yu(dataset: xr.Dataset, NIR: str, Red: str, Green: str, scalefactor: float = 0.01) -> xr.DataArray:
+
+def TI_yu(
+    dataset: xr.Dataset,
+    NIR: str,
+    Red: str,
+    Green: str,
+    scalefactor: float = 0.01,
+) -> xr.DataArray:
     """Turbidity Index of Yu et al. 2019."""
-    delta = ((dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]))
+    delta = (dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green])
     delta = xr.where(delta < 0, 0, delta)
     return scalefactor * np.sqrt(delta)
 
-def TSM_LYM_ETM(dataset: xr.Dataset, green_band: str, red_band: str, scale_factor: float = 0.0001) -> xr.DataArray:
-    return 3983 * (((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6246)
 
-def TSM_LYM_OLI(dataset: xr.Dataset, green_band: str, red_band: str, scale_factor: float = 0.0001) -> xr.DataArray:
-    return 3957 * (((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6436)
+def TSM_LYM_ETM(
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
+) -> xr.DataArray:
+    return 3983 * (
+        ((dataset[green_band] + dataset[red_band]) * scale_factor / 2)
+        ** 1.6246
+    )
 
-def SPM_QIU(dataset: xr.Dataset, green_band: str, red_band: str) -> xr.DataArray:
+
+def TSM_LYM_OLI(
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
+) -> xr.DataArray:
+    return 3957 * (
+        ((dataset[green_band] + dataset[red_band]) * scale_factor / 2)
+        ** 1.6436
+    )
+
+
+def SPM_QIU(
+    dataset: xr.Dataset, green_band: str, red_band: str
+) -> xr.DataArray:
     X = dataset[red_band] / dataset[green_band]
     return 10.0 ** (2.26 * (X**3) - 5.42 * (X**2) + 5.58 * X - 0.72)
+
 
 def TSS_QUANG8(dataset: xr.Dataset, red_band: str) -> xr.DataArray:
     """Quang et al. 2017 TSS estimation."""
     return 380.32 * dataset[red_band] * 0.0001 - 1.7826
 
-def TSS_Zhang(dataset: xr.Dataset, blue_band: str, green_band: str, red_band: str, scale_factor: float = 0.0001) -> xr.DataArray:
+
+def TSS_Zhang(
+    dataset: xr.Dataset,
+    blue_band: str,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
+) -> xr.DataArray:
     """Zhang et al. 2023 TSS estimation (stable version)."""
     abovezero = 1e-5
     GplusR = dataset[green_band] + dataset[red_band]
@@ -112,72 +169,226 @@ NORMALISATION_PARAMETERS = {
 
 ndci_nir_r = {
     "msi_agm": {
-        "54": create_wq_entry(NDCI_NIR_R, "ndci_msi54_agm", NIR_band="msi05_agmr", red_band="msi04_agmr"),
-        "64": create_wq_entry(NDCI_NIR_R, "ndci_msi64_agm", NIR_band="msi06_agmr", red_band="msi04_agmr"),
-        "74": create_wq_entry(NDCI_NIR_R, "ndci_msi74_agm", NIR_band="msi07_agmr", red_band="msi04_agmr"),
+        "54": create_wq_entry(
+            NDCI_NIR_R,
+            "ndci_msi54_agm",
+            NIR_band="msi05_agmr",
+            red_band="msi04_agmr",
+        ),
+        "64": create_wq_entry(
+            NDCI_NIR_R,
+            "ndci_msi64_agm",
+            NIR_band="msi06_agmr",
+            red_band="msi04_agmr",
+        ),
+        "74": create_wq_entry(
+            NDCI_NIR_R,
+            "ndci_msi74_agm",
+            NIR_band="msi07_agmr",
+            red_band="msi04_agmr",
+        ),
     },
-    "tm_agm": create_wq_entry(NDCI_NIR_R, "ndci_tm43_agm", NIR_band="tm04_agm", red_band="tm03_agmr"),
-    "oli_agm": create_wq_entry(NDCI_NIR_R, "ndci_oli54_agm", NIR_band="oli05_agm", red_band="oli04_agmr"),
+    "tm_agm": create_wq_entry(
+        NDCI_NIR_R, "ndci_tm43_agm", NIR_band="tm04_agm", red_band="tm03_agmr"
+    ),
+    "oli_agm": create_wq_entry(
+        NDCI_NIR_R,
+        "ndci_oli54_agm",
+        NIR_band="oli05_agm",
+        red_band="oli04_agmr",
+    ),
 }
 
 chla_meris2b = {
-    "msi_agm": create_wq_entry(ChlA_MERIS2B, "chla_meris2b_msi_agm", band_708="msi05_agmr", band_665="msi04_agmr"),
-    "msi": create_wq_entry(ChlA_MERIS2B, "chla_meris2b_msi", band_708="msi05", band_665="msi04"),
+    "msi_agm": create_wq_entry(
+        ChlA_MERIS2B,
+        "chla_meris2b_msi_agm",
+        band_708="msi05_agmr",
+        band_665="msi04_agmr",
+    ),
+    "msi": create_wq_entry(
+        ChlA_MERIS2B, "chla_meris2b_msi", band_708="msi05", band_665="msi04"
+    ),
 }
 
 chla_modis2b = {
-    "msi_agm": create_wq_entry(ChlA_MODIS2B, "chla_modis2b_msi_agm", band_748="msi06_agmr", band_667="msi04_agmr"),
-    "msi": create_wq_entry(ChlA_MODIS2B, "chla_modis2b_msi", band_748="msi06", band_667="msi04"),
-    "tm_agm": create_wq_entry(ChlA_MODIS2B, "chla_modis2b_tm_agm", band_748="tm04_agmr", band_667="tm03_agmr"),
+    "msi_agm": create_wq_entry(
+        ChlA_MODIS2B,
+        "chla_modis2b_msi_agm",
+        band_748="msi06_agmr",
+        band_667="msi04_agmr",
+    ),
+    "msi": create_wq_entry(
+        ChlA_MODIS2B, "chla_modis2b_msi", band_748="msi06", band_667="msi04"
+    ),
+    "tm_agm": create_wq_entry(
+        ChlA_MODIS2B,
+        "chla_modis2b_tm_agm",
+        band_748="tm04_agmr",
+        band_667="tm03_agmr",
+    ),
 }
 
 ndssi_rg = {
-    "msi_agm": create_wq_entry(NDSSI_RG, "ndssi_rg_msi_agm", red_band="msi04_agmr", green_band="msi03_agmr"),
-    "msi": create_wq_entry(NDSSI_RG, "ndssi_rg_msi", red_band="msi04r", green_band="msi03_agmr"),
-    "oli_agm": create_wq_entry(NDSSI_RG, "ndssi_rg_oli_agm", red_band="oli04_agmr", green_band="oli03_agmr"),
-    "oli": create_wq_entry(NDSSI_RG, "ndssi_rg_oli", red_band="oli04r", green_band="oli03r"),
-    "tm_agm": create_wq_entry(NDSSI_RG, "ndssi_rg_tm_agm", red_band="tm03_agmr", green_band="tm02_agmr"),
-    "tm": create_wq_entry(NDSSI_RG, "ndssi_rg_tm", red_band="tm03r", green_band="tmi02r"),
+    "msi_agm": create_wq_entry(
+        NDSSI_RG,
+        "ndssi_rg_msi_agm",
+        red_band="msi04_agmr",
+        green_band="msi03_agmr",
+    ),
+    "msi": create_wq_entry(
+        NDSSI_RG, "ndssi_rg_msi", red_band="msi04r", green_band="msi03_agmr"
+    ),
+    "oli_agm": create_wq_entry(
+        NDSSI_RG,
+        "ndssi_rg_oli_agm",
+        red_band="oli04_agmr",
+        green_band="oli03_agmr",
+    ),
+    "oli": create_wq_entry(
+        NDSSI_RG, "ndssi_rg_oli", red_band="oli04r", green_band="oli03r"
+    ),
+    "tm_agm": create_wq_entry(
+        NDSSI_RG,
+        "ndssi_rg_tm_agm",
+        red_band="tm03_agmr",
+        green_band="tm02_agmr",
+    ),
+    "tm": create_wq_entry(
+        NDSSI_RG, "ndssi_rg_tm", red_band="tm03r", green_band="tmi02r"
+    ),
 }
 
 ndssi_bnir = {
-    "msi": create_wq_entry(NDSSI_BNIR, "ndssi_bnir_msi", NIR_band="msi08", blue_band="msi02_agmr"),
-    "oli_agm": create_wq_entry(NDSSI_BNIR, "ndssi_bnir_oli_agm", NIR_band="oli06_agm", blue_band="oli02_agmr"),
-    "oli": create_wq_entry(NDSSI_BNIR, "ndssi_bnir_oli", NIR_band="oli06", blue_band="oli02r"),
-    "tm": create_wq_entry(NDSSI_BNIR, "ndssi_bnir_tm", NIR_band="tm04", blue_band="tm01r"),
+    "msi": create_wq_entry(
+        NDSSI_BNIR, "ndssi_bnir_msi", NIR_band="msi08", blue_band="msi02_agmr"
+    ),
+    "oli_agm": create_wq_entry(
+        NDSSI_BNIR,
+        "ndssi_bnir_oli_agm",
+        NIR_band="oli06_agm",
+        blue_band="oli02_agmr",
+    ),
+    "oli": create_wq_entry(
+        NDSSI_BNIR, "ndssi_bnir_oli", NIR_band="oli06", blue_band="oli02r"
+    ),
+    "tm": create_wq_entry(
+        NDSSI_BNIR, "ndssi_bnir_tm", NIR_band="tm04", blue_band="tm01r"
+    ),
 }
 
 ti_yu = {
-    "msi": create_wq_entry(TI_yu, "ti_yu_msi", NIR="msi08", Red="msi04r", Green="msi03_agmr"),
-    "oli_agm": create_wq_entry(TI_yu, "ti_yu_oli_agm", NIR="oli06_agm", Red="oli04_agmr", Green="oli03_agmr"),
-    "oli": create_wq_entry(TI_yu, "ti_yu_oli", NIR="oli06", Red="oli04r", Green="oli03r"),
-    "tm_agm": create_wq_entry(TI_yu, "ti_yu_tm_agm", NIR="tm04_agm", Red="tm03_agmr", Green="tm02_agmr"),
-    "tm": create_wq_entry(TI_yu, "ti_yu_tm", NIR="tm04", Red="tm03r", Green="tmi02r"),
+    "msi": create_wq_entry(
+        TI_yu, "ti_yu_msi", NIR="msi08", Red="msi04r", Green="msi03_agmr"
+    ),
+    "oli_agm": create_wq_entry(
+        TI_yu,
+        "ti_yu_oli_agm",
+        NIR="oli06_agm",
+        Red="oli04_agmr",
+        Green="oli03_agmr",
+    ),
+    "oli": create_wq_entry(
+        TI_yu, "ti_yu_oli", NIR="oli06", Red="oli04r", Green="oli03r"
+    ),
+    "tm_agm": create_wq_entry(
+        TI_yu,
+        "ti_yu_tm_agm",
+        NIR="tm04_agm",
+        Red="tm03_agmr",
+        Green="tm02_agmr",
+    ),
+    "tm": create_wq_entry(
+        TI_yu, "ti_yu_tm", NIR="tm04", Red="tm03r", Green="tmi02r"
+    ),
 }
 
 tsm_lym = {
-    "oli_agm": create_wq_entry(TSM_LYM_OLI, "tsm_lym_oli_agm", red_band="oli04_agmr", green_band="oli03_agmr"),
-    "oli": create_wq_entry(TSM_LYM_OLI, "tsm_lym_oli", red_band="oli04r", green_band="oli03r"),
-    "msi_agm": create_wq_entry(TSM_LYM_OLI, "tsm_lym_msi_agm", red_band="msi04_agmr", green_band="msi03_agmr"),
-    "msi": create_wq_entry(TSM_LYM_OLI, "tsm_lym_msi", red_band="msi04r", green_band="msi03r"),
-    "tm_agm": create_wq_entry(TSM_LYM_ETM, "tsm_lym_tm_agm", red_band="tm03_agmr", green_band="tm02_agmr"),
-    "tm": create_wq_entry(TSM_LYM_ETM, "tsm_lym_tm", red_band="tm03r", green_band="tm02r"),
+    "oli_agm": create_wq_entry(
+        TSM_LYM_OLI,
+        "tsm_lym_oli_agm",
+        red_band="oli04_agmr",
+        green_band="oli03_agmr",
+    ),
+    "oli": create_wq_entry(
+        TSM_LYM_OLI, "tsm_lym_oli", red_band="oli04r", green_band="oli03r"
+    ),
+    "msi_agm": create_wq_entry(
+        TSM_LYM_OLI,
+        "tsm_lym_msi_agm",
+        red_band="msi04_agmr",
+        green_band="msi03_agmr",
+    ),
+    "msi": create_wq_entry(
+        TSM_LYM_OLI, "tsm_lym_msi", red_band="msi04r", green_band="msi03r"
+    ),
+    "tm_agm": create_wq_entry(
+        TSM_LYM_ETM,
+        "tsm_lym_tm_agm",
+        red_band="tm03_agmr",
+        green_band="tm02_agmr",
+    ),
+    "tm": create_wq_entry(
+        TSM_LYM_ETM, "tsm_lym_tm", red_band="tm03r", green_band="tm02r"
+    ),
 }
 
 spm_qiu = {
-    "oli_agm": create_wq_entry(SPM_QIU, "spm_qiu_oli_agm", red_band="oli04_agmr", green_band="oli03_agmr"),
-    "oli": create_wq_entry(SPM_QIU, "spm_qiu_oli", red_band="oli04r", green_band="oli03r"),
-    "tm_agm": create_wq_entry(SPM_QIU, "spm_qiu_tm_agm", red_band="tm03_agmr", green_band="tm02_agmr"),
-    "tm": create_wq_entry(SPM_QIU, "spm_qiu_tm", red_band="tm03r", green_band="tm02r"),
-    "msi_agm": create_wq_entry(SPM_QIU, "spm_qiu_msi_agm", red_band="msi04_agmr", green_band="msi03_agmr"),
-    "msi": create_wq_entry(SPM_QIU, "spm_qiu_msi", red_band="msi04r", green_band="msi03r"),
+    "oli_agm": create_wq_entry(
+        SPM_QIU,
+        "spm_qiu_oli_agm",
+        red_band="oli04_agmr",
+        green_band="oli03_agmr",
+    ),
+    "oli": create_wq_entry(
+        SPM_QIU, "spm_qiu_oli", red_band="oli04r", green_band="oli03r"
+    ),
+    "tm_agm": create_wq_entry(
+        SPM_QIU, "spm_qiu_tm_agm", red_band="tm03_agmr", green_band="tm02_agmr"
+    ),
+    "tm": create_wq_entry(
+        SPM_QIU, "spm_qiu_tm", red_band="tm03r", green_band="tm02r"
+    ),
+    "msi_agm": create_wq_entry(
+        SPM_QIU,
+        "spm_qiu_msi_agm",
+        red_band="msi04_agmr",
+        green_band="msi03_agmr",
+    ),
+    "msi": create_wq_entry(
+        SPM_QIU, "spm_qiu_msi", red_band="msi04r", green_band="msi03r"
+    ),
 }
 
 tss_zhang = {
-    "msi_agm": create_wq_entry(TSS_Zhang, "tss_zhang_msi_agm", blue_band="msi02_agmr", red_band="msi04_agmr", green_band="msi03_agmr"),
-    "msi": create_wq_entry(TSS_Zhang, "tss_zhang_msi", blue_band="msi02r", red_band="msi04r", green_band="msi03_agmr"),
-    "oli_agm": create_wq_entry(TSS_Zhang, "tss_zhang_oli_agm", blue_band="oli02_agmr", red_band="oli04_agmr", green_band="oli03_agmr"),
-    "oli": create_wq_entry(TSS_Zhang, "tss_zhang_oli", blue_band="oli02r", red_band="oli04r", green_band="oli03r"),
+    "msi_agm": create_wq_entry(
+        TSS_Zhang,
+        "tss_zhang_msi_agm",
+        blue_band="msi02_agmr",
+        red_band="msi04_agmr",
+        green_band="msi03_agmr",
+    ),
+    "msi": create_wq_entry(
+        TSS_Zhang,
+        "tss_zhang_msi",
+        blue_band="msi02r",
+        red_band="msi04r",
+        green_band="msi03_agmr",
+    ),
+    "oli_agm": create_wq_entry(
+        TSS_Zhang,
+        "tss_zhang_oli_agm",
+        blue_band="oli02_agmr",
+        red_band="oli04_agmr",
+        green_band="oli03_agmr",
+    ),
+    "oli": create_wq_entry(
+        TSS_Zhang,
+        "tss_zhang_oli",
+        blue_band="oli02r",
+        red_band="oli04r",
+        green_band="oli03r",
+    ),
 }
 
 
@@ -199,6 +410,7 @@ ALGORITHMS_TSS = {
     "spm_qiu": spm_qiu,
 }
 
+
 # =============================================================================
 # Functions to Run Algorithms on Datasets
 # =============================================================================
@@ -215,7 +427,9 @@ def run_wq_algorithms(
             if instrument_name not in instruments_list:
                 continue
             instrument_alg_apps = (
-                list(inst_app.values()) if isinstance(inst_app, dict) and "func" not in inst_app else [inst_app]
+                list(inst_app.values())
+                if isinstance(inst_app, dict) and "func" not in inst_app
+                else [inst_app]
             )
             for alg_entry in instrument_alg_apps:
                 func = alg_entry["func"]
@@ -223,8 +437,14 @@ def run_wq_algorithms(
                 wq_varname = alg_entry["wq_varname"]
                 ds[wq_varname] = func(ds, **args)
 
-                scale_offset = NORMALISATION_PARAMETERS.get(wq_varname, {"scale": 1, "offset": 0})
-                ds[wq_varname].attrs = {"nodata": np.nan, "scales": scale_offset["scale"], "offsets": scale_offset["offset"]}
+                scale_offset = NORMALISATION_PARAMETERS.get(
+                    wq_varname, {"scale": 1, "offset": 0}
+                )
+                ds[wq_varname].attrs = {
+                    "nodata": np.nan,
+                    "scales": scale_offset["scale"],
+                    "offsets": scale_offset["offset"],
+                }
                 wq_varlist.append(wq_varname)
     return ds, wq_varlist
 

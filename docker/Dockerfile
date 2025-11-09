@@ -5,13 +5,16 @@ ARG BUILD_ENV=prod
 ARG MAMBA_DOCKERFILE_ACTIVATE=1 
 
 USER root
-COPY docker/environment_prod.yaml  docker/environment_dev.yaml /tmp/
-COPY docker/assets/tflite_runtime-2.20.0-cp312-cp312-linux_x86_64.whl /tmp/assets/
+COPY docker/environment_prod.yaml docker/requirements_prod.txt \
+    docker/environment_dev.yaml docker/requirements_dev.txt /tmp/
 
 # Install packages into the empty conda environmemnt base
-RUN  micromamba install --yes --name base  --file /tmp/environment_prod.yaml --verbose 
+RUN micromamba install --yes --name base  --file /tmp/environment_prod.yaml --verbose \
+     && micromamba run --name base pip install --no-cache-dir -r /tmp/requirements_prod.txt
+
 RUN if [ "$BUILD_ENV" = "dev" ]; then \
-    micromamba install --yes --name base  --file /tmp/environment_dev.yaml --verbose; \
+    micromamba install --yes --name base  --file /tmp/environment_dev.yaml --verbose \
+        && micromamba run --name base pip install --no-cache-dir -r /tmp/requirements_dev.txt; \
     fi 
 
 # Install python package

@@ -1,6 +1,6 @@
 services:
   db:
-    extends: 
+    extends:
       file: compose_prod.yaml
       service: db
 
