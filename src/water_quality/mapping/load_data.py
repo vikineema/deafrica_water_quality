@@ -701,7 +701,7 @@ def load_wofs_ann(
     water_mask_nodata = 255
     water_mask = water_mask.where(
         ~np.isnan(frequency), other=water_mask_nodata
-    ).astype(np.int8)
+    ).astype("uint8")
     water_mask.name = "water_mask"
 
     if compute:
