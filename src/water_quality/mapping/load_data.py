@@ -574,7 +574,7 @@ def load_tirs_annual_composite_data(
     # Due to memory constraints tirs data must be loaded in its native
     # resolution of 30 m and later reprojected to the target tile geobox.
     native_tirs_geobox = reproject_tile_geobox(
-        tile_geobox=tile_geobox, target_resolution=30
+        tile_geobox=tile_geobox, resolution_m=30
     )
     ds_tirs = load_tirs_data(
         dc_query=tirs_query,
