@@ -58,9 +58,5 @@ dependencies:
   - yarl
   # required for building hdstats
   - compilers
-<<<<<<< HEAD
   # developer tools
   - git
-=======
->>>>>>> 2b37bbca5ff29021ec32c4367206592f1055410e
-  # Do not use pip packages in environment file
