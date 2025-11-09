@@ -759,10 +759,9 @@ def load_water_mask(
 
     # Generate a water mask  by thresholding the frequency.
     water_mask = frequency > 0.45
-    water_mask_nodata = 255
-    water_mask = water_mask.where(
-        ~np.isnan(frequency), other=water_mask_nodata
-    ).astype("uint8")
+    water_mask = water_mask.where(~np.isnan(frequency), other=np.nan).astype(
+        np.float32
+    )
     water_mask.name = "water_mask"
 
     if compute:
@@ -773,7 +772,7 @@ def load_water_mask(
 
     # Add attributes
     water_mask.attrs = dict(
-        nodata=water_mask_nodata,
+        nodata=np.nan,
         scales=1,
         offsets=0,
     )
@@ -812,6 +811,25 @@ def build_wq_agm_dataset(
         dc = Datacube(app="BuildAnnualDataset")
 
     loaded_datasets: dict[str, xr.DataArray | xr.Dataset] = {}
+
+    if "wofs_ann" not in dc_queries:
+        raise ValueError(
+            "Datacube query for the instrument `wofs_ann` must be provided."
+        )
+    else:
+        loaded_datasets["wofs_ann"] = load_wofs_ann_data(
+            dc_query=dc_queries["wofs_ann"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+        loaded_datasets["water_mask"] = load_water_mask(
+            dc_query=dc_queries["wofs_ann"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+
     if "oli_agm" in dc_queries:
         loaded_datasets["oli_agm"] = load_oli_agm_data(
             dc_query=dc_queries["oli_agm"],
@@ -837,19 +855,6 @@ def build_wq_agm_dataset(
         loaded_datasets["tirs_ann"] = load_tirs_annual_composite_data(
             tirs_dc_query=dc_queries["tirs"],
             wofs_ann_dc_query=dc_queries["wofs_ann"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
-    if "wofs_ann" in dc_queries:
-        loaded_datasets["wofs_ann"] = load_wofs_ann_data(
-            dc_query=dc_queries["wofs_ann"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
-        loaded_datasets["water_mask"] = load_water_mask(
-            dc_query=dc_queries["wofs_ann"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
