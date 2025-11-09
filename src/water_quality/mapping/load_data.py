@@ -570,8 +570,17 @@ def load_tirs_annual_composite_data(
     """
     log.info("Loading data for the instrument `tirs` ...")
     tirs_query = copy.deepcopy(tirs_dc_query)
+
+    # Due to memory constraints tirs data must be loaded in its native
+    # resolution of 30 m and later reprojected to the target tile geobox.
+    native_tirs_geobox = reproject_tile_geobox(
+        source_geobox=tile_geobox, target_resolution=30
+    )
     ds_tirs = load_tirs_data(
-        dc_query=tirs_query, tile_geobox=tile_geobox, compute=False, dc=dc
+        dc_query=tirs_query,
+        tile_geobox=native_tirs_geobox,
+        compute=False,
+        dc=dc,
     )
     # Remove outliers (no data value for surface temp is 0),
     # apply quality filter
@@ -618,7 +627,11 @@ def load_tirs_annual_composite_data(
     # )
     # for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
     #    annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
-
+    annual_ds_tirs = xr_reproject(
+        annual_ds_tirs,
+        how=tile_geobox,
+        resampling=tirs_query["resampling"],
+    )
     if compute:
         log.info("Computing tirs annual composite dataset ...")
         annual_ds_tirs = annual_ds_tirs.compute()
@@ -800,8 +813,43 @@ def build_wq_agm_dataset(
         dc = Datacube(app="BuildAnnualDataset")
 
     loaded_datasets: dict[str, xr.DataArray | xr.Dataset] = {}
+    if "oli_agm" in dc_queries:
+        loaded_datasets["oli_agm"] = load_oli_agm_data(
+            dc_query=dc_queries["oli_agm"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+    if "msi_agm" in dc_queries:
+        loaded_datasets["msi_agm"] = load_msi_agm_data(
+            dc_query=dc_queries["msi_agm"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+    if "tm_agm" in dc_queries:
+        loaded_datasets["tm_agm"] = load_tm_agm_data(
+            dc_query=dc_queries["tm_agm"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+    if "tirs" in dc_queries and "wofs_ann" in dc_queries:
+        loaded_datasets["tirs_ann"] = load_tirs_annual_composite_data(
+            tirs_dc_query=dc_queries["tirs"],
+            wofs_ann_dc_query=dc_queries["wofs_ann"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
     if "wofs_ann" in dc_queries:
         loaded_datasets["wofs_ann"] = load_wofs_ann_data(
+            dc_query=dc_queries["wofs_ann"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+        loaded_datasets["water_mask"] = load_water_mask(
             dc_query=dc_queries["wofs_ann"],
             tile_geobox=tile_geobox,
             compute=False,
