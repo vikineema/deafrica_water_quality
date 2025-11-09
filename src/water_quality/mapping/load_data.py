@@ -568,7 +568,6 @@ def load_tirs_annual_composite_data(
         An xarray Dataset containing the surface temperature annnual
         composite produced from data for the instrument `tirs`.
     """
-    log.info("Loading data for the instrument `tirs` ...")
     tirs_query = copy.deepcopy(tirs_dc_query)
 
     # Due to memory constraints tirs data must be loaded in its native
