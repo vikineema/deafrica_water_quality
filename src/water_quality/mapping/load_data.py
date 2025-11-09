@@ -1,3 +1,4 @@
+import copy
 import logging
 from itertools import chain
 from typing import Any, Callable
@@ -9,7 +10,6 @@ import xarray as xr
 from datacube import Datacube
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject
-import copy
 
 from water_quality.dates import (
     validate_end_date,
@@ -655,6 +655,7 @@ def load_composite_instruments_data(
 def load_wofs_ann(
     dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
+    log.info("Loading data for the instrument wofs_ann ...")
     query = copy.deepcopy(dc_query)
 
     # Assumption here is that start and end date will
@@ -685,18 +686,24 @@ def load_wofs_ann(
     # observations for each pixel over the 5 year period.
     clear_count_sum = ds["count_clear"].sum(dim="time")
     wet_count_sum = ds["count_wet"].sum(dim="time")
-    frequency = np.divide(
-        wet_count_sum, clear_count_sum, where=(clear_count_sum > 0)
+
+    frequency = xr.where(
+        clear_count_sum > 0, wet_count_sum / clear_count_sum, -999
     )
 
     # Generate a water mask  by thresholding the frequency.
-    water_mask = frequency > 0.45
+    water_mask = xr.where(
+        frequency == -999,  # where nodata
+        -999,  # keep as -999
+        frequency > 0.45,  # else threshold
+    )
     water_mask.name = "water_mask"
+    water_mask = water_mask.astype(np.int8)
 
     if compute:
         log.info("Computing wofs_ann dataset ...")
         water_mask = water_mask.compute()
-
+        log.info("Done.")
     del ds, clear_count_sum, wet_count_sum, frequency
 
     return water_mask
