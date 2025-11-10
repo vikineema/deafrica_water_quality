@@ -767,6 +767,13 @@ def load_water_mask(
     )
     water_mask.name = "water_mask"
 
+    # Add a time coordinate for compatibility
+    time_values = np.array(
+        [year_to_dc_datetime(year_start.year)],
+        dtype="datetime64[ns]",
+    )
+    water_mask = water_mask.expand_dims(time=time_values)
+
     if compute:
         log.info("Computing wofs_ann dataset ...")
         water_mask = water_mask.compute()
