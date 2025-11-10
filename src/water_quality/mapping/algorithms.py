@@ -67,7 +67,7 @@ def FAI(ds: xr.Dataset, instrument: str) -> xr.DataArray:
         log.error(
             f"Invalid instrument '{instrument}'. FAI will be calculated as zero."
         )
-        return xr.zeros_like(ds[list(ds.data_vars)[0]]).assign_name("FAI")
+        return xr.zeros_like(ds[list(ds.data_vars)[0]]).rename("FAI")
     else:
         # Extract band names (vars) and central wavelengths (l) for the
         # selected instrument
@@ -131,42 +131,38 @@ def geomedian_FAI(ds: xr.Dataset) -> xr.Dataset:
     agm_count_total = None
 
     for inst_agm in geomedian_instruments:
-        # Assumption here is that for each geomedian instrument
-        # loaded the `smad` and `count` bands will always be available.
-        smad_band = f"{inst_agm}_smad"
-        count_band = f"{inst_agm}_count"
-        if smad_band not in ds.data_vars:
-            continue
+        if inst_agm in ds.data_vars:
+            count_band = f"{inst_agm}_count"
 
-        # Scale factor based on the reference mean of the current instrument
-        # relative to the reference mean of the reference instrument.
-        scale = (
-            reference_mean["fai"][reference_inst]
-            / reference_mean["fai"][inst_agm]
-        )
-        # Calculate the FAI for the instrument and scale
-        fai_data = FAI(ds, inst_agm) * scale
-        # Replace all NaN values with 0s in FAI
-        fai_data = fai_data.fillna(0)
-        # Replace all NaN values with 0s in count band.
-        inst_count = ds[count_band].fillna(0)
+            # Scale factor based on the reference mean of the current instrument
+            # relative to the reference mean of the reference instrument.
+            scale = (
+                reference_mean["fai"][reference_inst]
+                / reference_mean["fai"][inst_agm]
+            )
+            # Calculate the FAI for the instrument and scale
+            fai_data = FAI(ds, inst_agm) * scale
+            # Replace all NaN values with 0s in FAI
+            fai_data = fai_data.fillna(0)
+            # Replace all NaN values with 0s in count band.
+            inst_count = ds[count_band].fillna(0)
 
-        weighted_fai = fai_data * inst_count
+            weighted_fai = fai_data * inst_count
 
-        # Aggregate the weighted FAI and the total count
-        if mean_fai_weighted_sum is None:
-            mean_fai_weighted_sum = weighted_fai
-            agm_count_total = inst_count
-        else:
-            mean_fai_weighted_sum += weighted_fai
-            agm_count_total += inst_count
+            # Aggregate the weighted FAI and the total count
+            if mean_fai_weighted_sum is None:
+                mean_fai_weighted_sum = weighted_fai
+                agm_count_total = inst_count
+            else:
+                mean_fai_weighted_sum += weighted_fai
+                agm_count_total += inst_count
 
-        # Trim the fai values back to relevant areas and values
-        fai_data = fai_data.where(fai_data > fai_threshold)
-        # Mask to only include water pixels.
-        fai_data = fai_data.where(ds["water_mask"] == 1)
-        # Add the instrument-specific masked FAI to the Dataset
-        ds[f"{inst_agm}_fai"] = fai_data
+            # Trim the fai values back to relevant areas and values
+            fai_data = fai_data.where(fai_data > fai_threshold)
+            # Mask to only include water pixels.
+            fai_data = fai_data.where(ds["water_mask"] == 1)
+            # Add the instrument-specific masked FAI to the Dataset
+            ds[f"{inst_agm}_fai"] = fai_data
 
     if mean_fai_weighted_sum is not None and agm_count_total is not None:
         # Avoid division by zero:
@@ -226,49 +222,45 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
     agm_count_total = None
 
     for inst_agm in geomedian_instruments:
-        # Assumption here is that for each geomedian instrument
-        # loaded the `smad` and `count` bands will always be available.
-        smad_band = f"{inst_agm}_smad"
-        count_band = f"{inst_agm}_count"
-        if smad_band not in ds.data_vars:
-            continue
+        if inst_agm in ds.data_vars:
+            count_band = f"{inst_agm}_count"
 
-        # Scale factor based on the reference mean of the current instrument
-        # relative to the reference mean of the reference instrument.
-        scale = (
-            reference_mean["ndvi"][reference_inst]
-            / reference_mean["ndvi"][inst_agm]
-        )
-        # Calculate the NDVI for the instrument and scale
-        inst_bands = NDVI_BANDS[inst_agm]
-        red_band = inst_bands["red"]
-        nir_band = inst_bands["nir"]
-        ndvi_data = (ds[nir_band] - ds[red_band]) / (
-            ds[nir_band] + ds[red_band]
-        )
-        ndvi_data = ndvi_data * scale
+            # Scale factor based on the reference mean of the current instrument
+            # relative to the reference mean of the reference instrument.
+            scale = (
+                reference_mean["ndvi"][reference_inst]
+                / reference_mean["ndvi"][inst_agm]
+            )
+            # Calculate the NDVI for the instrument and scale
+            inst_bands = NDVI_BANDS[inst_agm]
+            red_band = inst_bands["red"]
+            nir_band = inst_bands["nir"]
+            ndvi_data = (ds[nir_band] - ds[red_band]) / (
+                ds[nir_band] + ds[red_band]
+            )
+            ndvi_data = ndvi_data * scale
 
-        # Replace all NaN values with 0s in NDVI
-        ndvi_data = ndvi_data.fillna(0)
-        # Replace all NaN values with 0s in count band.
-        inst_count = ds[count_band].fillna(0)
+            # Replace all NaN values with 0s in NDVI
+            ndvi_data = ndvi_data.fillna(0)
+            # Replace all NaN values with 0s in count band.
+            inst_count = ds[count_band].fillna(0)
 
-        weighted_ndvi = ndvi_data * inst_count
+            weighted_ndvi = ndvi_data * inst_count
 
-        # Aggregate the weighted NDVI and the total count
-        if mean_ndvi_weighted_sum is None:
-            mean_ndvi_weighted_sum = weighted_ndvi
-            agm_count_total = inst_count
-        else:
-            mean_ndvi_weighted_sum += weighted_ndvi
-            agm_count_total += inst_count
+            # Aggregate the weighted NDVI and the total count
+            if mean_ndvi_weighted_sum is None:
+                mean_ndvi_weighted_sum = weighted_ndvi
+                agm_count_total = inst_count
+            else:
+                mean_ndvi_weighted_sum += weighted_ndvi
+                agm_count_total += inst_count
 
-        # Trim the NDVI values back to relevant areas and values
-        ndvi_data = ndvi_data.where(ndvi_data > ndvi_threshold)
-        # Mask to only include water pixels.
-        ndvi_data = ndvi_data.where(ds["water_mask"] == 1)
-        # Add the instrument-specific masked NDVI to the Dataset
-        ds[f"{inst_agm}_ndvi"] = ndvi_data
+            # Trim the NDVI values back to relevant areas and values
+            ndvi_data = ndvi_data.where(ndvi_data > ndvi_threshold)
+            # Mask to only include water pixels.
+            ndvi_data = ndvi_data.where(ds["water_mask"] == 1)
+            # Add the instrument-specific masked NDVI to the Dataset
+            ds[f"{inst_agm}_ndvi"] = ndvi_data
 
     if mean_ndvi_weighted_sum is not None and agm_count_total is not None:
         # Avoid division by zero:
