@@ -27,6 +27,7 @@ from water_quality.io import (
 from water_quality.logs import setup_logging
 from water_quality.mapping.algorithms import (
     WQ_vars,
+    geomedian_FAI,
 )
 from water_quality.mapping.config import check_config
 from water_quality.mapping.hue import hue_calculation
@@ -236,13 +237,16 @@ def cli(
 
             # Turned off water analysis using wofs_annual_summary
             # to use the water mask from the 5year wofs summary
-            # ds = water_analysis(
-            #     ds,
-            #     water_frequency_threshold=WFTH,
-            #     wofs_varname="wofs_ann_freq",
-            #     permanent_water_threshold=PWT,
-            #     sigma_coefficient=SC,
-            # )
+            ds = water_analysis(
+                ds,
+                water_frequency_threshold=WFTH,
+                wofs_varname="wofs_ann_freq",
+                permanent_water_threshold=PWT,
+                sigma_coefficient=SC,
+            )
+
+            # Floating Algea Index
+            ds = geomedian_FAI(ds)
 
             # Reflectance correction
             ds = R_correction(ds, instruments_to_use, WFTL)
