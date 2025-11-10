@@ -28,6 +28,7 @@ from water_quality.logs import setup_logging
 from water_quality.mapping.algorithms import (
     WQ_vars,
     geomedian_FAI,
+    geomedian_NDVI,
 )
 from water_quality.mapping.config import check_config
 from water_quality.mapping.hue import hue_calculation
@@ -247,6 +248,9 @@ def cli(
 
             # Floating Algea Index
             ds = geomedian_FAI(ds)
+
+            # NDVI
+            ds = geomedian_NDVI(ds)
 
             # Reflectance correction
             ds = R_correction(ds, instruments_to_use, WFTL)
