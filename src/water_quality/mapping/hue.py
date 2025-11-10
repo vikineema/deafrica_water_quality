@@ -244,7 +244,10 @@ def geomedian_hue(ds: xr.Dataset) -> xr.Dataset:
     agm_count_total = None
 
     for inst_agm in geomedian_instruments:
-        if inst_agm in ds.data_vars:
+        # Use the smad band as an indicator that data for the geomedian
+        # instrument exists in the dataset.
+        smad_band = f"{inst_agm}_smad"
+        if smad_band in ds.data_vars:
             # Calculate the hue for this sensor
             hue_data = hue_calculation(ds, inst_agm)
 
