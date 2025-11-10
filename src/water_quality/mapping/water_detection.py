@@ -50,7 +50,8 @@ def water_analysis(
             water.
         - `wofs_ann_pwater` (float): Annual permanent water classification.
         - `wofs_ann_water` (float): Annual general water classification.
-        - `watermask` (float): A mask showing where general water is detected.
+        - `wofs_ann_watermask` (float): A mask showing where general water
+            is detected.
 
     """
     VALID_VARIABLES = ["wofs_ann_freq"]
@@ -82,11 +83,11 @@ def water_analysis(
         ds["wofs_pw_threshold"] = (
             -1 * ds.wofs_ann_freq_sigma * sigma_coefficient
         ) + permanent_water_threshold  # --- threshold varies with p and n
-        ds["wofs_ann_pwater"] = xr.where(
-            ds[wofs_varname] > ds.wofs_pw_threshold, ds[wofs_varname], 0
+        ds["wofs_ann_pwater"] = ds[wofs_varname].where(
+            ds[wofs_varname] > ds.wofs_pw_threshold, 0
         )
-        ds["wofs_ann_water"] = xr.where(
-            ds[wofs_varname] > water_frequency_threshold, ds[wofs_varname], 0
+        ds["wofs_ann_water"] = ds[wofs_varname].where(
+            ds[wofs_varname] > water_frequency_threshold, 0
         )
         # A variable called watermask is used in places.
         # I set the value of the mask as sigma or nan
