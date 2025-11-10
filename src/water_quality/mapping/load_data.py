@@ -571,16 +571,26 @@ def load_tirs_annual_composite_data(
     tirs_query = copy.deepcopy(tirs_dc_query)
 
     # Due to memory constraints tirs data must be loaded in its native
-    # resolution of 30 m and later reprojected to the target tile geobox.
-    native_tirs_geobox = reproject_tile_geobox(
-        tile_geobox=tile_geobox, resolution_m=30
-    )
-    ds_tirs = load_tirs_data(
-        dc_query=tirs_query,
-        tile_geobox=native_tirs_geobox,
-        compute=False,
-        dc=dc,
-    )
+    # resolution of 30 m and later reprojected to the target tile geobox
+    # if upsampling the data.
+    if abs(tile_geobox.resolution.y) < 30:
+        native_tirs_geobox = reproject_tile_geobox(
+            tile_geobox=tile_geobox, resolution_m=30
+        )
+        ds_tirs = load_tirs_data(
+            dc_query=tirs_query,
+            tile_geobox=native_tirs_geobox,
+            compute=False,
+            dc=dc,
+        )
+    else:
+        native_tirs_geobox = None
+        ds_tirs = load_tirs_data(
+            dc_query=tirs_query,
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
     # Remove outliers (no data value for surface temp is 0),
     # apply quality filter
     # and also filter on emissivity > 0.95
@@ -615,12 +625,20 @@ def load_tirs_annual_composite_data(
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
     # Restrict values to areas of water
-    ds_wofs_ann = load_wofs_ann_data(
-        dc_query=wofs_ann_dc_query,
-        tile_geobox=native_tirs_geobox,
-        compute=False,
-        dc=dc,
-    )
+    if native_tirs_geobox is None:
+        ds_wofs_ann = load_wofs_ann_data(
+            dc_query=wofs_ann_dc_query,
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+    else:
+        ds_wofs_ann = load_wofs_ann_data(
+            dc_query=wofs_ann_dc_query,
+            tile_geobox=native_tirs_geobox,
+            compute=False,
+            dc=dc,
+        )
     water_frequency_threshold = 0.5
     water_mask = (
         ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
@@ -629,11 +647,14 @@ def load_tirs_annual_composite_data(
     for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
         annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
 
-    annual_ds_tirs = xr_reproject(
-        annual_ds_tirs,
-        how=tile_geobox,
-        resampling=tirs_query["resampling"],
-    )
+    if native_tirs_geobox is not None:
+        # Reproject to target tile geobox
+        annual_ds_tirs = xr_reproject(
+            annual_ds_tirs,
+            how=tile_geobox,
+            resampling=tirs_query["resampling"],
+        )
+
     if compute:
         log.info("Computing tirs annual composite dataset ...")
         annual_ds_tirs = annual_ds_tirs.compute()
