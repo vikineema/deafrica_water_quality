@@ -31,7 +31,7 @@ from water_quality.mapping.algorithms import (
     geomedian_NDVI,
 )
 from water_quality.mapping.config import check_config
-from water_quality.mapping.hue import hue_calculation
+from water_quality.mapping.hue import geomedian_hue
 from water_quality.mapping.instruments import (
     check_instrument_dates,
     get_instruments_list,
@@ -253,13 +253,12 @@ def cli(
             ds = geomedian_NDVI(ds)
 
             # Reflectance correction
-            ds = R_correction(ds, instruments_to_use, WFTL)
+            ds = R_correction(ds, instruments_to_use, drop=False)
 
-            # Hue calculation for MSI
+            # Hue calculation
+            ds = geomedian_hue(ds)
+
             if "msi_agm" in instruments_list.keys():
-                log.info("Calculating the hue.")
-                ds["hue"] = hue_calculation(ds, instrument="msi_agm")
-
                 log.info(
                     "Determining the open water type for each pixel "
                     "using the instrument msi_agm"
@@ -305,6 +304,26 @@ def cli(
 
             # TODO: Refine list of expected water quality variables
             # to keep in final output dataset.
+            new_keep_list = [
+                # water_analysis
+                "wofs_ann_freq_sigma",
+                "wofs_ann_confidence",
+                "wofs_pw_threshold",
+                "wofs_ann_pwater",
+                "wofs_ann_water",
+                "wofs_ann_watermask",
+                # FAI
+                "agm_fai",
+                "msi_agm_fai",
+                "oli_agm_fai",
+                "tm_agm_fai",
+                # NDVI
+                "agm_ndvi",
+                "msi_agm_ndvi",
+                "oli_agm_ndvi",
+                "tm_agm_ndvi",
+            ]
+
             initial_keep_list = [
                 # wofs_ann instrument
                 "wofs_ann_freq",
