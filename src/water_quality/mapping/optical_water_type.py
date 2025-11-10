@@ -85,7 +85,7 @@ def create_OWT_response_models(agm=True) -> pd.DataFrame:
         data[sensor] = inst_OWT
         # --- write to a csv file in the current location ---
         # inst_OWT.to_csv(sensor+'_OWT_vectors.csv')
-    return None
+    return data
 
 
 def OWT(
