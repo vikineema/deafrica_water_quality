@@ -614,18 +614,21 @@ def load_tirs_annual_composite_data(
     )
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
-    ## Removed to use the 5 year water mask instead
     # Restrict values to areas of water
-    # ds_wofs_ann = load_wofs_ann_data(
-    #     dc_query=wofs_ann_dc_query, tile_geobox=tile_geobox, compute=False, dc=dc
-    # )
-    # water_frequency_threshold = 0.5
-    # water_mask = (
-    #     ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
-    #     > water_frequency_threshold
-    # )
-    # for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
-    #    annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
+    ds_wofs_ann = load_wofs_ann_data(
+        dc_query=wofs_ann_dc_query,
+        tile_geobox=native_tirs_geobox,
+        compute=False,
+        dc=dc,
+    )
+    water_frequency_threshold = 0.5
+    water_mask = (
+        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
+        > water_frequency_threshold
+    )
+    for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
+        annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
+
     annual_ds_tirs = xr_reproject(
         annual_ds_tirs,
         how=tile_geobox,
