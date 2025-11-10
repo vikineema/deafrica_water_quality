@@ -266,7 +266,10 @@ def cli(
             ds = geomedian_hue(ds)
 
             # OWT calculation
-            ds = run_OWT(ds)
+            # Turned off OWT as I work on fix
+            # TODO: turn on once owt_module is fixed
+            # OWT calculation
+            # ds = run_OWT(ds)
 
             # Mask dataset based on water frequency threshold
             mask = (ds.wofs_ann_freq >= WFTL).compute()
