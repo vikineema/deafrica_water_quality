@@ -40,7 +40,7 @@ from water_quality.mapping.load_data import (
     build_dc_queries,
     build_wq_agm_dataset,
 )
-from water_quality.mapping.optical_water_type import OWT_pixel
+from water_quality.mapping.optical_water_type import run_OWT
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.metadata.prepare_metadata import prepare_dataset
@@ -252,30 +252,21 @@ def cli(
             # NDVI
             ds = geomedian_NDVI(ds)
 
+            # Set the clear water mask
+            ds["clearwater"] = xr.where(
+                np.isnan(ds.agm_fai),
+                xr.where(ds.water_mask == 1, True, False),
+                False,
+            )
+
             # Reflectance correction
             ds = R_correction(ds, instruments_to_use, drop=False)
 
             # Hue calculation
             ds = geomedian_hue(ds)
 
-            if "msi_agm" in instruments_list.keys():
-                log.info(
-                    "Determining the open water type for each pixel "
-                    "using the instrument msi_agm"
-                )
-                ds["owt_msi"] = OWT_pixel(
-                    ds, instrument="msi_agm", resample_rate=3
-                )
-
-            # OWT calculation for OLI
-            if "oli_agm" in instruments_list.keys():
-                log.info(
-                    "Determining the open water type for each pixel "
-                    "using the instrument oli_agm"
-                )
-                ds["owt_oli"] = OWT_pixel(
-                    ds, instrument="oli_agm", resample_rate=3
-                )
+            # OWT calculation
+            ds = run_OWT(ds)
 
             # Mask dataset based on water frequency threshold
             mask = (ds.wofs_ann_freq >= WFTL).compute()
@@ -304,7 +295,7 @@ def cli(
 
             # TODO: Refine list of expected water quality variables
             # to keep in final output dataset.
-            new_keep_list = [
+            initial_keep_list = [
                 # water_analysis
                 "wofs_ann_freq_sigma",
                 "wofs_ann_confidence",
@@ -322,20 +313,13 @@ def cli(
                 "msi_agm_ndvi",
                 "oli_agm_ndvi",
                 "tm_agm_ndvi",
-            ]
-
-            initial_keep_list = [
-                # wofs_ann instrument
-                "wofs_ann_freq",
-                "wofs_ann_clearcount",
-                "wofs_ann_wetcount",
-                "watermask",
-                # water_analysis
-                "wofs_ann_freq_sigma",
-                "wofs_ann_confidence",
-                "wofs_pw_threshold",
-                "wofs_ann_pwater",
-                "wofs_ann_watermask",
+                # Clear water mask
+                "clearwater",
+                # Hue
+                "agm_hue",
+                "msi_agm_hue",
+                "oli_agm_hue",
+                "tm_agm_hue",
                 # optical water type
                 "owt_msi",
                 "owt_oli",
