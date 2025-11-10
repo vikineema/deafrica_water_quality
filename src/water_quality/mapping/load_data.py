@@ -723,9 +723,9 @@ def load_water_mask(
     # always be covering a single year.
     year_start = validate_start_date(dc_query["time"][0])
     year_end = validate_end_date(dc_query["time"][1])
-    delta = (year_end - year_start).days
+    delta = (year_end - year_start).days + 1
     assert delta in [365, 366], (
-        f"Expected time in query to cover a single year, not {delta}"
+        f"Expected time in query to cover a single year (365 or 366 days), not {delta} days."
     )
 
     # Expand date range to cover 5 years
