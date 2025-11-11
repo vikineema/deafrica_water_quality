@@ -14,6 +14,7 @@ from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 from odc.stats.model import DateTimeRange
 
+from water_quality.cli.common import split_tasks
 from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
@@ -45,8 +46,6 @@ from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import parse_task_id
-
-from .common import split_tasks
 
 
 def load_tasks(tasks=None, tasks_file=None):
