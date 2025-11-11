@@ -18,7 +18,7 @@ from eodatasets3 import serialise
 from eodatasets3.images import GridSpec, MeasurementBundler
 from eodatasets3.model import AccessoryDoc, DatasetDoc, ProductDoc
 from eodatasets3.properties import Eo3Interface
-from eodatasets3.stac import to_stac_item
+from eodatasets3.stac import to_stac_item as eo3_to_stac_item
 from eodatasets3.validate import (
     Level,
     ValidationExpectations,
@@ -625,7 +625,7 @@ class EasiPrepare(Eo3Interface):
             sort_measurements=sort_measurements,
             expect_geometry=expect_geometry,
         )
-        stac_item = to_stac_item(
+        stac_item = eo3_to_stac_item(
             dataset=dataset, stac_item_destination_url=self._output_path
         )
         return stac_item
