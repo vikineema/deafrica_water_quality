@@ -46,6 +46,8 @@ from water_quality.mapping.water_detection import water_analysis
 from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import parse_task_id
 
+from .common import split_tasks
+
 
 def load_tasks(tasks=None, tasks_file=None):
     """Load task IDs from --tasks or --tasks-file."""
@@ -63,15 +65,6 @@ def load_tasks(tasks=None, tasks_file=None):
     fs = get_filesystem(tasks_file, anon=True)
     with fs.open(tasks_file, "r") as f:
         return [i.strip() for i in f.readlines()]
-
-
-def split_tasks(all_task_ids, max_parallel_steps, worker_idx):
-    """Divide tasks across workers."""
-    task_chunks = np.array_split(np.array(all_task_ids), max_parallel_steps)
-    task_chunks = [chunk.tolist() for chunk in task_chunks if len(chunk) > 0]
-    if len(task_chunks) <= worker_idx:
-        return []
-    return task_chunks[worker_idx]
 
 
 def parse_task(task_id, gridspec):
