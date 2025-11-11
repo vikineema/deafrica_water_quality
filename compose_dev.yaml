@@ -11,8 +11,9 @@ services:
     build:
       args:
         BUILD_ENV: "dev"
+        JUPYTER_PORT: ${JUPYTER_PORT}
     ports:
-      - ${JUPYTER_PORT}:9988
+      - ${JUPYTER_PORT}:${JUPYTER_PORT}
     volumes:
       - .:/home/jovyan/
 

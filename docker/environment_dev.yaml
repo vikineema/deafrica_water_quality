@@ -3,7 +3,6 @@ channels:
   - conda-forge
 dependencies:
   # ODC ecosystem libraries
-  - odc-loader
   - odc-stac
   # Code formatting
   - pre-commit
