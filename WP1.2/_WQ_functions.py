@@ -212,7 +212,109 @@ def FAI (ds, instrument, test=False):
             
     # --- final value is scaled by 10000 to reduce to a value typically in the range of 0-1 (this assumes that our data are scaled 0-10,000)     
     return((ds[nir] - ( ds[red] + ( ( ds[swir] - ds[red] ) * ( ( l_nir - l_red ) / ( l_swir - l_red ) ) ) )) / 10000)
+
+# ------------------------------------------------------------------------------------------------------------------
+# A function to set the dictionary of instruments, bands, algorithms, and  functions ----------------------- 
+# --- revised to do away with the 'r' suffix
+# --- revised to remove duplication, with the suffix argument used to decide if the analysis is annual geomedian or other
+
+def set_wq_algorithms(suffix=''):
+    s = suffix
+    ndci_nir_r   =  { 
+                "msi"+s   : {'54' : {'func': NDCI_NIR_R, "wq_varname" : 'ndci_msi54'       ,'args' : {"NIR_band" : 'msi05'+s , "red_band" :'msi04'+s}},
+                               '64' : {'func': NDCI_NIR_R, "wq_varname" : 'ndci_msi64'     ,'args' : {"NIR_band" : 'msi06'+s , "red_band" :'msi04'+s}},
+                               '74' : {'func': NDCI_NIR_R, "wq_varname" : 'ndci_msi74'     ,'args' : {"NIR_band" : 'msi07'+s , "red_band" :'msi04'+s}}},
+                "tm"+s    : {'func': NDCI_NIR_R, "wq_varname" : 'ndci_tm43'            ,'args' : {"NIR_band" : 'tm04'+s  , "red_band" : 'tm03'+s}},
+                "oli"+s   : {'func': NDCI_NIR_R, "wq_varname" : 'ndci_oli54'           ,'args' : {"NIR_band" : 'oli05'+s , "red_band" :'oli04'+s}}
+                }
+
+    chla_toming  = { #looks more like a tss indicator!
+                    "msi"+s     : {'func': ChlA_Toming, "wq_varname" : 'chla_toming_msi' , 'args' : {"band5" : 'msi05'+s , "band4":'msi04'+s , 'band6' : 'msi06'+s }}
+                    }
+    chla_3bda    = { 
+                    "msi"+s     : {'func': ChlA_3BDA, "wq_varname" : 'chla_3bda_msi' , 'args' : {"blue_band" : 'msi02'+s , "red_band":'msi04'+s , 'green_band' : 'msi03'+s }},
+                    "oli"+s     : {'func': ChlA_3BDA, "wq_varname" : 'chla_3bda_oli' , 'args' : {"blue_band" : 'oli02'+s , "red_band":'oli04'+s , 'green_band' : 'oli03'+s }},
+                    "tm"+s      : {'func': ChlA_3BDA, "wq_varname" : 'chla_3bda_tm'  , 'args' : {"blue_band" : 'tm01'+s  , "red_band":'tm03'+s  , 'green_band' : 'tm02'+s  }}
+                    }
+    chla_tebbs  = {  #this is just a ratio of two bands
+                    "msi"+s     : {'func': ChlA_Tebbs, "wq_varname" : 'chla_tebbs_msi' , 'args' : {"NIR_band" : 'msi8a'+s , "Red_band":'msi04'+s  }},
+                    "oli"+s     : {'func': ChlA_Tebbs, "wq_varname" : 'chla_tebbs_oli' , 'args' : {"NIR_band" : 'oli05'+s , "Red_band":'oli04'+s  }},
+                    "tm"+s      : {'func': ChlA_Tebbs, "wq_varname" : 'chla_tebbs_tm'  , 'args' : {"NIR_band" : 'tm04'+s  , "Red_band":'tm03'+s  }}
+                    }
+    chla_meris2b = {
+                    "msi"+s     : {'func': ChlA_MERIS2B, "wq_varname" : 'chla_meris2b_msi'     ,'args' : {"band_708" : 'msi05'+s     , "band_665":'msi04'+s    }}
+                    }
+
+    chla_modis2b = {
+                    "msi"+s  : {'func': ChlA_MODIS2B, "wq_varname" : 'chla_modis2b_msi'        , 'args' : {"band_748" : 'msi06'+s , "band_667":'msi04'+s}},
+                     "tm"+s  : {'func': ChlA_MODIS2B, "wq_varname" :  'chla_modis2b_tm'        , 'args' : {"band_748" :  'tm04'+s , "band_667": 'tm03'+s}}
+                    }
+
+    ndssi_rg     = {
+                "msi"+s     : {'func': NDSSI_RG,     "wq_varname" : 'ndssi_rg_msi'            ,'args'   : { "red_band":'msi04'+s    , "green_band":'msi03'+s    }},
+                "oli"+s     : {'func': NDSSI_RG,     "wq_varname" : 'ndssi_rg_oli'            ,'args'   : { "red_band":'oli04'+s    , "green_band":'oli03'+s    }},
+                "tm"+s      : {'func': NDSSI_RG,     "wq_varname" : 'ndssi_rg_tm'             ,'args'   : { "red_band":'tm03'+s     , "green_band": 'tm02'+s    }}
+                }
+
+    ndssi_bnir   = {   
+                #"msi"     : {'func': NDSSI_BNIR,   "wq_varname" : 'ndssi_bnir_msi'         ,'args' : { "NIR_band":'msi8a'     , "blue_band":'msi02_agm'}},
+                "oli"+s     : {'func': NDSSI_BNIR,   "wq_varname" : 'ndssi_bnir_oli'         ,'args' : { "NIR_band":'oli06'+s     , "blue_band":'oli02'+s    }},
+                #"tm"+s      : {'func': NDSSI_BNIR,   "wq_varname" : 'ndssi_bnir_tm'          ,'args' : { "NIR_band":'tm04'+s      , "blue_band":'tm01'+s    }}
+                }
+
+    ti_yu        = {
+                    #"msi"     : {'func': TI_yu,        "wq_varname" : 'ti_yu_msi'            ,'args' : {"NIR" : 'msi8a'     , "Red":'msi04'    , "Green":'msi03_agm'}},
+                    "oli"+s     : {'func': TI_yu,        "wq_varname" : 'ti_yu_oli'            ,'args' : {"NIR" : 'oli06'+s     , "Red":'oli04'+s    , "Green":'oli03'+s    }},
+                    "tm"+s      : {'func': TI_yu,        "wq_varname" : 'ti_yu_tm'             ,'args' : {"NIR" : 'tm04'+s      , "Red":  'tm03'+s     , "Green":'tm02'+s    }}
+                    }
+
+    tsm_lym      = {
+                    "oli"+s     : {'func': TSM_LYM_OLI,  "wq_varname" : 'tsm_lym_oli'            ,'args' : {"red_band":'oli04'+s    , "green_band":'oli03'+s    }},
+                    "msi"+s     : {'func': TSM_LYM_OLI,  "wq_varname" : 'tsm_lym_msi'            ,'args' : {"red_band":'msi04'+s    , "green_band":'msi03'+s    }},
+                    "tm"+s      : {'func': TSM_LYM_ETM,  "wq_varname" : 'tsm_lym_tm'             ,'args' : {"red_band":'tm03'+s     , "green_band":'tm02'+s     }}
+                    }
+
+    spm_qiu      = {
+                    "tm"+s      : {'func': SPM_QIU,  "wq_varname" : 'spm_qiu_tm'             ,'args' : {"red_band":'tm03'+s     , "green_band":'tm02'+s     }},
+                    "msi"+s     : {'func': SPM_QIU,  "wq_varname" : 'spm_qiu_msi'            ,'args' : {"red_band":'msi04'+s    , "green_band":'msi03'+s    }}
+                    }
+
+    tss_zhang        = {
+                        "msi"+s     : {'func': TSS_Zhang, "wq_varname" : 'tss_zhang_msi'     ,'args' : {"blue_band" : 'msi02'+s    , "red_band":'msi04'+s    , "green_band":'msi03'+s }},
+                        "oli"+s     : {'func': TSS_Zhang, "wq_varname" : 'tss_zhang_oli'     ,'args' : {"blue_band" : 'oli02'+s    , "red_band":'oli04'+s    , "green_band":'oli03'+s }}
+                        }
+
+    # ---- algorithms are grouped into two over-arching dictionaries ---- 
+    algorithms_chla = {"ndci_nir_r"   : ndci_nir_r, 
+                       "chla_toming"  : chla_toming, 
+                       "chla_3bda"  : chla_3bda, 
+                       "chla_tebbs"  : chla_tebbs, 
+                       "chla_meris2b" : chla_meris2b, 
+                       "chla_modis2b" : chla_modis2b}
+    algorithms_tsm  = {"ndssi_rg"     : ndssi_rg  , 
+                       "ndssi_bnir"   : ndssi_bnir, 
+                       "ti_yu"        : ti_yu     ,
+                       "tsm_lym"      : tsm_lym   ,
+                       "tss_zhang"    : tss_zhang ,
+                       "spm_qiu"      : spm_qiu    }
+    return(algorithms_chla,algorithms_tsm)
+    
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------
+def ChlA_Toming(dataset, band5, band4, band6, verbose=False):
+# ---- Function to calculate ndci from input nir and red bands ----
+    return  (dataset[band5] - 0.5 * ( dataset[band4] / dataset[band6] ) )
+
+def ChlA_3BDA(dataset, blue_band, green_band, red_band, verbose=False):
+    scale = 1 / 10000.    #the reflectances should be less than one foe this function to make sensse
+    return  ((dataset[blue_band] * scale )  -  ( dataset[red_band] * scale * dataset[green_band] * scale ) )
+
+def ChlA_Tebbs(dataset, NIR_band, Red_band, verbose=False) :
+    # ---- the paramters are optional but for completeness ... ----
+    a0 = -135
+    a1 = 451  
+    return  (a0 + a1 * ( dataset[NIR_band] / dataset[Red_band] ) )
 
 
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
@@ -453,7 +555,9 @@ def OWT (ds,instrument,OWT_vectors,agm=False,dp_corrected = False, verbose=True,
     
     if verbose or test : print('....done')
     if verbose         : 
-        data = [[3,'oligotrophic (clear)'],
+        data =  [
+                [0,'zero - unresolved (error)'],
+                [3,'oligotrophic (clear)'],
                 [9,'oligotrophic (clear)'],
                 [13,'oligotrophic (clear)'],
                 [1,'eutrophic and blue-green'],
@@ -465,13 +569,15 @@ def OWT (ds,instrument,OWT_vectors,agm=False,dp_corrected = False, verbose=True,
                 [6,'hyper-eutrophic and green-brown'],
                 [7,'hyper-eutrophic and green-brown'],
                 [8,'hyper-eutrophic and green-brown'],
-                [10,'hyper-eutrophic and green-brown']]
+                [10,'hyper-eutrophic and green-brown']
+                ]
         data.sort()
         columns = ['OWT','description']
         
         df   = pd.DataFrame(data=data,columns=columns)
         owt  = mydataset.owt_closest.median().item()
-        desc = df[df['OWT']==owt]['description'].item()
+        if np.isnan(owt) : desc = 'nan value returned'
+        else : desc = df[df['OWT']==owt]['description'].item()
         print('Prevailng water type is ',owt,' :  ',desc)
     return(mydataset['owt_closest'])
 
@@ -708,7 +814,7 @@ def chromatic_coefficient_parameters():
     return({'msi':msi,'oli':oli,'tm':tm})
 
 
-def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=False,verbose=False) : 
+def hue_calculation(dataset,instrument='',test=False,verbose=False) : 
     #---- Hue is calculated by conversion of the wavelengths to chromatic coordinates using sensor-specific coefficients
     #- Method is as per Van Der Woerd 2018.
     #- More accurate hue angles are retrieved if more bands are used - but the visible bands are most important
@@ -734,7 +840,6 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
     dsbands = []
     for name in required_bands:
         if agm                     : name = name + '_agm'
-        if rayleigh_corrected_data : name = name + 'r'     
         if name in dataset.data_vars    : dsbands.append(name)
 
     Cdata         = xr.zeros_like(dataset).drop_vars(dataset.data_vars)
@@ -768,7 +873,7 @@ def hue_calculation(dataset,instrument='',rayleigh_corrected_data = True,test=Fa
     
     return(Cdata.hue)
     
-def geomedian_hue (ds_annual,water_mask,test=False):
+def geomedian_hue (ds_annual,water_mask,verbose=False,test=False):
     # --- a function to calculate the hue value of the geomedian, allowing for the possibility of multiple sensors at each time point
     # (band one is missing from the oli agm, but perhaps we will be able to do without it)
     # To combine the hue from multiple sensors we take a weighted mean. 
@@ -778,7 +883,7 @@ def geomedian_hue (ds_annual,water_mask,test=False):
         if inst_agm in ds_annual.data_vars: 
 
             # --- calculate the HUE for this sensor
-            hue_data = hue_calculation(ds_annual,inst_agm,rayleigh_corrected_data = True,test=True)
+            hue_data = hue_calculation(ds_annual,inst_agm,test=test,verbose=verbose)
             
             # --- set nans to zero, and also in the agm_count variable
             ds_annual[inst_agm+'_count'] = xr.where(~np.isnan(ds_annual[inst_agm+'_count']),ds_annual[inst_agm+'_count'],0)
