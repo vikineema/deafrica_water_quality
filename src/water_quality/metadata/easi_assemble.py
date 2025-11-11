@@ -368,16 +368,16 @@ class EasiPrepare(Eo3Interface):
 
         # File system
         if self._dataset_scheme == "file":
-            if self._dataset_path.is_dir():
-                for filename in self._dataset_path.rglob("*.*"):
+            if Path(self._dataset_path).is_dir():
+                for filename in Path(self._dataset_path).rglob("*.*"):
                     m = p.search(str(filename))
                     if m:
                         band_ids[m.group(1)] = filename
             else:
-                filename = self._dataset_path
+                filename = Path(self._dataset_path)
                 m = p.search(str(filename.name))
                 if m:
-                    band_ids[m.group(1)] = filename
+                    band_ids[m.group(1)] = str(filename)
 
         # S3; obtain a list of object keys for the dataset
         if self._dataset_scheme == "s3":
