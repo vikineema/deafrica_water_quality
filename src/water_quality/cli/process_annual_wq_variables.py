@@ -14,6 +14,7 @@ from odc.geo.xr import write_cog
 from odc.stats._cli_common import click_yaml_cfg
 from odc.stats.model import DateTimeRange
 
+from water_quality.cli.common import split_tasks
 from water_quality.grid import get_waterbodies_grid
 from water_quality.io import (
     check_directory_exists,
@@ -63,15 +64,6 @@ def load_tasks(tasks=None, tasks_file=None):
     fs = get_filesystem(tasks_file, anon=True)
     with fs.open(tasks_file, "r") as f:
         return [i.strip() for i in f.readlines()]
-
-
-def split_tasks(all_task_ids, max_parallel_steps, worker_idx):
-    """Divide tasks across workers."""
-    task_chunks = np.array_split(np.array(all_task_ids), max_parallel_steps)
-    task_chunks = [chunk.tolist() for chunk in task_chunks if len(chunk) > 0]
-    if len(task_chunks) <= worker_idx:
-        return []
-    return task_chunks[worker_idx]
 
 
 def parse_task(task_id, gridspec):

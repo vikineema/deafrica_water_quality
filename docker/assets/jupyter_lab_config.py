@@ -38,7 +38,7 @@ c.ServerApp.ip = "0.0.0.0"
 
 # Port the server will listen on
 if "JUPYTER_PORT" not in os.environ:
-    os.environ["JUPYTER_PORT"] = 8889
+    os.environ["JUPYTER_PORT"] = "8888"
 c.ServerApp.port = int(os.environ["JUPYTER_PORT"])
 
 # Log level

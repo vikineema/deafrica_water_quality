@@ -43,6 +43,7 @@ ARG NB_USER="jovyan"
 ARG NB_UID="1000"
 ARG NB_GID="100"
 ARG BUILD_ENV=prod
+ARG JUPYTER_PORT="8888"
 
 # Configure python environment.
 # This should be the same prefix 
@@ -59,7 +60,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="${PYTHON_ENV}/bin:${PATH}" \
     PROJ_DATA="${PYTHON_ENV}/share/proj" \
     BUILD_ENV=$BUILD_ENV \
-    JUPYTERLAB_DIR=$PYTHON_ENV/share/jupyter/lab 
+    JUPYTERLAB_DIR=$PYTHON_ENV/share/jupyter/lab \
+    JUPYTER_PORT=${JUPYTER_PORT}
 
 ## Non-root user creation
 # Delete existing user with UID="${NB_UID}" if it exists
