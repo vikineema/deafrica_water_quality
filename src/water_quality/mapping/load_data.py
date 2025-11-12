@@ -893,7 +893,7 @@ def build_wq_agm_dataset(
 
     # Merge while still lazy
     log.info("Merging instrument datasets (lazy) ...")
-    combined = xr.merge(list(loaded_datasets.values()))
+    combined = xr.merge(list(loaded_datasets.values()), compat="no_conflicts")
     combined = combined.drop_vars("quantile", errors="ignore")
 
     # Compute only once at the very end
