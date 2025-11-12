@@ -529,6 +529,7 @@ def create_OWT_response_models(path='/home/jovyan/dev/deafrica_water_quality/ref
     #     The response for a specific instrument/band, say oli01, is estimated by integrating the spectrum over the instrument response 
     #     - ideally that is a convolution, using  the instrument response functions, however   
     #     - I settle for an average over the central range
+    #     - Checked on 2025-12-12. Corrected the sum to be the mean over the band interval. Corrected the band interval for TM bands in the reference data
     # --- read in the data ---
     
     name = 'Vagelis_OWT_allwaters_mean_standardised.csv'
@@ -570,7 +571,8 @@ def create_OWT_response_models(path='/home/jovyan/dev/deafrica_water_quality/ref
             #print(sensor,band_name, start,end)
 
             # find the start and end column numbers in the response functions and sum over those for each OWT
-            b = OWT_spectra.loc[:,str(start):str(end)].T.sum()
+            # must allow for the spectral band width  - average not the sum
+            b = OWT_spectra.loc[:,str(start):str(end)].T.mean()    
             # add to the data frame
             inst_OWT.insert(inst_OWT.columns.size,band_name+suffix,(b.values))
         # --- add this data frame to the data dictionary ---
