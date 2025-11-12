@@ -279,9 +279,25 @@ def set_wq_algorithms(suffix=''):
                     "msi"+s     : {'func': SPM_QIU,  "wq_varname" : 'spm_qiu_msi'            ,'args' : {"red_band":'msi04'+s    , "green_band":'msi03'+s    }}
                     }
 
-    tss_zhang        = {
-                        "msi"+s     : {'func': TSS_Zhang, "wq_varname" : 'tss_zhang_msi'     ,'args' : {"blue_band" : 'msi02'+s    , "red_band":'msi04'+s    , "green_band":'msi03'+s }},
-                        "oli"+s     : {'func': TSS_Zhang, "wq_varname" : 'tss_zhang_oli'     ,'args' : {"blue_band" : 'oli02'+s    , "red_band":'oli04'+s    , "green_band":'oli03'+s }}
+    tss_zhang23    = {
+                        "msi"+s     : {'func': TSS_Zhang23, "wq_varname" : 'tss_zhang23_msi'     ,'args' : {"G" : 'msi03'+s    , "R":'msi04'+s    , "B":'msi02'+s }},
+                        "oli"+s     : {'func': TSS_Zhang23, "wq_varname" : 'tss_zhang23_oli'     ,'args' : {"G" : 'oli03'+s    , "R":'oli04'+s    , "B":'oli02'+s }},
+                        "tm"+s      : {'func': TSS_Zhang23, "wq_varname" : 'tss_zhang23_tm'      ,'args' : {"G" : 'tm02'+s     , "R":'tm03'+s     , "B":'tm01'+s  }}
+                        }
+    tss_GRB       = {
+                        "msi"+s     : {'func': TSS_GreenRedBlue, "wq_varname" : 'tss_grb_msi'     ,'args' : {"G" : 'msi03'+s    , "R":'msi04'+s    , "B":'msi02'+s }},
+                        "oli"+s     : {'func': TSS_GreenRedBlue, "wq_varname" : 'tss_grb_oli'     ,'args' : {"G" : 'oli03'+s    , "R":'oli04'+s    , "B":'oli02'+s }},
+                        "tm"+s      : {'func': TSS_GreenRedBlue, "wq_varname" : 'tss_grb_tm'      ,'args' : {"G" : 'tm02'+s     , "R":'tm03'+s     , "B":'tm01'+s  }}
+                        }
+    tss_zhang21    = {
+                        "msi"+s     : {'func': TSS_Zhang21, "wq_varname" : 'tss_zhang21_msi'     ,'args' : {"G" : 'msi03'+s    , "R":'msi04'+s }},
+                        "oli"+s     : {'func': TSS_Zhang21, "wq_varname" : 'tss_zhang21_oli'     ,'args' : {"G" : 'oli03'+s    , "R":'oli04'+s }},
+                        "tm"+s      : {'func': TSS_Zhang21, "wq_varname" : 'tss_zhang21_tm'      ,'args' : {"G" : 'tm02'+s     , "R":'tm03'+s  }}
+                        }
+    tss_GR       = {
+                        "msi"+s     : {'func': TSS_GreenRed, "wq_varname" : 'tss_gr_msi'      ,'args' : {"G" : 'msi03'+s    , "R":'msi04'+s }},
+                        "oli"+s     : {'func': TSS_GreenRed, "wq_varname" : 'tss_gr_oli'      ,'args' : {"G" : 'oli03'+s    , "R":'oli04'+s }},
+                        "tm"+s      : {'func': TSS_GreenRed, "wq_varname" : 'tss_gr_tm'       ,'args' : {"G" : 'tm02'+s     , "R":'tm03'+s  }}
                         }
 
     # ---- algorithms are grouped into two over-arching dictionaries ---- 
@@ -295,7 +311,10 @@ def set_wq_algorithms(suffix=''):
                        "ndssi_bnir"   : ndssi_bnir, 
                        "ti_yu"        : ti_yu     ,
                        "tsm_lym"      : tsm_lym   ,
-                       "tss_zhang"    : tss_zhang ,
+#                       "tss_zhang23"  : tss_zhang23 ,   
+#                       "tss_zhang21"  : tss_zhang21 ,
+                       "tss_grb"      : tss_GRB ,
+                       "tss_gr"       : tss_GR ,
                        "spm_qiu"      : spm_qiu    }
     return(algorithms_chla,algorithms_tsm)
     
@@ -305,11 +324,15 @@ def set_wq_algorithms(suffix=''):
 def ChlA_Toming(dataset, band5, band4, band6, verbose=False):
 # ---- Function to calculate ndci from input nir and red bands ----
     return  (dataset[band5] - 0.5 * ( dataset[band4] / dataset[band6] ) )
-
+# ------------------------------------------------------------------------
 def ChlA_3BDA(dataset, blue_band, green_band, red_band, verbose=False):
+    #
+    # as described in Byrne et al 2024:  LAQUA: a LAndsat water QUality retrieval tool for east African lakes
+    #
     scale = 1 / 10000.    #the reflectances should be less than one foe this function to make sensse
     return  ((dataset[blue_band] * scale )  -  ( dataset[red_band] * scale * dataset[green_band] * scale ) )
 
+# ------------------------------------------------------------------------
 def ChlA_Tebbs(dataset, NIR_band, Red_band, verbose=False) :
     # ---- the paramters are optional but for completeness ... ----
     a0 = -135
@@ -317,6 +340,7 @@ def ChlA_Tebbs(dataset, NIR_band, Red_band, verbose=False) :
     return  (a0 + a1 * ( dataset[NIR_band] / dataset[Red_band] ) )
 
 
+# ------------------------------------------------------------------------
 def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
 # ---- Function to calculate ndci from input nir and red bands ----
     return  (dataset[NIR_band] - dataset[red_band])/(dataset[NIR_band] + dataset[red_band])
@@ -337,6 +361,7 @@ def NDCI_NIR_R(dataset, NIR_band, red_band, verbose=False):
 
      MODIS2B = 190.34 * (ds.msi06/ ds.msi04r) - 32.45
 '''
+# ------------------------------------------------------------------------
 def ChlA_MERIS2B(dataset, band_708, band_665, verbose=False):   #matching MSI bands are 5 and 4
 # ---- Functions to estimate ChlA using the MERIS and MODIS 2-Band models, using closest bands from MSI (6, 5, 4) or other
     if verbose: print("ChlA_MERIS two-band model")
@@ -344,6 +369,7 @@ def ChlA_MERIS2B(dataset, band_708, band_665, verbose=False):   #matching MSI ba
     return  (25.28 * (X)**2) + 14.85 * (X) - 15.18
 
 
+# ------------------------------------------------------------------------
 def ChlA_MODIS2B(dataset, band_748, band_667,verbose=False):  #matching MSI bands are 6 and 4
     if verbose: print("ChlA_MODIS two-band model")
     X = dataset[band_748] / dataset[band_667]
@@ -354,45 +380,52 @@ def ChlA_MODIS2B(dataset, band_748, band_667,verbose=False):  #matching MSI band
 #        red-green / red_+green, or,
 #        blue-NIR / blue + NIR
 
+# ------------------------------------------------------------------------
 def NDSSI_RG(dataset, red_band, green_band,verbose=False):
     if verbose: print("NDSSI_RG")
     return ((dataset[red_band] - dataset[green_band]) / (dataset[red_band] + dataset[green_band]))
 
+# ------------------------------------------------------------------------
 def NDSSI_BNIR(dataset, blue_band, NIR_band,verbose=False):
     if verbose: print("NDSSI_BNIR")
     return ((dataset[blue_band] - dataset[NIR_band]) / (dataset[blue_band] + dataset[NIR_band]))
 
-# ---- Turbidity index of Yu, X. et al.
-#    An empirical algorithm to seamlessly retrieve the concentration of suspended particulate matter 
-#    from water color across ocean to turbid river mouths. Remote Sens. Environ. 235, 111491 (2019).
-#    Used in screening turbid waters for mapping floating algal blooms
-#    Initially developed with TM
-#    -TI = ((Red − green) − (NIR − Rgreen)) ^ 0.5
 
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 def TI_yu(dataset,NIR,Red,Green,scalefactor=0.01,verbose=False):
+    # ---- Turbidity index of Yu, X. et al.
+    #    An empirical algorithm to seamlessly retrieve the concentration of suspended particulate matter 
+    #    from water color across ocean to turbid river mouths. Remote Sens. Environ. 235, 111491 (2019).
+    #    Used in screening turbid waters for mapping floating algal blooms
+    #    Initially developed with TM
+    #    -TI = ((Red − green) − (NIR − Rgreen)) ^ 0.5
     if verbose: print('TI_yu')
     return  scalefactor * ( ( (dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]) ) ** 0.5 )
 #    return  scalefactor * ((dataset[Red] - dataset[Green]) - ((dataset[NIR] - dataset[Green]) * 0.5)) correction!
 
-# ---- Lymburner Total Suspended Matter (TSM)
-# Paper: [Lymburner et al. 2016](https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
-# Units of mg/L concentration. Variants for ETM and OLT, slight difference in parameters.
-# These models, developed by leo lymburner and arnold dekker, are simple, stable, and produce credible # 
-# results over a range of observations
-
+# ------------------------------------------------------------------------
 def TSM_LYM_ETM(dataset, green_band, red_band, scale_factor=0.0001,verbose=False):
+    # ---- Lymburner Total Suspended Matter (TSM)
+    # Paper: [Lymburner et al. 2016](https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
+    # Units of mg/L concentration. Variants for ETM and OLT, slight difference in parameters.
+    # These models, developed by leo lymburner and arnold dekker, are simple, stable, and produce credible # 
+    # results over a range of observations
+
     if verbose: print("TSM_LYM_ETM")
     return 3983 * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6246
 
+# ------------------------------------------------------------------------
 def TSM_LYM_OLI(dataset, green_band, red_band, scale_factor=0.0001,verbose=False):
         if verbose: print("TSM_LYM_OLI")
         return 3957 * ((dataset[green_band] + dataset[red_band]) * scale_factor / 2) ** 1.6436
 
-# Qui Function to calculate Suspended Particulate Model value
-# Paper: Zhongfeng Qiu et.al. 2013 - except it's not. 
-# This model seems to discriminate well although the scaling is questionable and it goes below zero due # to the final subtraction.
-# (The final subtraction seems immaterial in the context of our work (overly precise) and I skip it.) 
 
+# ------------------------------------------------------------------------
+    # Qui Function to calculate Suspended Particulate Model value
+    # Paper: Zhongfeng Qiu et.al. 2013 - except it's not. 
+    # This model seems to discriminate well although the scaling is questionable and it goes below zero due # to the final subtraction.
+    # (The final subtraction seems immaterial in the context of our work (overly precise) and I skip it.) 
 def SPM_QIU(dataset,green_band,red_band,verbose=False):
     if verbose: print("SPM_QIU")
     return (
@@ -405,35 +438,85 @@ def SPM_QIU(dataset,green_band,red_band,verbose=False):
          #- 1.43
          )
 
-# ---- Quang Total Suspended Solids (TSS)
-# Paper: Quang et al. 2017
-# Units of mg/L concentration
 
+# ------------------------------------------------------------------------
 def TSS_QUANG8(dataset,red_band,verbose=False):
     # ---- Function to calculate quang8 value ----
     if verbose: print("TSS_QUANG8")
     return 380.32 * (dataset.red_band) * 0.0001 - 1.7826
+    # ---- Quang Total Suspended Solids (TSS)
+    # Paper: Quang et al. 2017
+    # Units of mg/L concentration
 
-# ---- Model of Zhang et al 2023: ----
-#      This model seems to be funamentally unstable, using band ratios as an exponent 
-#      is asking for extreme values and numerical overflows. It runs to inf all over the place.
-#      Green = B3 520-600; Blue = B2 450-515 Red = B4 630-680
-#  The function is not scale-less.
-#  The factor of 0.0001 is not part of the forumula but  scales back from 10000 range which is clearly 
-#  ridiculous (exp(10000) etc. is not a good number). This therefore avoids overflow. 
-# This model can only be used together with other models and indices; it may handle some situations well...
 
-# --- This measure by Zhang is based on a log regression and therefore requires an exponential making it fundamentally unstable. 
-#     Propose to remove this measure since I can't make it work in the published form. 
-def TSS_Zhang(dataset, blue_band, green_band, red_band, scale_factor=0.0001,verbose=False):
-    if verbose: print("TSS_Zhang")
-    abovezero = .00001  #avoids div by zero if blue is zero
-    GplusR = dataset[green_band] + dataset[red_band]             
-    RdivB  = dataset[red_band] / (dataset[blue_band] + abovezero)   
-    X = (GplusR * RdivB) * scale_factor                          
-    #return(10**(14.44*X))*1.20
-    #return  np.exp(14.44* X)*1.20
-    return  (14.44* X)      #the distribution of results is exponential; this measure will be more stable without raising to the power.
+# -------------------------------------------------------------------------------------
+#   this is a the Zhang21 model without the exponential model fit
+def TSS_GreenRed (dataset, G, R, scale_factor=0.0001, verbose=False):
+    return( TSS_Zhang21(dataset , G=G , R=R , scale_factor=scale_factor , with_model=False) )
+
+# -------------------------------------------------------------------------------------
+def TSS_Zhang21(dataset, G, R, scale_factor=0.0001, with_model=True , verbose=False):
+
+# ---- Model of Zhang et al 2021 Remote sensing: Landsat Image-Based Retrieval and Analysis of Spatiotemporal 
+#      Variation of Total Suspended Solid Concentration in Jiaozhou Bay, China
+#
+#      Developed for Jiaozhou bay, a limited area with TSS values upto 30 (ie relatively low)
+#      Fundamentals are: (G + R) / (G/R)   
+#                        = G+R  * R/G  
+#      Clearly this scales with the data values so dividing by 10000 is a start point for implementation.
+#      Sensible values are returned if the data are divided by 2pi
+#      Divide by zero is a problem.
+#      To avoid zero division in a consistent manner, I introduce an offset of 1 to all values before scaling. 
+#      (This offset is within the noise)
+#      In fitting the model, the authors introduce an exponent
+#
+#                        Y = 0.71 * exp(21.31X) where X is the combination above
+#      This leads to ridiculous values, making the model useless. 
+#   
+    Green  = dataset[G].where(~(dataset[G]>0),1) * scale_factor 
+    Red    = dataset[R]                          * scale_factor 
+    
+    if with_model :
+            Green = Green / (2 * np.pi)
+            Red   = Red   / (2 * np.pi)
+            return(0.71 * np.e**(21.31 * (Green + Red) * (Red / Green)))
+    else :
+        return( (Green + Red) * (Red / Green) )
+
+# -------------------------------------------------------------------------------------
+#   this is a the Zhang23 model without the exponential model fit
+def TSS_GreenRedBlue (dataset , G , R , B , scale_factor=0.0001 , verbose=False):
+    return( TSS_Zhang23(dataset=dataset , G=G , R=R , B=B , scale_factor=scale_factor , with_model=False) )
+
+# -------------------------------------------------------------------------------------
+def TSS_Zhang23(dataset, B , G , R , scale_factor=0.0001 , with_model=True , verbose=False):
+#    Model of Zhang 2023 
+#    Remote sensing monitoring of total suspended solids concentration in Jiaozhou Bay based on multi-source data
+#    Ecological Indicators 154 (2023) 110513
+#    Developed for Jiaozhou bay in China, low TSS values (less than 20) with cross-reference to MODIS
+#    Fundamentals are: X = (G + R) / ( B/R ) = 
+#                          (G + R) * ( R/B )
+#    This is not scale-free; data must be in reflectance values.
+#    Zero values in the blue must be mitigated to avoid nans coming in.     
+#    
+#    A model is then fitted empirically, viz:
+#                          TSS = 1.20 × exp(14.44 * X)
+#    The inclusion of an exponent makes values from this function ridiculous, in general
+#    HOWEVER: The band combinaton BEFORE the model fit is also useful, showing patterns consistent with NDSSI and Lymburner to which it is closely related
+#    
+#
+    Blue   = dataset[B].where(~(dataset[B]>0),1) * scale_factor 
+    Red    = dataset[R]                          * scale_factor 
+    Green  = dataset[G]                          * scale_factor 
+        
+    if with_model :
+        Green = Green / (2 * np.pi)
+        Red   = Red   / (2 * np.pi)
+        Blue  = Blue  / (2 * np.pi)
+
+        return  (1.20 * np.e**( 14.44 * (Green + Red) * (Red / Blue)  )  )
+    else:
+        return  ( ((Green + Red)*(Red / Blue)) )   
 
 
 def create_OWT_response_models(path='/home/jovyan/dev/deafrica_water_quality/reference_data/',agm=False):   
