@@ -30,6 +30,7 @@ from water_quality.mapping.algorithms import (
     WQ_vars,
     geomedian_FAI,
     geomedian_NDVI,
+    normalise_and_stack_wq_vars,
 )
 from water_quality.mapping.config import check_config
 from water_quality.mapping.hue import geomedian_hue
@@ -265,7 +266,9 @@ def cli(
 
             # Mask dataset based on water frequency threshold
             mask = (ds.wofs_ann_freq >= WFTL).compute()
-            ds_masked = ds.where(mask, drop=True)
+            # Change to False to see if this preserves
+            # the tile extent
+            ds_masked = ds.where(mask, drop=False)
 
             # Run WQ algorithms
             log.info("Applying the WQ algorithms to water areas.")
@@ -275,6 +278,11 @@ def cli(
                 stack_wq_vars=False,
             )
 
+            ds_out = normalise_and_stack_wq_vars(
+                ds=ds_out,
+                wq_vars_table=wq_vars_df,
+                water_frequency_threshold=0,
+            )
             del ds_masked
             gc.collect()
 
