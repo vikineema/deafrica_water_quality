@@ -7,6 +7,32 @@ import gc   # garbage collection
 import pandas as pd
 
 
+#----------------------------------------------------------------------
+#  A function to calculate the Trophic State Index (TSI) from ChlA estimates. 
+#  For completeness, I include the data array sourced from the SDG 6.6.1 web site, which 
+#  gives the TSI as a step function. However it is just a log transfrom of the ChlA, so a much neater 
+#  implementation is to derive the TSI as a continuous variable. 
+#  The pandas data frame part is not essential; just convenient at the time.
+def trophic_state(da):
+    # source data
+    data = np.array((0,0.04,10,0.12,20,0.34,30,0.94,40,2.6,50,6.4,60,20,70,56,80,154,90,427,100,1183)).reshape(11,2)
+    df = pd.DataFrame(data=None,
+                  columns = ['TSI','ChlA'],
+                 )
+    df['TSI' ] = data[:,0].astype('int')
+    df['ChlA'] = data[:,1]
+
+    # derive the log-linear model; in practice these parameters will not change, slope =22.4622417, intercept = 30.9129
+    slope,intercept = np.polyfit(np.log10(df.ChlA),df.TSI,1) 
+    min        = 0.01
+    da[da<min] = min
+    tsi = np.log10(da) * slope + intercept + 0.53   #the 0.53 ensures that the lowest values match. A nicety.
+    
+    tsi[tsi<0] = 0
+    tsi[tsi>100] = 100
+    tsi[np.isnan(da)]=np.nan
+    return(tsi.round(2))  
+
 
 # --------------------------------------------------------------------------------------------------------
 def WQ_vars(ds,
@@ -19,6 +45,7 @@ def WQ_vars(ds,
     
     # ---- Run the TSS/TSP algorithms applying each algorithm to the instruments and band combinations set in the dictionary,
     #      checking that the necessary instruments are in the dataset
+    
     if test: print(' \nRunning  WQ algorithms for:\n',list(algorithms.keys()))    
     wq_varlist =  []
     for alg in algorithms.keys():
