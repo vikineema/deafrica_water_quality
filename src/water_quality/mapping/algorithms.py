@@ -130,6 +130,7 @@ def geomedian_FAI(ds: xr.Dataset) -> xr.Dataset:
     mean_fai_weighted_sum = None
     agm_count_total = None
 
+    fai_bands = []
     for inst_agm in geomedian_instruments:
         # Use the smad band as an indicator that data for the geomedian
         # instrument exists in the dataset.
@@ -146,7 +147,7 @@ def geomedian_FAI(ds: xr.Dataset) -> xr.Dataset:
             # Calculate the FAI for the instrument and scale
             fai_data = FAI(ds, inst_agm) * scale
             # Replace all NaN values with 0s in FAI
-            fai_data = fai_data.fillna(0)
+            # fai_data = fai_data.fillna(0)
             # Replace all NaN values with 0s in count band.
             inst_count = ds[count_band].fillna(0)
 
@@ -160,12 +161,14 @@ def geomedian_FAI(ds: xr.Dataset) -> xr.Dataset:
                 mean_fai_weighted_sum += weighted_fai
                 agm_count_total += inst_count
 
-            # Trim the fai values back to relevant areas and values
-            fai_data = fai_data.where(fai_data > fai_threshold)
-            # Mask to only include water pixels.
-            fai_data = fai_data.where(ds["water_mask"] == 1)
             # Add the instrument-specific masked FAI to the Dataset
             ds[f"{inst_agm}_fai"] = fai_data
+            fai_bands.append(f"{inst_agm}_fai")
+
+    # Trim the fai values back to relevant areas and values
+    ds[fai_bands] = ds[fai_bands].where(ds[fai_bands] > fai_threshold)
+    # Mask to only include water pixels.
+    ds[fai_bands] = ds[fai_bands].where(ds["water_mask"] == 1)
 
     if mean_fai_weighted_sum is not None and agm_count_total is not None:
         # Avoid division by zero:
@@ -224,6 +227,7 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
     mean_ndvi_weighted_sum = None
     agm_count_total = None
 
+    ndvi_bands = []
     for inst_agm in geomedian_instruments:
         # Use the smad band as an indicator that data for the geomedian
         # instrument exists in the dataset.
@@ -247,7 +251,7 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
             ndvi_data = ndvi_data * scale
 
             # Replace all NaN values with 0s in NDVI
-            ndvi_data = ndvi_data.fillna(0)
+            # ndvi_data = ndvi_data.fillna(0)
             # Replace all NaN values with 0s in count band.
             inst_count = ds[count_band].fillna(0)
 
@@ -261,12 +265,14 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
                 mean_ndvi_weighted_sum += weighted_ndvi
                 agm_count_total += inst_count
 
-            # Trim the NDVI values back to relevant areas and values
-            ndvi_data = ndvi_data.where(ndvi_data > ndvi_threshold)
-            # Mask to only include water pixels.
-            ndvi_data = ndvi_data.where(ds["water_mask"] == 1)
             # Add the instrument-specific masked NDVI to the Dataset
             ds[f"{inst_agm}_ndvi"] = ndvi_data
+            ndvi_bands.append(f"{inst_agm}_ndvi")
+
+    # Trim the ndvi values back to relevant areas and values
+    ds[ndvi_bands] = ds[ndvi_bands].where(ds[ndvi_bands] > ndvi_threshold)
+    # Mask to only include water pixels.
+    ds[ndvi_bands] = ds[ndvi_bands].where(ds["water_mask"] == 1)
 
     if mean_ndvi_weighted_sum is not None and agm_count_total is not None:
         # Avoid division by zero:
@@ -879,11 +885,11 @@ def normalise_and_stack_wq_vars(
     ds = ds.drop_vars(all_wq_vars)
 
     log.info("Get median of tss and chla measurements for water pixels")
-    water_mask = ds["wofs_ann_pwater"] > water_frequency_threshold
-
-    ds["tss"] = xr.where(water_mask, tss_da.median(dim="tss_measures"), np.nan)
+    ds["tss"] = xr.where(
+        ds["water_mask"] == 1, tss_da.median(dim="tss_measures"), np.nan
+    )
     ds["chla"] = xr.where(
-        water_mask, chla_da.median(dim="chla_measures"), np.nan
+        ds["water_mask"] == 1, chla_da.median(dim="chla_measures"), np.nan
     )
     # ds = ds.drop_dims(["tss_measures", "chla_measures"], errors="ignore")
 

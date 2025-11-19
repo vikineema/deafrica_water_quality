@@ -1,10 +1,7 @@
 import copy
 import logging
-from itertools import chain
-from typing import Any, Callable
-from uuid import UUID
+from typing import Any
 
-import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
@@ -534,8 +531,7 @@ def load_tirs_data(
 
 
 def load_tirs_annual_composite_data(
-    tirs_dc_query: dict[str, Any],
-    wofs_ann_dc_query: dict[str, Any],
+    dc_query: dict[str, Any],
     tile_geobox: GeoBox,
     compute: bool,
     dc: Datacube,
@@ -545,11 +541,8 @@ def load_tirs_annual_composite_data(
 
     Parameters
     ----------
-    tirs_dc_query : dict[str, Any]
+    dc_query: dict[str, Any]
         Datacube query to use to load data for the instrument `tirs`.
-
-    wofs_ann_dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `wofs_ann`.
 
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
@@ -568,7 +561,7 @@ def load_tirs_annual_composite_data(
         An xarray Dataset containing the surface temperature annnual
         composite produced from data for the instrument `tirs`.
     """
-    tirs_query = copy.deepcopy(tirs_dc_query)
+    query = copy.deepcopy(dc_query)
 
     # Due to memory constraints tirs data must be loaded in its native
     # resolution of 30 m and later reprojected to the target tile geobox
@@ -578,7 +571,7 @@ def load_tirs_annual_composite_data(
             tile_geobox=tile_geobox, resolution_m=30
         )
         ds_tirs = load_tirs_data(
-            dc_query=tirs_query,
+            dc_query=query,
             tile_geobox=native_tirs_geobox,
             compute=False,
             dc=dc,
@@ -586,11 +579,12 @@ def load_tirs_annual_composite_data(
     else:
         native_tirs_geobox = None
         ds_tirs = load_tirs_data(
-            dc_query=tirs_query,
+            dc_query=query,
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
         )
+
     # Remove outliers (no data value for surface temp is 0),
     # apply quality filter
     # and also filter on emissivity > 0.95
@@ -624,35 +618,12 @@ def load_tirs_annual_composite_data(
     )
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
-    # Restrict values to areas of water
-    if native_tirs_geobox is None:
-        ds_wofs_ann = load_wofs_ann_data(
-            dc_query=wofs_ann_dc_query,
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
-    else:
-        ds_wofs_ann = load_wofs_ann_data(
-            dc_query=wofs_ann_dc_query,
-            tile_geobox=native_tirs_geobox,
-            compute=False,
-            dc=dc,
-        )
-    water_frequency_threshold = 0.5
-    water_mask = (
-        ds_wofs_ann["wofs_ann_freq"].sel(time=time_values)
-        > water_frequency_threshold
-    )
-    for var in ["tirs_st_ann_med", "tirs_st_ann_min", "tirs_st_ann_max"]:
-        annual_ds_tirs[var] = annual_ds_tirs[var].where(water_mask)
-
     if native_tirs_geobox is not None:
         # Reproject to target tile geobox
         annual_ds_tirs = xr_reproject(
             annual_ds_tirs,
             how=tile_geobox,
-            resampling=tirs_query["resampling"],
+            resampling=query["resampling"],
         )
 
     if compute:
@@ -799,6 +770,8 @@ def load_water_mask(
         log.info("Computing wofs_ann dataset ...")
         water_mask = water_mask.compute()
         log.info("Done.")
+    else:
+        water_mask = water_mask.persist()
     del ds, clear_count_sum, wet_count_sum, frequency
 
     # Add attributes
@@ -815,6 +788,7 @@ def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
+    compute: bool = False,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
     for each composite products instrument using the datacube queries
@@ -831,6 +805,10 @@ def build_wq_agm_dataset(
 
     dc: Datacube
         Datacube connection to use when loading data, by default None.
+
+    compute : bool
+        Whether to compute the dask arrays immediately, by default True.
+        Set to False to keep datasets lazy for memory efficiency.
 
     Returns
     -------
@@ -896,9 +874,10 @@ def build_wq_agm_dataset(
     combined = xr.merge(list(loaded_datasets.values()), compat="no_conflicts")
     combined = combined.drop_vars("quantile", errors="ignore")
 
-    # Compute only once at the very end
-    log.info("Computing final merged dataset ...")
-    combined = combined.compute()
-    log.info("Done.")
+    if compute:
+        # Compute only once at the very end
+        log.info("Computing final merged dataset ...")
+        combined = combined.compute()
+        log.info("Done.")
 
     return combined
