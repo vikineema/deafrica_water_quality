@@ -885,11 +885,11 @@ def normalise_and_stack_wq_vars(
     ds = ds.drop_vars(all_wq_vars)
 
     log.info("Get median of tss and chla measurements for water pixels")
-    water_mask = ds["wofs_ann_pwater"] > water_frequency_threshold
-
-    ds["tss"] = xr.where(water_mask, tss_da.median(dim="tss_measures"), np.nan)
+    ds["tss"] = xr.where(
+        ds["water_mask"] == 1, tss_da.median(dim="tss_measures"), np.nan
+    )
     ds["chla"] = xr.where(
-        water_mask, chla_da.median(dim="chla_measures"), np.nan
+        ds["water_mask"] == 1, chla_da.median(dim="chla_measures"), np.nan
     )
     # ds = ds.drop_dims(["tss_measures", "chla_measures"], errors="ignore")
 
