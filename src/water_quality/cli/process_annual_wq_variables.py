@@ -229,14 +229,9 @@ def cli(
             if client is not None:
                 client.close()
 
-            # Turned off water analysis using wofs_annual_summary
-            # to use the water mask from the 5year wofs summary
             ds = water_analysis(
                 ds,
                 water_frequency_threshold=WFTH,
-                wofs_varname="wofs_ann_freq",
-                permanent_water_threshold=PWT,
-                sigma_coefficient=SC,
             )
 
             # Floating Algea Index

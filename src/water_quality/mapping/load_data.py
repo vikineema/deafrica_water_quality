@@ -773,6 +773,8 @@ def load_water_mask(
         log.info("Computing wofs_ann dataset ...")
         water_mask = water_mask.compute()
         log.info("Done.")
+    else:
+        water_mask = water_mask.persist()
     del ds, clear_count_sum, wet_count_sum, frequency
 
     # Add attributes
@@ -789,6 +791,7 @@ def build_wq_agm_dataset(
     dc_queries: dict[str, dict[str, Any]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
+    compute: bool = False,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
     for each composite products instrument using the datacube queries
@@ -805,6 +808,10 @@ def build_wq_agm_dataset(
 
     dc: Datacube
         Datacube connection to use when loading data, by default None.
+
+    compute : bool
+        Whether to compute the dask arrays immediately, by default True.
+        Set to False to keep datasets lazy for memory efficiency.
 
     Returns
     -------
@@ -870,9 +877,10 @@ def build_wq_agm_dataset(
     combined = xr.merge(list(loaded_datasets.values()), compat="no_conflicts")
     combined = combined.drop_vars("quantile", errors="ignore")
 
-    # Compute only once at the very end
-    log.info("Computing final merged dataset ...")
-    combined = combined.compute()
-    log.info("Done.")
+    if compute:
+        # Compute only once at the very end
+        log.info("Computing final merged dataset ...")
+        combined = combined.compute()
+        log.info("Done.")
 
     return combined
