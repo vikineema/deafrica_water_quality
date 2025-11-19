@@ -390,6 +390,7 @@ def cli(
 
     dss = chain(*datasets_list)
 
+    # Stream datasets into  file database ---
     cache = dscache.create_cache(
         path=cache_db_fp, complevel=6, zdict=zdict, truncate=True
     )
@@ -405,8 +406,6 @@ def cli(
     # TODO: Add filtering by tile id
     # prune out tiles that were not requested
 
-    # TODO: Add filtering by temporal range
-    # Prune Datasets outside of temporal range (after correcting for UTC offset)
     log.info(f"Total of {len(cells):,d} spatial tiles")
 
     # Not rewriting cells because original `cells` is needed during
