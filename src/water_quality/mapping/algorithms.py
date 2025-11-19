@@ -227,6 +227,7 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
     mean_ndvi_weighted_sum = None
     agm_count_total = None
 
+    ndvi_bands = []
     for inst_agm in geomedian_instruments:
         # Use the smad band as an indicator that data for the geomedian
         # instrument exists in the dataset.
@@ -250,7 +251,7 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
             ndvi_data = ndvi_data * scale
 
             # Replace all NaN values with 0s in NDVI
-            ndvi_data = ndvi_data.fillna(0)
+            # ndvi_data = ndvi_data.fillna(0)
             # Replace all NaN values with 0s in count band.
             inst_count = ds[count_band].fillna(0)
 
@@ -264,12 +265,14 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
                 mean_ndvi_weighted_sum += weighted_ndvi
                 agm_count_total += inst_count
 
-            # Trim the NDVI values back to relevant areas and values
-            ndvi_data = ndvi_data.where(ndvi_data > ndvi_threshold)
-            # Mask to only include water pixels.
-            ndvi_data = ndvi_data.where(ds["water_mask"] == 1)
             # Add the instrument-specific masked NDVI to the Dataset
             ds[f"{inst_agm}_ndvi"] = ndvi_data
+            ndvi_bands.append(f"{inst_agm}_ndvi")
+
+    # Trim the ndvi values back to relevant areas and values
+    ds[ndvi_bands] = ds[ndvi_bands].where(ds[ndvi_bands] > ndvi_threshold)
+    # Mask to only include water pixels.
+    ds[ndvi_bands] = ds[ndvi_bands].where(ds["water_mask"] == 1)
 
     if mean_ndvi_weighted_sum is not None and agm_count_total is not None:
         # Avoid division by zero:
