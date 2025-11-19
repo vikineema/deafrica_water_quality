@@ -42,7 +42,6 @@ from water_quality.mapping.load_data import (
     build_dc_queries,
     build_wq_agm_dataset,
 )
-from water_quality.mapping.optical_water_type import run_OWT
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.metadata.prepare_metadata import prepare_dataset
@@ -259,16 +258,10 @@ def cli(
             # OWT calculation
             # ds = run_OWT(ds)
 
-            # Mask dataset based on water frequency threshold
-            mask = (ds.wofs_ann_freq >= WFTL).compute()
-            # Change to False to see if this preserves
-            # the tile extent
-            ds_masked = ds.where(mask, drop=False)
-
             # Run WQ algorithms
             log.info("Applying the WQ algorithms to water areas.")
             ds_out, wq_vars_df = WQ_vars(
-                ds_masked,
+                ds,
                 instruments_list=instruments_list,
                 stack_wq_vars=False,
             )
@@ -278,7 +271,6 @@ def cli(
                 wq_vars_table=wq_vars_df,
                 water_frequency_threshold=0,
             )
-            del ds_masked
             gc.collect()
 
             # Get list of WQ variables
