@@ -8,86 +8,6 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 
-def create_OWT_response_models(agm=True) -> pd.DataFrame:
-    """
-    Create Optical Water Type (OWT) response models.
-
-    Parameters
-    ----------
-    agm : bool, optional
-        Whether to create models for geomedian instruments, by default True.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing OWT response models.
-    """
-    if agm:
-        suffix = "_agm"
-    else:
-        suffix = ""
-
-    OWT_spectra_fp = files("water_quality.data").joinpath(
-        "Vagelis_OWT_allwaters_mean_standardised.csv"
-    )
-    OWT_spectra = pd.read_csv(OWT_spectra_fp)
-    # Limit to inland water types
-    OWT_spectra = OWT_spectra[OWT_spectra.index < 13]
-
-    data = {}
-
-    # Read in the wavelengths for the bands in oli, tm and msi
-    # (spectral response models)
-    for sensor in ["msi", "tm", "oli"]:
-        sensor_data_fp = files("water_quality.data").joinpath(
-            f"sensor bands-{sensor}.csv"
-        )
-        sensor_data = pd.read_csv(sensor_data_fp)
-        # Rename columns to avoid clashes with reserved words
-        sensor_data.rename(
-            columns={"max": "l_max", "min": "l_min"}, inplace=True
-        )
-        a = sensor_data
-        # list the bands  that are going to be relevant , ie., less than 800nm
-        band_list = (
-            a[a["l_max"] < 800].band_name
-        ).values  # & set(ds.data_vars)
-
-        # Set up a  dataframe to take results for this instrument
-        labels = []
-        for i in np.arange(1, 14):
-            labels = np.append(labels, "OWT-" + str(i))
-
-        inst_OWT = pd.DataFrame(
-            data={"OWT": np.arange(1, 14, 1)}, index=labels
-        )
-        # Run through the bands ...
-        for band_name in band_list:
-            # determine the integration interval based on the central
-            # wavlength and the width; extract these as integers
-            delta = a[a["band_name"] == band_name]["width"].values * 0.8 * 0.5
-            start = int(
-                (a[a["band_name"] == band_name]["central"].values - delta)[0]
-            )
-            end = int(
-                (a[a["band_name"] == band_name]["central"].values + delta)[0]
-            )
-            # print(sensor,band_name, start,end)
-
-            # find the start and end column numbers in the response functions
-            # and sum over those for each OWT
-            b = OWT_spectra.loc[:, str(start) : str(end)].T.sum()
-            # add to the data frame
-            inst_OWT.insert(
-                inst_OWT.columns.size, band_name + suffix, (b.values)
-            )
-        # --- add this data frame to the data dictionary ---
-        data[sensor] = inst_OWT
-        # --- write to a csv file in the current location ---
-        # inst_OWT.to_csv(sensor+'_OWT_vectors.csv')
-    return data
-
-
 def OWT(
     ds,
     instrument,
@@ -212,15 +132,16 @@ def run_OWT(ds: xr.Dataset) -> xr.Dataset:
     xr.Dataset
         Dataset with OWT classification results.
     """
-    OWT_vector_data = create_OWT_response_models(agm=True)
     suffix = "_agm"
     for instrument in ["msi", "oli", "tm"]:
         inst_agm = instrument + suffix
+        OWT_vectors = pd.read_csv(
+            files("water_quality.data").joinpath(f"{inst_agm}_OWT_vectors.csv")
+        )
         # Use the smad band as an indicator that data for the geomedian
         # instrument exists in the dataset.
         smad_band = f"{inst_agm}_smad"
         if smad_band in ds.data_vars:
-            OWT_vectors = OWT_vector_data[instrument]
             OWT_data = OWT(
                 ds.where(ds.clearwater == 1),
                 instrument,
