@@ -1,6 +1,7 @@
 import json
 import random
 from collections import defaultdict, namedtuple
+from copy import deepcopy
 from datetime import datetime
 from itertools import chain, islice
 from types import SimpleNamespace
@@ -389,9 +390,11 @@ def cli(
     # Update analysis config with validated instruments and frequency
     # and add to cache metadata. This makes the config parameter
     # unnecessary when processing the water quality variables later on.
-    analysis_config["instruments_to_use"] = instruments_to_use
-    analysis_config["frequency"] = frequency
-    cache.append_info_dict("wq_", {"config": analysis_config})
+    cfg = deepcopy(analysis_config)
+    cfg["instruments_to_use"] = instruments_to_use
+    cfg["frequency"] = frequency
+    cfg["grid_name"] = grid_name
+    cache.append_info_dict("wq_", {"config": cfg})
 
     dss = cache.tee(dss)
 
