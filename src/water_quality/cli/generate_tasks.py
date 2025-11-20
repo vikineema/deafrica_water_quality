@@ -386,6 +386,13 @@ def cli(
     )
     cache.add_grid(grid_spec, grid_name)
 
+    # Update analysis config with validated instruments and frequency
+    # and add to cache metadata. This makes the config parameter
+    # unnecessary when processing the water quality variables later on.
+    analysis_config["instruments_to_use"] = instruments_to_use
+    analysis_config["frequency"] = frequency
+    cache.append_info_dict("wq_", {"config": analysis_config})
+
     dss = cache.tee(dss)
 
     cells = {}
