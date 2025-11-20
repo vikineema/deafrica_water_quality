@@ -4,7 +4,6 @@ import warnings
 
 import click
 
-from water_quality.cli.common import split_tasks
 from water_quality.io import (
     check_directory_exists,
     check_file_exists,
@@ -16,6 +15,7 @@ from water_quality.io import (
 )
 from water_quality.logs import setup_logging
 from water_quality.metadata.prepare_metadata import prepare_dataset
+from water_quality.tasks import split_tasks
 
 
 @click.command(
