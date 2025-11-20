@@ -312,7 +312,7 @@ def cli(
     )
 
     # Define prerequisites
-    FILE_NAME_PREFIX = f"wq_{frequency}_{temporal_range.short}_"
+    FILE_NAME_PREFIX = f"wq_{frequency}_{temporal_range.short}"
     cache_db_fp = f"{FILE_NAME_PREFIX}_cache.db"
     tasks_csv_fp = f"{FILE_NAME_PREFIX}_tasks.csv"
     grid_name = "water_quality_grid"
