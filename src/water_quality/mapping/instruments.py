@@ -295,6 +295,7 @@ def check_instrument_dates(
     instruments_to_use: dict[str, dict[str, bool]],
     start_date: str,
     end_date: str,
+    raise_errors: bool = False,
 ):
     """
     Cross check the years data is available for each instrument against
@@ -309,12 +310,15 @@ def check_instrument_dates(
         Start date of the analysis period.
     end_date : str
         End date of the analysis period.
-
+    raise_errors : bool, optional
+        Whether to raise errors when an instrument is not valid for the
+        analysis period, by default False.
     Returns
     -------
     dict[str, dict[str, bool]]
-        Updated `instruments_to_use` where instruments where data is not available for
-        the analysis period have their usage parameter set to False.
+        Updated `instruments_to_use` where instruments where data is not
+        available for the analysis period have their usage parameter set
+        to False.
     """
     start_date = validate_start_date(start_date)
     end_date = validate_end_date(end_date)
@@ -326,10 +330,12 @@ def check_instrument_dates(
                 instrument_name, None
             )
             if instruments_data_date_range is None:
-                valid_instruments_to_use[instrument_name] = {"use": False}
-                log.error(
-                    f"Valid data date range for instrument {instrument_name} has not been set"
-                )
+                error = f"Valid data date range for instrument {instrument_name} has not been set."
+                if raise_errors:
+                    raise ValueError(error)
+                else:
+                    valid_instruments_to_use[instrument_name] = {"use": False}
+                    log.error(error, "\nInstrument use set to False")
             else:
                 instrument_data_start_date = validate_start_date(
                     str(min(instruments_data_date_range))
@@ -346,12 +352,18 @@ def check_instrument_dates(
                 ):
                     valid_instruments_to_use[instrument_name] = {"use": True}
                 else:
-                    valid_instruments_to_use[instrument_name] = {"use": False}
-                    log.error(
+                    error = (
                         f"Instrument {instrument_name} has data for the date range "
                         f"{instrument_data_start_date} to {instrument_data_end_date} which is outside"
                         f" the requested date range of {start_date} to {end_date}."
                     )
+                    if raise_errors:
+                        raise ValueError(error)
+                    else:
+                        valid_instruments_to_use[instrument_name] = {
+                            "use": False
+                        }
+                        log.error(error, "\nInstrument use set to False")
         else:
             valid_instruments_to_use[instrument_name] = usage
     return valid_instruments_to_use
