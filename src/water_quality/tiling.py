@@ -11,7 +11,7 @@ import geopandas as gpd
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 
-from water_quality.africa_extent import africa_extent_geometry
+from water_quality.africa_extent import AFRICA_EXTENT_URL
 from water_quality.grid import check_resolution, get_waterbodies_grid
 
 log = logging.getLogger(__name__)
@@ -170,7 +170,10 @@ def get_africa_tiles(
     """
 
     # Get the tiles over Africa
-    africa_extent_geom = africa_extent_geometry()
+    africa_extent = gpd.read_file(AFRICA_EXTENT_URL)
+    africa_extent_geom = Geometry(
+        geom=africa_extent.iloc[0].geometry, crs=africa_extent.crs
+    )
 
     tiles = get_aoi_tiles(africa_extent_geom)
     if save_to_disk is True:
