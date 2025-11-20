@@ -36,8 +36,10 @@ from water_quality.io import (
 )
 from water_quality.logs import setup_logging
 from water_quality.mapping.config import check_config
-from water_quality.mapping.instruments import check_instrument_dates
-from water_quality.mapping.load_data import INSTRUMENTS_PRODUCTS
+from water_quality.mapping.instruments import (
+    INSTRUMENTS_PRODUCTS,
+    check_instrument_dates,
+)
 
 SUPPORTED_FREQUENCY = [
     "annual",

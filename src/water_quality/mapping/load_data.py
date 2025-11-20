@@ -19,20 +19,6 @@ from water_quality.tiling import reproject_tile_geobox
 
 log = logging.getLogger(__name__)
 
-COMPOSITE_INSTRUMENTS = {
-    "tm_agm": ["gm_ls5_ls7_annual"],
-    "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
-    "msi_agm": ["gm_s2_annual"],
-    "wofs_ann": ["wofs_ls_summary_annual"],
-    "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
-}
-SINGLE_DAY_INSTRUMENTS = {
-    "tm": ["ls5_sr", "ls7_sr"],
-    "oli": ["ls8_sr", "ls9_sr"],
-    "msi": ["s2_l2a"],
-}
-INSTRUMENTS_PRODUCTS = {**COMPOSITE_INSTRUMENTS, **SINGLE_DAY_INSTRUMENTS}
-
 
 def get_dc_products(instrument_name: str) -> list[str]:
     """
