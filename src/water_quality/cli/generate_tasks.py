@@ -17,13 +17,11 @@ from odc import dscache
 from odc.dscache import DatasetCache
 from odc.dscache.tools import bin_dataset_stream, ordered_dss
 from odc.dscache.tools.profiling import ds_stream_test_func
-from odc.geo import XY, Resolution
-from odc.geo.crs import CRS
 from odc.geo.geobox import GeoBox
 from odc.geo.geom import Geometry
 from odc.geo.gridspec import GridSpec
 from odc.stats._cli_common import click_yaml_cfg
-from odc.stats._gjson import compute_grid_info, gjson_from_tasks, gs_bounds
+from odc.stats._gjson import compute_grid_info, gjson_from_tasks
 from odc.stats.model import DateTimeRange
 from odc.stats.utils import _rolling_tasks, bin_annual, rolling_season_binner
 
@@ -282,7 +280,8 @@ def cli(
     """
     log = setup_logging()
 
-    # Verify inputs ------
+    # ----- Validate inputs ----- #
+
     try:
         temporal_range = DateTimeRange(temporal_range)
     except ValueError:
@@ -294,14 +293,14 @@ def cli(
 
     if frequency not in SUPPORTED_FREQUENCY:
         e = ValueError(
-            f"Frequency must be one of {'|'.join(SUPPORTED_FREQUENCY)} and not "
-            f"{frequency}"
+            f"Frequency must be one of {'|'.join(SUPPORTED_FREQUENCY)} and not"
+            f" {frequency}"
         )
         log.error(e)
         raise e
 
     analysis_config = check_config(analysis_config)
-
+    resolution = analysis_config["resolution"]
     instruments_to_use = analysis_config["instruments_to_use"]
     instruments_to_use = check_instrument_dates(
         instruments_to_use,
@@ -311,16 +310,12 @@ def cli(
 
     # Define prerequisites
     FILE_NAME_PREFIX = f"wq_{frequency}_{temporal_range.short}_"
-
     cache_db_fp = f"{FILE_NAME_PREFIX}_cache.db"
     tasks_csv_fp = f"{FILE_NAME_PREFIX}_tasks.csv"
     grid_name = "water_quality_grid"
 
-    dc = Datacube(app="FindDatasets")
+    # ----- Find datasets for each instrument ----- #
 
-    # Find datasets for each instrument ----
-
-    resolution = analysis_config["resolution"]
     grid_spec = get_waterbodies_grid(resolution)
     africa_extent = gpd.read_file(AFRICA_EXTENT_URL)
     africa_extent_geom = Geometry(
@@ -329,16 +324,13 @@ def cli(
     africa_geobox = GeoBox.from_geopolygon(
         africa_extent_geom, resolution=grid_spec.resolution, crs=grid_spec.crs
     )
-    query = dict(
-        like=africa_geobox, time=(temporal_range.start, temporal_range.end)
-    )
 
     # zstandard compression dictionary
     # for dataset cache
     zdict = None
-
     datasets_list = []
     log.info("Connecting to the datacube and streaming datasets")
+    dc = Datacube(app="FindDatasets")
     for inst in instruments_to_use.keys():
         if instruments_to_use[inst]["use"]:
             input_products = INSTRUMENTS_PRODUCTS[inst]
@@ -348,22 +340,16 @@ def cli(
             # range start date due to the 5 year water mask generated
             # when processing the annual water quality variables.
             if inst == "wofs_ann":
-                time_range = query["time"]
                 time_range = (
-                    time_range[0] - relativedelta(years=4),
-                    time_range[1],
+                    temporal_range.start - relativedelta(years=4),
+                    temporal_range.end,
                 )
-
-                dc_query = {}
-                for k, v in query.items():
-                    if k != "time":
-                        dc_query[k] = v
-                    dc_query.update(
-                        {"time": time_range, "product": input_products}
-                    )
             else:
-                dc_query = {"product": input_products, **query}
+                time_range = (temporal_range.start, temporal_range.end)
 
+            dc_query = dict(
+                product=input_products, time=time_range, like=africa_geobox
+            )
             datasets = ordered_dss(
                 dc,
                 freq="Y",
@@ -390,7 +376,8 @@ def cli(
 
     dss = chain(*datasets_list)
 
-    # Stream datasets into  file database ---
+    # ----- Stream datasets into  file database ----- #
+
     cache = dscache.create_cache(
         path=cache_db_fp, complevel=6, zdict=zdict, truncate=True
     )
@@ -408,7 +395,7 @@ def cli(
 
     log.info(f"Total of {len(cells):,d} spatial tiles")
 
-    # Not rewriting cells because original `cells` is needed during
+    # Note: Rewriting cells because original `cells` is needed during
     # writing tasks to geojson.
     updated_cells = bin_by_instrument(cells)
 
@@ -417,10 +404,14 @@ def cli(
     # all other instruments due to the temporal range adjustment needed for
     # wofs_ann datasets for the water mask generation process.
     not_wofs_ann_cells = {
-        k: v for k, v in updated_cells.items() if "wofs_ann" not in k
+        tile_index: cell
+        for tile_index, cell in updated_cells.items()
+        if "wofs_ann" not in tile_index
     }
     wofs_ann_cells = {
-        k: v for k, v in updated_cells.items() if "wofs_ann" in k
+        tile_index: cell
+        for tile_index, cell in updated_cells.items()
+        if "wofs_ann" in tile_index
     }
 
     wofs_ann_tasks = bin_5yr_wofs_ann(
@@ -428,7 +419,7 @@ def cli(
     )
     not_wofs_ann_tasks = bin_annual(not_wofs_ann_cells)
 
-    # Recombine tasks without instruments
+    # Remove instrument from the tile index for final tasks
     tasks = defaultdict(list)
     for d in (wofs_ann_tasks, not_wofs_ann_tasks):
         for (p, inst, x, y), dss in d.items():
@@ -440,7 +431,7 @@ def cli(
     tasks = {k: set(dss) for k, dss in tasks.items()}
     tasks_uuid = {k: [ds.id for ds in dss] for k, dss in tasks.items()}
 
-    log.info(f"Saving tasks to disk ({len(tasks)})")
+    log.info(f"Saving {len(tasks)} tasks to disk.")
     cache.add_grid_tiles(grid_name, tasks_uuid)
 
     write_tasks_to_csv(tasks_csv_fp, tasks)
