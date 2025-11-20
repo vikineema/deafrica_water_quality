@@ -3,6 +3,7 @@ This module provides functions to create tasks used as
 as building blocks in the DE Africa Water Quality workflow.
 """
 
+import numpy as np
 from odc.stats._text import split_and_check
 
 from water_quality.tiling import get_region_code, parse_region_code
@@ -55,3 +56,14 @@ def parse_task_id(task_id: str) -> tuple[str, tuple[int, int]]:
     # Should always be one item in the temporal_id.
     temporal_id = temporal_id[0]
     return temporal_id, tile_id
+
+
+def split_tasks(
+    all_tasks: list[str], max_parallel_steps: int, worker_idx: int
+) -> list[str]:
+    """Divide tasks across workers."""
+    task_chunks = np.array_split(np.array(all_tasks), max_parallel_steps)
+    task_chunks = [chunk.tolist() for chunk in task_chunks if len(chunk) > 0]
+    if len(task_chunks) <= worker_idx:
+        return []
+    return task_chunks[worker_idx]
