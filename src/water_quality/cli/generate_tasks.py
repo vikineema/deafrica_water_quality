@@ -526,7 +526,7 @@ def cli(
             fs.makedirs(output_parent_dir, exist_ok=True)
         fs.put(local_cache_db, output_cache_db)
         log.info(
-            f"Wrote file database to: {output_cache_db}"
+            f"Wrote file database to: {output_cache_db} \n"
             f"Local copy retained at: {local_cache_db}"
         )
     else:
