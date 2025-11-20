@@ -8,24 +8,31 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 
-def create_OWT_response_models(agm=True) -> pd.DataFrame:
+def create_OWT_response_model(
+    sensor: str, write_to_file: bool
+) -> pd.DataFrame:
     """
     Create Optical Water Type (OWT) response models.
-
     Parameters
     ----------
-    agm : bool, optional
-        Whether to create models for geomedian instruments, by default True.
+    sensor : str
+        The instrument for which to create the OWT response model.
+        Must be one of 'msi', 'msi_agm', 'tm', 'tm_agm', 'oli', 'oli_agm'.
 
+    write_to_file : bool
+        Whether to write the OWT response model to a CSV file.
     Returns
     -------
     pd.DataFrame
-        DataFrame containing OWT response models.
+        DataFrame containing OWT response model for the instrument
+
     """
-    if agm:
-        suffix = "_agm"
-    else:
-        suffix = ""
+    sensors = ["msi", "msi_agm", "tm", "tm_agm", "oli", "oli_agm"]
+
+    if sensor not in sensors:
+        raise ValueError(
+            f"Instrument must be one of {', '.join(sensors)}, not {sensor}"
+        )
 
     OWT_spectra_fp = files("water_quality.data").joinpath(
         "Vagelis_OWT_allwaters_mean_standardised.csv"
@@ -34,58 +41,56 @@ def create_OWT_response_models(agm=True) -> pd.DataFrame:
     # Limit to inland water types
     OWT_spectra = OWT_spectra[OWT_spectra.index < 13]
 
-    data = {}
-
-    # Read in the wavelengths for the bands in oli, tm and msi
-    # (spectral response models)
-    for sensor in ["msi", "tm", "oli"]:
+    # read in the wavelengths for the bands in
+    # (spectal response models)
+    if sensor.endswith("_agm"):
+        suffix = "_agm"
+        sensor_data_fp = files("water_quality.data").joinpath(
+            f"sensor bands-{sensor[: -len(suffix)]}.csv"
+        )
+    else:
+        suffix = ""
         sensor_data_fp = files("water_quality.data").joinpath(
             f"sensor bands-{sensor}.csv"
         )
-        sensor_data = pd.read_csv(sensor_data_fp)
-        # Rename columns to avoid clashes with reserved words
-        sensor_data.rename(
-            columns={"max": "l_max", "min": "l_min"}, inplace=True
+    sensor_data = pd.read_csv(sensor_data_fp)
+    sensor_data["band_name"] = sensor_data["band_name"] + suffix
+
+    # Rename columns to avoid clashes with reserved words
+    sensor_data.rename(columns={"max": "l_max", "min": "l_min"}, inplace=True)
+
+    # set up a  dataframe to take results for this instrument
+    owt_values = OWT_spectra["wl"].to_list()
+    owt_labels = [f"OWT-{i}" for i in owt_values]
+    inst_OWT = pd.DataFrame(data={"OWT": owt_values}, index=owt_labels)
+
+    # list the bands  that are going to be relevant , ie., less than 800nm
+    band_list = sensor_data[sensor_data["l_max"] < 800]["band_name"].to_list()
+
+    for band_name in band_list:
+        band_data = sensor_data[sensor_data["band_name"] == band_name].iloc[0]
+
+        # Determine the integration interval based on the central
+        # wavlength and the width
+        delta = band_data["width"] * 0.8 * 0.5
+        central = band_data["central"]
+
+        # Find start and end column numbers in the response functions
+        # and average over those for each OWT, must allow for the
+        # spectral band width.
+        start = str(int(central - delta))
+        end = str(int(central + delta))
+        inst_OWT.insert(
+            inst_OWT.columns.size,
+            band_name,
+            OWT_spectra.loc[:, start:end].T.mean().to_list(),
         )
-        a = sensor_data
-        # list the bands  that are going to be relevant , ie., less than 800nm
-        band_list = (
-            a[a["l_max"] < 800].band_name
-        ).values  # & set(ds.data_vars)
-
-        # Set up a  dataframe to take results for this instrument
-        labels = []
-        for i in np.arange(1, 14):
-            labels = np.append(labels, "OWT-" + str(i))
-
-        inst_OWT = pd.DataFrame(
-            data={"OWT": np.arange(1, 14, 1)}, index=labels
+    if write_to_file:
+        inst_OWT.to_csv(
+            files("water_quality.data").joinpath(f"{sensor}_OWT_vectors.csv")
         )
-        # Run through the bands ...
-        for band_name in band_list:
-            # determine the integration interval based on the central
-            # wavlength and the width; extract these as integers
-            delta = a[a["band_name"] == band_name]["width"].values * 0.8 * 0.5
-            start = int(
-                (a[a["band_name"] == band_name]["central"].values - delta)[0]
-            )
-            end = int(
-                (a[a["band_name"] == band_name]["central"].values + delta)[0]
-            )
-            # print(sensor,band_name, start,end)
 
-            # find the start and end column numbers in the response functions
-            # and sum over those for each OWT
-            b = OWT_spectra.loc[:, str(start) : str(end)].T.sum()
-            # add to the data frame
-            inst_OWT.insert(
-                inst_OWT.columns.size, band_name + suffix, (b.values)
-            )
-        # --- add this data frame to the data dictionary ---
-        data[sensor] = inst_OWT
-        # --- write to a csv file in the current location ---
-        # inst_OWT.to_csv(sensor+'_OWT_vectors.csv')
-    return data
+    return inst_OWT
 
 
 def OWT(
@@ -212,15 +217,16 @@ def run_OWT(ds: xr.Dataset) -> xr.Dataset:
     xr.Dataset
         Dataset with OWT classification results.
     """
-    OWT_vector_data = create_OWT_response_models(agm=True)
     suffix = "_agm"
     for instrument in ["msi", "oli", "tm"]:
         inst_agm = instrument + suffix
+        OWT_vectors = pd.read_csv(
+            files("water_quality.data").joinpath(f"{inst_agm}_OWT_vectors.csv")
+        )
         # Use the smad band as an indicator that data for the geomedian
         # instrument exists in the dataset.
         smad_band = f"{inst_agm}_smad"
         if smad_band in ds.data_vars:
-            OWT_vectors = OWT_vector_data[instrument]
             OWT_data = OWT(
                 ds.where(ds.clearwater == 1),
                 instrument,

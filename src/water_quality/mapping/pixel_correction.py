@@ -44,7 +44,7 @@ def R_correction(
     ----------
     ds : xarray.Dataset
         An xarray Dataset containing remote sensing bands
-        (e.g., 'msi04_agm', 'oli07_agm') and 'wofs_ann_freq' for
+        (e.g., 'msi04_agm', 'oli07_agm') and 'water_mask' for
         water masking.
     instruments_to_use : dict[str, dict[str, bool]]
         A dictionary of the instruments used to get the remote sensing
@@ -121,7 +121,7 @@ def R_correction(
                             np.nan,
                         )
                         ds[new_var] = ds[new_var].where(
-                            ds["water_mask"], ds[target_var]
+                            ds["water_mask"] == 1, ds[target_var]
                         )
 
                         if drop:

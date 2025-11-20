@@ -46,3 +46,11 @@ c.ServerApp.log_level = "DEBUG"
 
 # Do not open browser
 c.ServerApp.open_browser = False
+
+## Allow access to hidden files
+#  Default: False
+c.ContentsManager.allow_hidden = True
+
+## Allow access to hidden files
+#  See also: ContentsManager.allow_hidden
+c.FileContentsManager.allow_hidden = True
