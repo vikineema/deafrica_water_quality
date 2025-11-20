@@ -499,7 +499,7 @@ def load_tirs_annual_composite_data(
     Returns
     -------
     xr.Dataset
-        An xarray Dataset containing the surface temperature annnual
+        An xarray Dataset containing the surface temperature annual
         composite produced from data for the instrument `tirs`.
     """
     # Due to memory constraints tirs data must be loaded in its native
