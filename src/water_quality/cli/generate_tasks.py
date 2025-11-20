@@ -276,7 +276,10 @@ def cli(
     frequency: str,
 ):
     """
-    # TODO: Add description
+    Prepare tasks for the time range TEMPORAL_RANGE
+    (e.g '2020-05--P1M' for the month of May 2020) and temporal
+    binning FREQUENCY for running the DE Africa Water Quality continental
+    workflow on.
     """
     log = setup_logging()
 
