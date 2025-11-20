@@ -28,6 +28,12 @@ from odc.stats.utils import _rolling_tasks, bin_annual, rolling_season_binner
 
 from water_quality.africa_extent import AFRICA_EXTENT_URL
 from water_quality.grid import get_waterbodies_grid
+from water_quality.io import (
+    check_directory_exists,
+    check_file_exists,
+    get_filesystem,
+    join_url,
+)
 from water_quality.logs import setup_logging
 from water_quality.mapping.config import check_config
 from water_quality.mapping.instruments import check_instrument_dates
@@ -264,6 +270,26 @@ def write_tasks_to_geojson(
     required=True,
     help="Config for the analysis parameters in yaml format, file or text",
 )
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=True,
+    show_default=True,
+    help=(
+        "If overwrite is True, wipe out any existing file database and "
+        "create a new one."
+    ),
+)
+@click.option(
+    "--output-directory",
+    type=str,
+    default="",
+    show_default=True,
+    help=(
+        "The directory to write a copy of the output file database to. "
+        "Usually the same directory as the output directory used when "
+        "processing the water quality variables."
+    ),
+)
 @click.argument(
     "temporal-range",
     type=str,
@@ -273,6 +299,8 @@ def write_tasks_to_geojson(
 )
 def cli(
     analysis_config: dict,
+    overwrite: bool,
+    output_directory: str,
     temporal_range: str,
     frequency: str,
 ):
@@ -304,6 +332,8 @@ def cli(
         raise e
 
     analysis_config = check_config(analysis_config)
+    product_name = analysis_config["product_name"]
+    product_version = analysis_config["product_version"]
     resolution = analysis_config["resolution"]
     instruments_to_use = analysis_config["instruments_to_use"]
     instruments_to_use = check_instrument_dates(
@@ -313,10 +343,44 @@ def cli(
     )
 
     # Define prerequisites
-    FILE_NAME_PREFIX = f"wq_{frequency}_{temporal_range.short}"
-    cache_db_fp = f"{FILE_NAME_PREFIX}_cache.db"
+    FILE_NAME_PREFIX = f"{product_name}_{frequency}_{temporal_range.short}"
+    local_cache_db = f"{FILE_NAME_PREFIX}.db"
     tasks_csv_fp = f"{FILE_NAME_PREFIX}_tasks.csv"
     grid_name = "water_quality_grid"
+
+    if output_directory:
+        product_version_dashed = product_version.replace(".", "-")
+        output_parent_dir = join_url(
+            output_directory,
+            product_name,
+            product_version_dashed,
+            "dbs",
+        )
+        output_cache_db = join_url(output_parent_dir, local_cache_db)
+    else:
+        output_cache_db = None
+
+    # If an output directory is provided, it is assumed that the file
+    # database in the output directory is the priority over the local
+    # cache db file.
+    if output_cache_db is not None:
+        exists = check_file_exists(output_cache_db)
+        if exists and not overwrite:
+            e = FileExistsError(
+                f"File database already exists at: {output_cache_db}. "
+                "Use --overwrite to overwrite it."
+            )
+            log.error(e)
+            raise e
+    else:
+        exists = check_file_exists(local_cache_db)
+        if exists and not overwrite:
+            e = FileExistsError(
+                f"File database already exists at: {local_cache_db}. "
+                "Use --overwrite to overwrite it."
+            )
+            log.error(e)
+            raise e
 
     # ----- Find datasets for each instrument ----- #
 
@@ -383,7 +447,7 @@ def cli(
     # ----- Stream datasets into  file database ----- #
 
     cache = dscache.create_cache(
-        path=cache_db_fp, complevel=6, zdict=zdict, truncate=True
+        path=local_cache_db, complevel=6, zdict=zdict, truncate=True
     )
     cache.add_grid(grid_spec, grid_name)
 
@@ -451,3 +515,23 @@ def cli(
     log.info(f"Wrote tasks summary to: {tasks_csv_fp}")
 
     write_tasks_to_geojson(FILE_NAME_PREFIX, grid_spec, cells, tasks)
+
+    # Not sure if this is necessary
+    cache.close()
+
+    # Copy the local cache db to the final output location
+    if output_cache_db is not None:
+        fs = get_filesystem(output_cache_db, anon=False)
+        if not check_directory_exists(output_parent_dir):
+            fs.makedirs(output_parent_dir, exist_ok=True)
+        fs.put(local_cache_db, output_cache_db)
+        log.info(
+            f"Wrote file database to: {output_cache_db}"
+            f"Local copy retained at: {local_cache_db}"
+        )
+    else:
+        log.info(f"Wrote file database to: {local_cache_db}")
+
+
+if __name__ == "__main__":
+    cli()
