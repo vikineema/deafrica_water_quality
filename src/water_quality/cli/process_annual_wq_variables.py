@@ -41,7 +41,7 @@ from water_quality.mapping.load_data import build_wq_agm_dataset
 from water_quality.mapping.pixel_correction import R_correction
 from water_quality.mapping.water_detection import water_analysis
 from water_quality.metadata.prepare_metadata import prepare_dataset
-from water_quality.tasks import create_task_id, split_tasks
+from water_quality.tasks import create_task_id, parse_task_id, split_tasks
 
 
 def setup_dask_if_needed():
@@ -61,7 +61,7 @@ def setup_dask_if_needed():
     "--tasks",
     help="List of comma separated tasks in the format "
     "period/x{x:02d}/y{y:02d} to generate water quality variables for. "
-    "For example `2015--P1Y/x200/y34,2015--P1Y/x178/y095, 2015--P1Y/x199y/100`",
+    "For example `2015--P1Y/x200/y034,2015--P1Y/x178/y095,2015--P1Y/x199/y100`",
 )
 @click.argument(
     "cache-file-path",
@@ -143,9 +143,28 @@ def cli(
     # Load all tasks and split for this worker
     all_task_ids = sorted([i[0] for i in cache.tiles(grid_name)])
 
-    # TODO: Add tasks filter.
+    if tasks:
+        task_filter = [i.strip() for i in tasks.split(",")]
+        # "period/x{x:02d}/y{y:02d}" to (period, x, y)
+        task_filter = [parse_task_id(i) for i in task_filter]
+        found_tasks = list(set(task_filter).intersection(set(all_task_ids)))
 
-    tasks_to_run = split_tasks(all_task_ids, max_parallel_steps, worker_idx)
+        if len(found_tasks) == 0:
+            log.error(
+                "No matching tasks found in the file database "
+                f"for the provided filter: {tasks}."
+            )
+            sys.exit(1)
+        else:
+            log.info(
+                f"Found {len(found_tasks)} matching tasks "
+                f"in the file database for the provided filter: {tasks}."
+            )
+        tasks_to_run = split_tasks(found_tasks, max_parallel_steps, worker_idx)
+    else:
+        tasks_to_run = split_tasks(
+            all_task_ids, max_parallel_steps, worker_idx
+        )
 
     if not tasks_to_run:
         log.warning(f"Worker {worker_idx} has no tasks to process. Exiting.")
