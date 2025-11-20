@@ -136,7 +136,6 @@ def geomedian_FAI(ds: xr.Dataset) -> xr.Dataset:
         # instrument exists in the dataset.
         count_band = f"{inst_agm}_count"
         if count_band in ds.data_vars:
-
             # Scale factor based on the reference mean of the current instrument
             # relative to the reference mean of the reference instrument.
             scale = (
@@ -232,7 +231,6 @@ def geomedian_NDVI(ds: xr.Dataset) -> xr.Dataset:
         # instrument exists in the dataset.
         count_band = f"{inst_agm}_count"
         if count_band in ds.data_vars:
-
             # Scale factor based on the reference mean of the current instrument
             # relative to the reference mean of the reference instrument.
             scale = (
