@@ -8,6 +8,91 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 
+def create_OWT_response_model(
+    sensor: str, write_to_file: bool
+) -> pd.DataFrame:
+    """
+    Create Optical Water Type (OWT) response models.
+    Parameters
+    ----------
+    sensor : str
+        The instrument for which to create the OWT response model.
+        Must be one of 'msi', 'msi_agm', 'tm', 'tm_agm', 'oli', 'oli_agm'.
+
+    write_to_file : bool
+        Whether to write the OWT response model to a CSV file.
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing OWT response model for the instrument
+
+    """
+    sensors = ["msi", "msi_agm", "tm", "tm_agm", "oli", "oli_agm"]
+
+    if sensor not in sensors:
+        raise ValueError(
+            f"Instrument must be one of {', '.join(sensors)}, not {sensor}"
+        )
+
+    OWT_spectra_fp = files("water_quality.data").joinpath(
+        "Vagelis_OWT_allwaters_mean_standardised.csv"
+    )
+    OWT_spectra = pd.read_csv(OWT_spectra_fp)
+    # Limit to inland water types
+    OWT_spectra = OWT_spectra[OWT_spectra.index < 13]
+
+    # read in the wavelengths for the bands in
+    # (spectral response models)
+    if sensor.endswith("_agm"):
+        suffix = "_agm"
+        sensor_data_fp = files("water_quality.data").joinpath(
+            f"sensor bands-{sensor[: -len(suffix)]}.csv"
+        )
+    else:
+        suffix = ""
+        sensor_data_fp = files("water_quality.data").joinpath(
+            f"sensor bands-{sensor}.csv"
+        )
+    sensor_data = pd.read_csv(sensor_data_fp)
+    sensor_data["band_name"] = sensor_data["band_name"] + suffix
+
+    # Rename columns to avoid clashes with reserved words
+    sensor_data.rename(columns={"max": "l_max", "min": "l_min"}, inplace=True)
+
+    # set up a  dataframe to take results for this instrument
+    owt_values = OWT_spectra["wl"].to_list()
+    owt_labels = [f"OWT-{i}" for i in owt_values]
+    inst_OWT = pd.DataFrame(data={"OWT": owt_values}, index=owt_labels)
+
+    # list the bands  that are going to be relevant , ie., less than 800nm
+    band_list = sensor_data[sensor_data["l_max"] < 800]["band_name"].to_list()
+
+    for band_name in band_list:
+        band_data = sensor_data[sensor_data["band_name"] == band_name].iloc[0]
+
+        # Determine the integration interval based on the central
+        # wavelength and the width
+        delta = band_data["width"] * 0.8 * 0.5
+        central = band_data["central"]
+
+        # Find start and end column numbers in the response functions
+        # and average over those for each OWT, must allow for the
+        # spectral band width.
+        start = str(int(central - delta))
+        end = str(int(central + delta))
+        inst_OWT.insert(
+            inst_OWT.columns.size,
+            band_name,
+            OWT_spectra.loc[:, start:end].T.mean().to_list(),
+        )
+    if write_to_file:
+        inst_OWT.to_csv(
+            files("water_quality.data").joinpath(f"{sensor}_OWT_vectors.csv")
+        )
+
+    return inst_OWT
+
+
 def OWT(
     ds,
     instrument,
