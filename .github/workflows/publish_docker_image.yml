@@ -8,7 +8,7 @@ on:
 
 jobs:
   push-if-main:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
