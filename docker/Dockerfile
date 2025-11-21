@@ -86,7 +86,6 @@ RUN if [ "$BUILD_ENV" = "dev" ]; then \
 ## Jupyter config
 COPY docker/assets/overrides.json $JUPYTERLAB_DIR/settings/
 COPY docker/assets/jupyter_lab_config.py  $PYTHON_ENV/etc/jupyter/
-COPY docker/assets/jupyter_server_config.py $HOME/.jupyter/
 
 # Enable server extensions
 USER $NB_USER
