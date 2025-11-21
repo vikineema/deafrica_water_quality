@@ -807,7 +807,7 @@ def build_wq_agm_dataset(
         )
     if "tirs" in instruments:
         loaded_datasets["tirs_ann"] = load_tirs_annual_composite_data(
-            tirs_datasets=datasets["tirs"],
+            datasets=datasets["tirs"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,

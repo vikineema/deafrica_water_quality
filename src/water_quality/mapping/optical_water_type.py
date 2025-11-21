@@ -42,7 +42,7 @@ def create_OWT_response_model(
     OWT_spectra = OWT_spectra[OWT_spectra.index < 13]
 
     # read in the wavelengths for the bands in
-    # (spectal response models)
+    # (spectral response models)
     if sensor.endswith("_agm"):
         suffix = "_agm"
         sensor_data_fp = files("water_quality.data").joinpath(
@@ -71,7 +71,7 @@ def create_OWT_response_model(
         band_data = sensor_data[sensor_data["band_name"] == band_name].iloc[0]
 
         # Determine the integration interval based on the central
-        # wavlength and the width
+        # wavelength and the width
         delta = band_data["width"] * 0.8 * 0.5
         central = band_data["central"]
 
