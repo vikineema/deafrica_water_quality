@@ -360,7 +360,7 @@ def parse_wq_cog_url(cog_url: str) -> tuple[str, str, str, str]:
     temporal_id = [p for p in parts if "--P" in p][0]
 
     product_name = "_".join(parts[: parts.index(region_code)])
-    band = "_".join(parts[parts.index(temporal_id) + 1 :])
+    band = "_".join(parts[parts.index(temporal_id) + 1:])
 
     return product_name, region_code, temporal_id, band
 

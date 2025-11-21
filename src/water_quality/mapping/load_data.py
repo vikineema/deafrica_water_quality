@@ -1,6 +1,6 @@
 import logging
 
-import dask.array as da
+import dask.array
 import numpy as np
 import xarray as xr
 from datacube import Datacube
@@ -633,6 +633,19 @@ def load_wofs_ann_data(
     return ds
 
 
+def _sum_over_time(da: xr.DataArray) -> xr.DataArray:
+    """Helper function for `load_5year_water_mask` to sum
+    xr.DataArray over time dimension while handling nodata values."""
+    nodata_val = da.attrs.get("nodata", None)
+
+    if nodata_val is not None:
+        da_masked = da.where(da != nodata_val, np.nan).astype("float32")
+        sum_over_time = da_masked.sum(dim="time")
+    else:
+        sum_over_time = da.sum(dim="time")
+    return sum_over_time
+
+
 def load_5year_water_mask(
     datasets: list[Dataset],
     tile_geobox: GeoBox,
@@ -661,66 +674,78 @@ def load_5year_water_mask(
         An xarray DataArray containing the water mask derived from the
         wofs_ann data.
     """
-    log.info("Loading data for the instrument wofs_ann ...")
+    inst = "wofs_ann"
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "nearest"
+
+    log.info(f"Loading data for the instrument {inst} ...")
 
     if dc is None:
-        dc = Datacube(app="LoadWofsAnn")
+        dc = Datacube(app=f"Load_{inst}")
 
-    dask_chunks = {"x": 4800, "y": 4800}
     ds = dc.load(
         datasets=datasets,
+        measurements=list(measurements.keys()),
         like=tile_geobox,
-        resampling="nearest",
+        resampling=resampling,
         dask_chunks=dask_chunks,
     )
-    ds = ds.rename(get_measurements_name_dict("wofs_ann"))
-
-    # For each band mask no data values to np.nan
-    for band in ds.data_vars:
-        nodata = ds[band].attrs["nodata"]
-        ds[band] = ds[band].where(ds[band] != nodata)
+    ds = ds.rename(measurements)
 
     # Calculate the ratio of clear wet observations to total clear
     # observations for each pixel over the 5 year period.
-    clear_count_sum = ds["wofs_ann_clearcount"].sum(dim="time")
-    wet_count_sum = ds["wofs_ann_wetcount"].sum(dim="time")
+    clearcount_sum = _sum_over_time(ds["wofs_ann_clearcount"])
+    wet_count_sum = _sum_over_time(ds["wofs_ann_wetcount"])
 
-    frequency = da.divide(
+    frequency_np = dask.array.full_like(
+        wet_count_sum, np.nan, dtype="float32", name="frequency"
+    )
+    dask.array.divide(
         wet_count_sum,
-        clear_count_sum,
-        out=da.full_like(wet_count_sum, np.nan, dtype=np.float32),
-        where=(clear_count_sum > 0),
+        clearcount_sum,
+        out=frequency_np,
+        where=clearcount_sum > 0,
     )
-    frequency.name = "frequency"
 
-    # Generate a water mask  by thresholding the frequency.
-    water_mask = frequency > 0.45
-    water_mask = water_mask.where(~np.isnan(frequency), other=np.nan).astype(
-        np.float32
+    # Bool to float32 to allow for preserving no data pixels
+    water_mask_np = (frequency_np > 0.45).astype("float32")
+    water_mask_np = dask.array.where(
+        ~np.isnan(frequency_np), water_mask_np, np.nan
     )
-    water_mask.name = "water_mask"
 
-    # Add a time coordinate for compatibility
-    # Use the last year in the 5 year period
-    # based on how the tasks were generated in `wq-generate-tasks`.
-    water_mask = water_mask.expand_dims(time=[ds.time.values[-1]])
-
-    if compute:
-        log.info("Computing wofs_ann dataset ...")
-        water_mask = water_mask.compute()
-        log.info("Done.")
-    else:
-        water_mask = water_mask.persist()
-    del ds, clear_count_sum, wet_count_sum, frequency
-
-    # Add attributes
-    water_mask.attrs = dict(
+    water_mask_da = xr.DataArray(
+        water_mask_np,
+        coords=wet_count_sum.coords,
+        dims=wet_count_sum.dims,
+        name="water_mask",
+    )
+    water_mask_da.attrs = dict(
         nodata=np.nan,
         scales=1,
         offsets=0,
     )
+    # Add a time coordinate for compatibility with other annual datasets.
+    # Use the last year in the 5 year period
+    # based on how the tasks were generated in `wq-generate-tasks`.
+    water_mask_da = water_mask_da.expand_dims(
+        time=[ds.isel(time=-1).time.values]
+    )
 
-    return water_mask
+    if compute:
+        log.info("Computing wofs_ann dataset ...")
+        water_mask_da = water_mask_da.compute()
+        log.info("Done.")
+    else:
+        water_mask_da = water_mask_da.persist()
+    del ds, clearcount_sum, wet_count_sum, frequency_np, water_mask_np
+
+    # gc.collect()
+    return water_mask_da
 
 
 def build_wq_agm_dataset(
@@ -770,12 +795,13 @@ def build_wq_agm_dataset(
             "Datasets for the instrument `wofs_ann` must be provided."
         )
     else:
-        loaded_datasets["wofs_ann"] = load_wofs_ann_data(
-            datasets=datasets["wofs_ann"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
+        # Turned off for testing.
+        # loaded_datasets["wofs_ann"] = load_wofs_ann_data(
+        #    datasets=datasets["wofs_ann"],
+        #    tile_geobox=tile_geobox,
+        #    compute=False,
+        #    dc=dc,
+        # )
 
         loaded_datasets["water_mask"] = load_5year_water_mask(
             datasets=datasets["wofs_ann"],
