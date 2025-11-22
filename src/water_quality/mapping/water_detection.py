@@ -63,7 +63,7 @@ def load_5year_water_mask(
     inst = "wofs_ann"
     if inst not in list(dss.keys()):
         error = (
-            f"No datasets found for instrument '{inst}'.",
+            f"No datasets found for instrument '{inst}'. ",
             "Returning empty array.",
         )
         log.error(error)
@@ -77,8 +77,6 @@ def load_5year_water_mask(
         # For int data nearest is preferred
         # bilinear for float data.
         resampling = "nearest"
-
-        log.info(f"Loading data for the instrument {inst} ...")
 
         if dc is None:
             dc = Datacube(app=f"Load_{inst}")
@@ -133,13 +131,12 @@ def load_5year_water_mask(
         )
 
         if compute:
-            log.info("Computing water mask ...")
+            log.info("\tComputing water mask.")
             water_mask_da = water_mask_da.compute()
-            log.info("Done.")
         else:
             water_mask_da = water_mask_da.persist()
         del ds, clearcount_sum, wet_count_sum, frequency_np, water_mask_np
-        log.info("Processing for 5 year water mask completed.")
+        log.info("Processing complete for water mask.")
         # gc.collect()
         return water_mask_da
 
