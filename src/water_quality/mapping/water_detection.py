@@ -105,7 +105,6 @@ def load_5year_water_mask(
             where=clearcount_sum > 0,
         )
 
-        log.info("Processing 5 year water mask ...")
         # Bool to float32 to allow for preserving no data pixels
         water_mask_np = (frequency_np > 0.45).astype("float32")
         water_mask_np = dask.array.where(
@@ -131,9 +130,10 @@ def load_5year_water_mask(
         )
 
         if compute:
-            log.info("\tComputing water mask.")
+            log.info("\tComputing water mask ...")
             water_mask_da = water_mask_da.compute()
         else:
+            log.info("\tPersisting water mask ...")
             water_mask_da = water_mask_da.persist()
         del ds, clearcount_sum, wet_count_sum, frequency_np, water_mask_np
         log.info("Processing complete for water mask.")
