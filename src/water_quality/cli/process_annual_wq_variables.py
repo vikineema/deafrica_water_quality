@@ -228,7 +228,6 @@ def cli(
             annual_data = load_annual_data(
                 dss=dss,
                 tile_geobox=tile_geobox,
-                instruments=instruments_list,
                 compute=False,
                 dc=dc,
             )
