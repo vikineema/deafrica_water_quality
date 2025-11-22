@@ -106,7 +106,7 @@ def load_oli_agm_data(
     Parameters
     ----------
     dss: dict[str, list[Dataset]]
-        Mapping of instrument names to list of Datasets to load.
+        A dictionary mapping instruments to a list of datacube datasets available.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -234,7 +234,7 @@ def load_msi_agm_data(
     Parameters
     ----------
     dss: dict[str, list[Dataset]]
-        Mapping of instrument names to list of Datasets to load.
+        A dictionary mapping instruments to a list of datacube datasets available.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -353,7 +353,7 @@ def load_tm_agm_data(
     Parameters
     ----------
     dss: dict[str, list[Dataset]]
-        Mapping of instrument names to list of Datasets to load.
+        A dictionary mapping instruments to a list of datacube datasets available.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -692,20 +692,20 @@ def load_wofs_ann_data(
     return ds
 
 
-def build_wq_agm_dataset(
-    datasets: dict[str, list[Dataset]],
+def load_annual_data(
+    dss: dict[str, list[Dataset]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
     compute: bool = False,
-) -> xr.Dataset:
-    """Build a combined annual dataset from loading data
-    for each instrument using the datacube datasets
-    provided.
+) -> dict[str, xr.Dataset | xr.DataArray]:
+    """
+    Load data for the instruments "oli_agm", "msi_agm", "tm_agm" and "tirs".
 
     Parameters
     ----------
-    datasets : dict[str, list[Dataset]]
-        A dictionary mapping instruments to the datacube datasets available.
+    dss : dict[str, list[Dataset]]
+        A dictionary mapping instruments to a list of datacube datasets
+        available.
 
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
@@ -720,79 +720,40 @@ def build_wq_agm_dataset(
 
     Returns
     -------
-    xr.Dataset
-        A single dataset containing all the data found for each
-        instrument in the datacube.
+    dict[str, xr.DataArray | xr.Dataset]
+        A dictionary mapping each instrument to the xr.Dataset or xr.DataArray
+        of the loaded datasets for that instrument.
     """
     if dc is None:
-        dc = Datacube(app="BuildAnnualDataset")
-
-    instruments = list(datasets.keys())
+        dc = Datacube(app="LoadAnnualData")
 
     loaded_datasets: dict[str, xr.DataArray | xr.Dataset] = {}
 
-    # Due to the water mask that is required in nearly all steps in
-    # producing the annual water quality variables, at the very least
-    # wofs_ann data should be available.
-    if "wofs_ann" not in instruments:
-        raise ValueError(
-            "Datasets for the instrument `wofs_ann` must be provided."
-        )
-    else:
-        # Turned off for testing.
-        # loaded_datasets["wofs_ann"] = load_wofs_ann_data(
-        #    datasets=datasets["wofs_ann"],
-        #    tile_geobox=tile_geobox,
-        #    compute=False,
-        #    dc=dc,
-        # )
-
-        # loaded_datasets["water_mask"] = load_5year_water_mask(
-        #    datasets=datasets["wofs_ann"],
-        #    tile_geobox=tile_geobox,
-        #    compute=False,
-        #    dc=dc,
-        # )
-        pass
+    instruments = list(dss.keys())
 
     if "oli_agm" in instruments:
         loaded_datasets["oli_agm"] = load_oli_agm_data(
-            datasets=datasets["oli_agm"],
+            dss=dss,
             tile_geobox=tile_geobox,
-            compute=False,
+            compute=compute,
             dc=dc,
         )
     if "msi_agm" in instruments:
         loaded_datasets["msi_agm"] = load_msi_agm_data(
-            datasets=datasets["msi_agm"],
+            dss=dss,
             tile_geobox=tile_geobox,
-            compute=False,
+            compute=compute,
             dc=dc,
         )
     if "tm_agm" in instruments:
         loaded_datasets["tm_agm"] = load_tm_agm_data(
-            datasets=datasets["tm_agm"],
+            dss=dss,
             tile_geobox=tile_geobox,
-            compute=False,
+            compute=compute,
             dc=dc,
         )
     if "tirs" in instruments:
-        loaded_datasets["tirs_ann"] = load_tirs_annual_composite_data(
-            datasets=datasets["tirs"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
+        # TODO: Load tirs annual composite data
+        pass
 
-    # Merge while still lazy
-    log.info("Merging instrument datasets (lazy) ...")
-    combined = xr.merge(list(loaded_datasets.values()), compat="no_conflicts")
-    combined = combined.drop_vars("quantile", errors="ignore")
-
-    if compute:
-        # Compute only once at the very end
-        log.info("Computing final merged dataset ...")
-        combined = combined.compute()
-        log.info("Done.")
-
-    return combined
+    return loaded_datasets

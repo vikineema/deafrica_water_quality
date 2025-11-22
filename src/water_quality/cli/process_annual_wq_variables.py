@@ -29,6 +29,7 @@ from water_quality.mapping.instruments import (
     check_instrument_dates,
     get_instruments_list,
 )
+from water_quality.mapping.load_data import load_annual_data
 from water_quality.mapping.water_detection import load_5year_water_mask
 from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import create_task_id, parse_task_id, split_tasks
@@ -221,6 +222,18 @@ def cli(
                 dc=dc,
             )
             gc.collect()
+
+            # Load annual data for oli_agm, msi_agm, tm_agm and tirs
+            # if available in order to process the rest of the water
+            # quality variables.
+            annual_data = load_annual_data(
+                dss=dss,
+                tile_geobox=tile_geobox,
+                instruments=instruments_list,
+                compute=False,
+                dc=dc,
+            )
+            del dss
 
             # bands = list(wq_ds.keys())
             bands = list(wq_ds.data_vars)
