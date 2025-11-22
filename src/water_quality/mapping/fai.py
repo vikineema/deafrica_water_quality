@@ -95,7 +95,9 @@ def FAI(ds: xr.Dataset, instrument: str) -> xr.DataArray:
 
 
 def geomedian_FAI(
-    annual_data: dict[str, xr.Dataset], water_mask: xr.DataArray
+    annual_data: dict[str, xr.Dataset],
+    water_mask: xr.DataArray,
+    compute: bool = False,
 ) -> xr.Dataset:
     """
     Calculate the FAI (Floating Algae Index) across multiple instruments
@@ -110,7 +112,9 @@ def geomedian_FAI(
     water_mask : xr.DataArray
         Water mask to apply for masking non-water pixels, where 1
         indicates water.
-
+    compute : bool
+        Whether to compute the dask arrays immediately, by default False.
+        Set to False to keep datasets lazy for memory efficiency.
     Returns
     -------
     xr.Dataset
@@ -130,12 +134,14 @@ def geomedian_FAI(
         log.error(error)
         return xr.Dataset()
 
+    log.info("Calculating Geomedian FAI for available instruments ...")
     fai_ds = xr.Dataset()
     all_inst_fai_list = []
     all_inst_count_list = []
 
     for inst in geomedian_fai_instruments:
         if inst in loaded_instruments:
+            log.info(f"\tCalculating FAI for instrument: {inst} ...")
             inst_ds = annual_data[inst]
             count_band = f"{inst}_count"
             scale = REFERENCE_MEAN["msi_agm"] / REFERENCE_MEAN[inst]
@@ -166,4 +172,8 @@ def geomedian_FAI(
         all_inst_count_total,
         mean_fai,
     )
+    if compute:
+        log.info("\tComputing FAI dataset ...")
+        fai_ds = fai_ds.compute()
+    log.info("Geomedian FAI calculation complete.")
     return fai_ds

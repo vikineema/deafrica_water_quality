@@ -236,9 +236,11 @@ def cli(
             # Calculate the Floating Algae Index (FAI) for the
             # available instruments
             fai_ds = geomedian_FAI(
-                annual_data=annual_data, water_mask=wq_ds["water_mask"]
+                annual_data=annual_data,
+                water_mask=wq_ds["water_mask"],
+                compute=True,
             )
-            wq_ds["fai"] = fai_ds.compute()
+            wq_ds["fai"] = fai_ds
 
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
@@ -249,7 +251,7 @@ def cli(
                 fs = get_filesystem(output_directory, anon=False)
                 bands = list(ds.data_vars.keys())
                 for band in bands:
-                    da = wq_ds[band]
+                    da = ds[band]
                     if da.size == 0:
                         continue
                     # Set attributes
