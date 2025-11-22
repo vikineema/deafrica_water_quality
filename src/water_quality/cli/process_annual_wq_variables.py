@@ -29,7 +29,7 @@ from water_quality.mapping.instruments import (
     check_instrument_dates,
     get_instruments_list,
 )
-from water_quality.mapping.load_data import load_5year_water_mask
+from water_quality.mapping.water_detection import load_5year_water_mask
 from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import create_task_id, parse_task_id, split_tasks
 
