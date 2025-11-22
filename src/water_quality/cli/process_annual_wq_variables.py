@@ -7,7 +7,6 @@ import warnings
 import click
 import numpy as np
 import toolz
-import xarray as xr
 from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc import dscache
@@ -24,6 +23,7 @@ from water_quality.io import (
     join_url,
 )
 from water_quality.logs import setup_logging
+from water_quality.mapping.fai import geomedian_FAI
 from water_quality.mapping.instruments import (
     INSTRUMENTS_PRODUCTS,
     check_instrument_dates,
@@ -211,8 +211,7 @@ def cli(
             )
             tile_geobox = grid_spec.tile_geobox(tile_index=tile_id)
 
-            # wq_ds = {}
-            wq_ds = xr.Dataset()
+            wq_ds = {}
 
             # Generate 5 year water mask
             wq_ds["water_mask"] = load_5year_water_mask(
@@ -235,59 +234,62 @@ def cli(
             )
             del dss
 
-            # bands = list(wq_ds.keys())
-            bands = list(wq_ds.data_vars)
+            # Calculate the Floating Algae Index (FAI) for the
+            # available instruments
+            fai_ds = geomedian_FAI(
+                annual_data=annual_data, water_mask=wq_ds["water_mask"]
+            )
+            wq_ds["fai"] = fai_ds.compute()
 
-            is_empty = all([wq_ds[band].size == 0 for band in bands])
-            if is_empty:
-                log.error(
-                    f"No water quality variables generated for task {task_id_str}. "
-                )
-                continue
+            for wq_var_group in list(wq_ds.keys()):
+                ds = wq_ds[wq_var_group]
+                if wq_var_group == "water_mask":
+                    ds = ds.to_dataset(name="water_mask")
 
-            # Save each band as COG
-            fs = get_filesystem(output_directory, anon=False)
-            for band in bands:
-                da = wq_ds[band]
-                if da.size == 0:
-                    continue
-                # Set attributes
-                if "nodata" not in list(da.attrs.keys()):
-                    da.attrs = dict(
-                        nodata=np.nan,
-                        scales=1,
-                        offsets=0,
-                        product_name=product_name,
-                        product_version=product_version,
-                    )
-                else:
-                    da.attrs.update(
-                        dict(
+                # Save each band as COG
+                fs = get_filesystem(output_directory, anon=False)
+                bands = list(ds.data_vars.keys())
+                for band in bands:
+                    da = wq_ds[band]
+                    if da.size == 0:
+                        continue
+                    # Set attributes
+                    if "nodata" not in list(da.attrs.keys()):
+                        da.attrs = dict(
+                            nodata=np.nan,
+                            scales=1,
+                            offsets=0,
                             product_name=product_name,
                             product_version=product_version,
                         )
+                    else:
+                        da.attrs.update(
+                            dict(
+                                product_name=product_name,
+                                product_version=product_version,
+                            )
+                        )
+
+                    # Write COG
+                    cog_bytes = write_cog(
+                        geo_im=da,
+                        fname=":mem:",
+                        overwrite=True,
+                        nodata=da.attrs["nodata"],
+                        tags=da.attrs,
                     )
 
-                # Write COG
-                cog_bytes = write_cog(
-                    geo_im=da,
-                    fname=":mem:",
-                    overwrite=True,
-                    nodata=da.attrs["nodata"],
-                    tags=da.attrs,
-                )
-
-                output_cog_url = get_wq_cog_url(
-                    output_directory=output_directory,
-                    tile_id=tile_id,
-                    temporal_id=temporal_id,
-                    band_name=band,
-                    product_name=product_name,
-                    product_version=product_version,
-                )
-                with fs.open(output_cog_url, "wb") as f:
-                    f.write(cog_bytes)
-                log.info(f"Band {band} saved to {output_cog_url}")
+                    output_cog_url = get_wq_cog_url(
+                        output_directory=output_directory,
+                        tile_id=tile_id,
+                        temporal_id=temporal_id,
+                        band_name=band,
+                        product_name=product_name,
+                        product_version=product_version,
+                    )
+                    with fs.open(output_cog_url, "wb") as f:
+                        f.write(cog_bytes)
+                    log.info(f"Band {band} saved to {output_cog_url}")
 
             # Generate STAC metadata
             with warnings.catch_warnings():

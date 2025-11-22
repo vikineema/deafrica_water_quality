@@ -1,6 +1,5 @@
 import logging
 
-import dask.array
 import numpy as np
 import xarray as xr
 from datacube import Datacube
