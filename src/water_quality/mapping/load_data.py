@@ -48,6 +48,16 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
         return dc_measurements
 
 
+def _mask_nodata(da: xr.DataArray) -> xr.DataArray:
+    """Mask no data values in an xarray DataArray to np.nan."""
+    nodata = da.attrs.get("nodata", None)
+    if nodata is None:
+        return da
+    if np.issubdtype(da.dtype, np.integer):
+        da = da.astype("float32")
+    return da.where(da != nodata)
+
+
 def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
     """
     Get the dictionary for re-naming measurements to have unique
@@ -86,14 +96,17 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
 
 
 def load_oli_agm_data(
-    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    dss: dict[str, list[Dataset]],
+    tile_geobox: GeoBox,
+    compute: bool,
+    dc: Datacube,
 ) -> xr.Dataset:
     """Load and process data for the `oli_agm` instrument.
 
     Parameters
     ----------
-    datasets : list[Dataset]
-        List of datasets to load data for the instrument `oli_agm`.
+    dss: dict[str, list[Dataset]]
+        Mapping of instrument names to list of Datasets to load.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -110,27 +123,40 @@ def load_oli_agm_data(
         instrument oli_agm.
 
     """
-    log.info("Loading data for the instrument `oli_agm` ...")
+    inst = "oli_agm"
+    log.info(f"Loading data for the instrument '{inst}' ...")
+    if inst not in list(dss.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Returning empty array.",
+        )
+        log.error(error)
+        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+
+    datasets = dss[inst]
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "bilinear"
 
     if dc is None:
-        dc = Datacube(app="LoadOliAgm")
+        dc = Datacube(app=f"Load_{inst}")
 
-    dask_chunks = {"x": 4800, "y": 4800}
     ds = dc.load(
         datasets=datasets,
+        measurements=list(measurements.keys()),
         like=tile_geobox,
-        resampling="bilinear",
+        resampling=resampling,
         dask_chunks=dask_chunks,
     )
-    ds = ds.rename(get_measurements_name_dict("oli_agm"))
-
-    # For each band mask no data values to np.nan
-    for band in ds.data_vars:
-        nodata = ds[band].attrs["nodata"]
-        ds[band] = ds[band].where(ds[band] != nodata)
+    ds = ds.rename(measurements)
+    ds = ds.map(_mask_nodata)
 
     if compute:
-        log.info("Computing oli_agm dataset ...")
+        log.info(f"Computing {inst} dataset ...")
         ds = ds.compute()
         log.info("Done.")
 
@@ -198,14 +224,17 @@ def load_oli_data(
 
 
 def load_msi_agm_data(
-    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    dss: dict[str, list[Dataset]],
+    tile_geobox: GeoBox,
+    compute: bool,
+    dc: Datacube,
 ) -> xr.Dataset:
     """Load and process data for the `msi_agm` instrument.
 
     Parameters
     ----------
-    datasets : list[Dataset]
-        List of datasets to load data for the instrument `msi_agm`.
+    dss: dict[str, list[Dataset]]
+        Mapping of instrument names to list of Datasets to load.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -221,27 +250,40 @@ def load_msi_agm_data(
         An xarray Dataset containing the processed data for the
         instrument `msi_agm`.
     """
-    log.info("Loading data for the instrument `msi_agm` ...")
+    inst = "msi_agm"
+    log.info(f"Loading data for the instrument '{inst}' ...")
+    if inst not in list(dss.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Returning empty array.",
+        )
+        log.error(error)
+        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+
+    datasets = dss[inst]
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "bilinear"
 
     if dc is None:
-        dc = Datacube(app="LoadMsiAgm")
+        dc = Datacube(app=f"Load_{inst}")
 
-    dask_chunks = {"x": 4800, "y": 4800}
     ds = dc.load(
         datasets=datasets,
+        measurements=list(measurements.keys()),
         like=tile_geobox,
-        resampling="bilinear",
+        resampling=resampling,
         dask_chunks=dask_chunks,
     )
-    ds = ds.rename(get_measurements_name_dict("msi_agm"))
-
-    # For each band mask no data values to np.nan
-    for band in ds.data_vars:
-        nodata = ds[band].attrs["nodata"]
-        ds[band] = ds[band].where(ds[band] != nodata)
+    ds = ds.rename(measurements)
+    ds = ds.map(_mask_nodata)
 
     if compute:
-        log.info("Computing msi_agm dataset ...")
+        log.info(f"Computing {inst} dataset ...")
         ds = ds.compute()
         log.info("Done.")
 
@@ -301,14 +343,17 @@ def load_msi_data(
 
 
 def load_tm_agm_data(
-    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    dss: dict[str, list[Dataset]],
+    tile_geobox: GeoBox,
+    compute: bool,
+    dc: Datacube,
 ) -> xr.Dataset:
     """Load and process data for the `tm_agm` instrument.
 
     Parameters
     ----------
-    datasets : list[Dataset]
-        List of datasets to load data for the instrument `tm_agm`.
+    dss: dict[str, list[Dataset]]
+        Mapping of instrument names to list of Datasets to load.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -324,27 +369,41 @@ def load_tm_agm_data(
         An xarray Dataset containing the processed data for the
         instrument `tm_agm`.
     """
-    log.info("Loading data for the instrument `tm_agm` ...")
+    inst = "tm_agm"
+
+    log.info(f"Loading data for the instrument '{inst}' ...")
+    if inst not in list(dss.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Returning empty array.",
+        )
+        log.error(error)
+        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+
+    datasets = dss[inst]
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "bilinear"
 
     if dc is None:
-        dc = Datacube(app="LoadTmAgm")
+        dc = Datacube(app=f"Load_{inst}")
 
-    dask_chunks = {"x": 4800, "y": 4800}
     ds = dc.load(
         datasets=datasets,
+        measurements=list(measurements.keys()),
         like=tile_geobox,
-        resampling="bilinear",
+        resampling=resampling,
         dask_chunks=dask_chunks,
     )
-    ds = ds.rename(get_measurements_name_dict("tm_agm"))
-
-    # For each band mask no data values to np.nan
-    for band in ds.data_vars:
-        nodata = ds[band].attrs["nodata"]
-        ds[band] = ds[band].where(ds[band] != nodata)
+    ds = ds.rename(measurements)
+    ds = ds.map(_mask_nodata)
 
     if compute:
-        log.info("Computing tm_agm dataset ...")
+        log.info(f"Computing {inst} dataset ...")
         ds = ds.compute()
         log.info("Done.")
 
@@ -688,12 +747,13 @@ def build_wq_agm_dataset(
         #    dc=dc,
         # )
 
-        loaded_datasets["water_mask"] = load_5year_water_mask(
-            datasets=datasets["wofs_ann"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
+        # loaded_datasets["water_mask"] = load_5year_water_mask(
+        #    datasets=datasets["wofs_ann"],
+        #    tile_geobox=tile_geobox,
+        #    compute=False,
+        #    dc=dc,
+        # )
+        pass
 
     if "oli_agm" in instruments:
         loaded_datasets["oli_agm"] = load_oli_agm_data(
