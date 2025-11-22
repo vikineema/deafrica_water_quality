@@ -5,7 +5,6 @@ Africa Water Observations from Space (WOfS) products.
 
 import logging
 
-import dask.array
 import numpy as np
 import xarray as xr
 from datacube import Datacube
@@ -22,12 +21,16 @@ def _sum_over_time(da: xr.DataArray) -> xr.DataArray:
     xr.DataArray over time dimension while handling nodata values."""
     nodata_val = da.attrs.get("nodata", None)
 
-    if nodata_val is not None:
-        da_masked = da.where(da != nodata_val, np.nan).astype("float32")
-        sum_over_time = da_masked.sum(dim="time")
+    if nodata_val is None:
+        return da.sum(dim="time")
+
+    # If nodata is explicitly NaN, handle it accordingly
+    if isinstance(nodata_val, float) and np.isnan(nodata_val):
+        da_masked = da.where(~np.isnan(da)).astype("float32")
     else:
-        sum_over_time = da.sum(dim="time")
-    return sum_over_time
+        da_masked = da.where(da != nodata_val, np.nan).astype("float32")
+
+    return da_masked.sum(dim="time", skipna=True)
 
 
 def load_5year_water_mask(
@@ -72,7 +75,7 @@ def load_5year_water_mask(
         datasets = dss[inst]
         # TODO: Set a global dask chunk size configuration
         # Expected tile size is 9600 x 9 600 at 10 m resolution
-        dask_chunks = {"x": 4800, "y": 4800}
+        dask_chunks = {"x": 4800, "y": 4800, "time": -1}
         measurements = get_measurements_name_dict(inst)
         # For int data nearest is preferred
         # bilinear for float data.
@@ -95,28 +98,17 @@ def load_5year_water_mask(
         clearcount_sum = _sum_over_time(ds["wofs_ann_clearcount"])
         wet_count_sum = _sum_over_time(ds["wofs_ann_wetcount"])
 
-        frequency_np = dask.array.full_like(
-            wet_count_sum, np.nan, dtype="float32", name="frequency"
-        )
-        dask.array.divide(
-            wet_count_sum,
-            clearcount_sum,
-            out=frequency_np,
-            where=clearcount_sum > 0,
+        frequency = xr.where(
+            clearcount_sum > 0,
+            (wet_count_sum / clearcount_sum),
+            np.nan,
         )
 
-        # Bool to float32 to allow for preserving no data pixels
-        water_mask_np = (frequency_np > 0.45).astype("float32")
-        water_mask_np = dask.array.where(
-            ~np.isnan(frequency_np), water_mask_np, np.nan
+        # TODO: Do we need to preserve land pixels as 0, together with nodata (np.nan)?
+        water_mask_da = xr.where(frequency > 0.45, 1.0, np.nan).astype(
+            "float32"
         )
-
-        water_mask_da = xr.DataArray(
-            water_mask_np,
-            coords=wet_count_sum.coords,
-            dims=wet_count_sum.dims,
-            name="water_mask",
-        )
+        water_mask_da.name = "water_mask"
         water_mask_da.attrs = dict(
             nodata=np.nan,
             scales=1,
@@ -135,7 +127,7 @@ def load_5year_water_mask(
         else:
             log.info("\tPersisting water mask ...")
             water_mask_da = water_mask_da.persist()
-        del ds, clearcount_sum, wet_count_sum, frequency_np, water_mask_np
+        del ds, clearcount_sum, wet_count_sum, frequency
         log.info("Processing complete for water mask.")
         # gc.collect()
         return water_mask_da
