@@ -27,6 +27,7 @@ from water_quality.logs import setup_logging
 from water_quality.mapping.instruments import (
     INSTRUMENTS_PRODUCTS,
     check_instrument_dates,
+    get_instruments_list,
 )
 from water_quality.mapping.load_data import load_5year_water_mask
 from water_quality.metadata.prepare_metadata import prepare_dataset
@@ -119,7 +120,7 @@ def cli(
     product_version = config["product_version"]
     # Instruments to use should also have been validated
     # during task generation.
-    instruments_to_use = config["instruments_to_use"]
+    cfg_instruments_to_use = config["instruments_to_use"]
 
     # Grid properties
     grid_name = config["grid_name"]
@@ -177,12 +178,13 @@ def cli(
             temporal_range = DateTimeRange(temporal_id)
             start_date = temporal_range.start.strftime("%Y-%m-%d")
             end_date = temporal_range.end.strftime("%Y-%m-%d")
-            # TODO: Not sure if this works as intended if running for
-            # generate-tasks for 2000--P25Y then processing
-            # 2000--P1Y (annual) tasks.
-            check_instrument_dates(
-                instruments_to_use, start_date, end_date, raise_errors=True
+            instruments_to_use = check_instrument_dates(
+                cfg_instruments_to_use,
+                start_date,
+                end_date,
+                raise_errors=False,
             )
+            instruments_list = get_instruments_list(instruments_to_use)
 
             expected_stac_path = get_wq_stac_url(
                 get_wq_dataset_path(
@@ -208,80 +210,81 @@ def cli(
             )
             tile_geobox = grid_spec.tile_geobox(tile_index=tile_id)
 
+            # wq_ds = {}
             wq_ds = xr.Dataset()
 
             # Generate 5 year water mask
-            if "wofs_ann" in list(dss.keys()):
-                wq_ds["water_mask"] = load_5year_water_mask(
-                    datasets=dss["wofs_ann"],
-                    tile_geobox=tile_geobox,
-                    compute=True,
-                    dc=dc,
-                )
-                gc.collect()
+            wq_ds["water_mask"] = load_5year_water_mask(
+                dss=dss,
+                tile_geobox=tile_geobox,
+                compute=True,
+                dc=dc,
+            )
+            gc.collect()
 
-            is_empty = not bool(wq_ds.data_vars)
+            # bands = list(wq_ds.keys())
+            bands = list(wq_ds.data_vars)
 
+            is_empty = all([wq_ds[band].size == 0 for band in bands])
             if is_empty:
                 log.error(
                     f"No water quality variables generated for task {task_id_str}. "
                 )
                 continue
-            else:
-                # Save each band as COG
-                fs = get_filesystem(output_directory, anon=False)
-                bands = list(wq_ds.data_vars)
 
-                for band in bands:
-                    da = wq_ds[band]
-
-                    # Set attributes
-                    if "nodata" not in list(da.attrs.keys()):
-                        da.attrs = dict(
-                            nodata=np.nan,
-                            scales=1,
-                            offsets=0,
-                            product_name=product_name,
-                            product_version=product_version,
-                        )
-                    else:
-                        da.attrs.update(
-                            dict(
-                                product_name=product_name,
-                                product_version=product_version,
-                            )
-                        )
-
-                    # Write COG
-                    cog_bytes = write_cog(
-                        geo_im=da,
-                        fname=":mem:",
-                        overwrite=True,
-                        nodata=da.attrs["nodata"],
-                        tags=da.attrs,
-                    )
-
-                    output_cog_url = get_wq_cog_url(
-                        output_directory=output_directory,
-                        tile_id=tile_id,
-                        temporal_id=temporal_id,
-                        band_name=band,
+            # Save each band as COG
+            fs = get_filesystem(output_directory, anon=False)
+            for band in bands:
+                da = wq_ds[band]
+                if da.size == 0:
+                    continue
+                # Set attributes
+                if "nodata" not in list(da.attrs.keys()):
+                    da.attrs = dict(
+                        nodata=np.nan,
+                        scales=1,
+                        offsets=0,
                         product_name=product_name,
                         product_version=product_version,
                     )
-                    with fs.open(output_cog_url, "wb") as f:
-                        f.write(cog_bytes)
-                    log.info(f"Band {band} saved to {output_cog_url}")
-
-                # Generate STAC metadata
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=UserWarning)
-                    log.info("Creating metadata STAC file ...")
-                    stac_file_url = prepare_dataset(  # noqa F841
-                        dataset_path=get_parent_dir(output_cog_url),
+                else:
+                    da.attrs.update(
+                        dict(
+                            product_name=product_name,
+                            product_version=product_version,
+                        )
                     )
 
-                log.info(f"Successfully processed task: {task_id_str}")
+                # Write COG
+                cog_bytes = write_cog(
+                    geo_im=da,
+                    fname=":mem:",
+                    overwrite=True,
+                    nodata=da.attrs["nodata"],
+                    tags=da.attrs,
+                )
+
+                output_cog_url = get_wq_cog_url(
+                    output_directory=output_directory,
+                    tile_id=tile_id,
+                    temporal_id=temporal_id,
+                    band_name=band,
+                    product_name=product_name,
+                    product_version=product_version,
+                )
+                with fs.open(output_cog_url, "wb") as f:
+                    f.write(cog_bytes)
+                log.info(f"Band {band} saved to {output_cog_url}")
+
+            # Generate STAC metadata
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                log.info("Creating metadata STAC file ...")
+                stac_file_url = prepare_dataset(  # noqa F841
+                    dataset_path=get_parent_dir(output_cog_url),
+                )
+
+            log.info(f"Successfully processed task: {task_id_str}")
 
         except Exception as error:
             log.exception(error)
