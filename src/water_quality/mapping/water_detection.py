@@ -58,6 +58,8 @@ def load_5year_water_mask(
         An xarray DataArray containing the water mask derived from the
         wofs_ann data.
     """
+    log.info("Generating 5 year water mask ...")
+
     inst = "wofs_ann"
     if inst not in list(dss.keys()):
         error = (
@@ -105,6 +107,7 @@ def load_5year_water_mask(
             where=clearcount_sum > 0,
         )
 
+        log.info("Processing 5 year water mask ...")
         # Bool to float32 to allow for preserving no data pixels
         water_mask_np = (frequency_np > 0.45).astype("float32")
         water_mask_np = dask.array.where(
@@ -130,13 +133,13 @@ def load_5year_water_mask(
         )
 
         if compute:
-            log.info("Computing wofs_ann dataset ...")
+            log.info("Computing water mask ...")
             water_mask_da = water_mask_da.compute()
             log.info("Done.")
         else:
             water_mask_da = water_mask_da.persist()
         del ds, clearcount_sum, wet_count_sum, frequency_np, water_mask_np
-
+        log.info("Processing for 5 year water mask completed.")
         # gc.collect()
         return water_mask_da
 
