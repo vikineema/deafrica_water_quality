@@ -7,6 +7,7 @@ import warnings
 import click
 import numpy as np
 import toolz
+import xarray as xr
 from datacube import Datacube
 from deafrica_tools.dask import create_local_dask_cluster
 from odc import dscache
@@ -30,7 +31,11 @@ from water_quality.mapping.instruments import (
     get_instruments_list,
 )
 from water_quality.mapping.load_data import load_annual_data
-from water_quality.mapping.water_detection import load_5year_water_mask
+from water_quality.mapping.ndvi import geomedian_NDVI
+from water_quality.mapping.water_detection import (
+    clear_water_mask,
+    five_year_water_mask,
+)
 from water_quality.metadata.prepare_metadata import prepare_dataset
 from water_quality.tasks import create_task_id, parse_task_id, split_tasks
 
@@ -113,7 +118,7 @@ def cli(
     # This should have been validated during task generation.
     config = cache.get_info_dict("wq_config")
     # resolution = config["resolution"]
-    # WFTH = config["WFTH"]
+    WFTH = config["WFTH"]
     # WFTL = config["WFTL"]
     # PWT = config["PWT"]
     # SC = config["SC"]
@@ -185,7 +190,7 @@ def cli(
                 end_date,
                 raise_errors=False,
             )
-            instruments_list = get_instruments_list(instruments_to_use)
+            instruments_list = get_instruments_list(instruments_to_use)  # noqa F841
 
             expected_stac_path = get_wq_stac_url(
                 get_wq_dataset_path(
@@ -211,41 +216,56 @@ def cli(
             )
             tile_geobox = grid_spec.tile_geobox(tile_index=tile_id)
 
-            wq_ds = {}
-
-            # Generate 5 year water mask
-            wq_ds["water_mask"] = load_5year_water_mask(
-                dss=dss,
-                tile_geobox=tile_geobox,
-                compute=True,
-                dc=dc,
-            )
-            gc.collect()
-
-            # Load annual data for oli_agm, msi_agm, tm_agm and tirs
-            # if available in order to process the rest of the water
-            # quality variables.
+            # Load annual data for all instruments
             annual_data = load_annual_data(
                 dss=dss,
                 tile_geobox=tile_geobox,
                 compute=False,
                 dc=dc,
             )
-            del dss
+
+            wq_ds = {}
+
+            # Generate 5 year water mask
+            wq_ds["water_mask"] = five_year_water_mask(
+                annual_data=annual_data,
+                compute=True,
+            )
+            gc.collect()
 
             # Calculate the Floating Algae Index (FAI) for the
             # available instruments
-            fai_ds = geomedian_FAI(
+            wq_ds["fai"] = geomedian_FAI(
                 annual_data=annual_data,
                 water_mask=wq_ds["water_mask"],
                 compute=True,
             )
-            wq_ds["fai"] = fai_ds
+            gc.collect()
+
+            # Calculate the clear water mask.
+            wq_ds["clear_water_mask"] = clear_water_mask(
+                annual_data=annual_data,
+                water_frequency_threshold=WFTH,
+                water_mask=wq_ds["water_mask"],
+                agm_fai=wq_ds["fai"]["agm_fai"],
+                compute=True,
+            )
+            gc.collect()
+
+            # Calculate the Normalized Difference Vegetation Index (NDVI)
+            # for the available instruments.
+            wq_ds["ndvi"] = geomedian_NDVI(
+                annual_data=annual_data,
+                water_mask=wq_ds["water_mask"],
+                compute=True,
+            )
+            gc.collect()
 
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
-                if wq_var_group == "water_mask":
-                    ds = ds.to_dataset(name="water_mask")
+                if isinstance(ds, xr.DataArray):
+                    name = ds.name
+                    ds = ds.to_dataset(name=name)
 
                 # Save each band as COG
                 fs = get_filesystem(output_directory, anon=False)

@@ -7,53 +7,26 @@ import logging
 
 import numpy as np
 import xarray as xr
-from datacube import Datacube
-from datacube.model import Dataset
-from odc.geo.geobox import GeoBox
-
-from water_quality.mapping.load_data import get_measurements_name_dict
 
 log = logging.getLogger(__name__)
 
 
-def _sum_over_time(da: xr.DataArray) -> xr.DataArray:
-    """Helper function for `load_5year_water_mask` to sum
-    xr.DataArray over time dimension while handling nodata values."""
-    nodata_val = da.attrs.get("nodata", None)
-
-    if nodata_val is None:
-        return da.sum(dim="time")
-
-    # If nodata is explicitly NaN, handle it accordingly
-    if isinstance(nodata_val, float) and np.isnan(nodata_val):
-        da_masked = da.where(~np.isnan(da)).astype("float32")
-    else:
-        da_masked = da.where(da != nodata_val, np.nan).astype("float32")
-
-    return da_masked.sum(dim="time", skipna=True)
-
-
-def load_5year_water_mask(
-    dss: dict[str, list[Dataset]],
-    tile_geobox: GeoBox,
+def five_year_water_mask(
+    annual_data: dict[str, xr.Dataset],
     compute: bool = True,
-    dc: Datacube = None,
 ) -> xr.DataArray:
-    """Load and process 5 years data for the `wofs_ann` instrument to
+    """Process 5 years of data for the `wofs_ann` instrument to
     generate a water mask.
 
     Parameters
     ----------
-    dss: dict[str, list[Dataset]]
-        Mapping of instrument name to list of datasets to load.
-    tile_geobox : GeoBox
-        Defines the location and resolution of a rectangular grid of
-        data, including it's crs.
+    annual_data : dict[str, xr.Dataset]
+        A dictionary mapping each instrument to the xr.Dataset or
+        xr.DataArray of the loaded geomedian datacube datasets for that
+        instrument.
     compute : bool
         Whether to compute the dask arrays immediately, by default True.
         Set to False to keep datasets lazy for memory efficiency.
-    dc : Datacube
-        Datacube connection to use when loading data, by default None.
 
     Returns
     -------
@@ -64,73 +37,124 @@ def load_5year_water_mask(
     log.info("Generating 5 year water mask ...")
 
     inst = "wofs_ann"
-    if inst not in list(dss.keys()):
+    if inst not in list(annual_data.keys()):
         error = (
             f"No datasets found for instrument '{inst}'. ",
-            "Returning empty array.",
+            "Cannot generate water mask. Returning empty DataArray.",
         )
         log.error(error)
         return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+
+    inst_ds = annual_data[inst]
+    # Calculate the ratio of clear wet observations to total clear
+    # observations for each pixel over the 5 year period.
+    clearcount_sum = inst_ds["wofs_ann_clearcount"].sum(
+        dim="time", skipna=True
+    )
+    wet_count_sum = inst_ds["wofs_ann_wetcount"].sum(dim="time", skipna=True)
+
+    frequency = xr.where(
+        clearcount_sum > 0,
+        (wet_count_sum / clearcount_sum),
+        np.nan,
+    )
+    # TODO: Do we need to preserve land pixels as 0, together
+    # with nodata (np.nan)?
+    water_mask_da = xr.where(frequency > 0.45, 1.0, np.nan).astype("float32")
+    water_mask_da.name = "water_mask"
+    water_mask_da.attrs = dict(
+        nodata=np.nan,
+        scales=1,
+        offsets=0,
+    )
+    # Add a time coordinate for compatibility with other annual datasets.
+    # Use the last year in the 5 year period
+    # based on how the tasks were generated in `wq-generate-tasks`.
+    water_mask_da = water_mask_da.expand_dims(
+        time=[inst_ds.isel(time=-1).time.values]
+    )
+
+    if compute:
+        log.info("\tComputing water mask ...")
+        water_mask_da = water_mask_da.compute()
     else:
-        datasets = dss[inst]
-        # TODO: Set a global dask chunk size configuration
-        # Expected tile size is 9600 x 9 600 at 10 m resolution
-        dask_chunks = {"x": 4800, "y": 4800, "time": -1}
-        measurements = get_measurements_name_dict(inst)
-        # For int data nearest is preferred
-        # bilinear for float data.
-        resampling = "nearest"
+        log.info("\tPersisting water mask ...")
+        water_mask_da = water_mask_da.persist()
+    del inst_ds, clearcount_sum, wet_count_sum, frequency
+    log.info("Processing complete for water mask.")
+    return water_mask_da
 
-        if dc is None:
-            dc = Datacube(app=f"Load_{inst}")
 
-        ds = dc.load(
-            datasets=datasets,
-            measurements=list(measurements.keys()),
-            like=tile_geobox,
-            resampling=resampling,
-            dask_chunks=dask_chunks,
+def clear_water_mask(
+    annual_data: dict[str, xr.Dataset],
+    water_frequency_threshold: float,
+    water_mask: xr.DataArray,
+    agm_fai: xr.DataArray,
+    compute: bool = True,
+):
+    """Calculate the clear water mask using the Geomedian FAI
+    and the 5 year water mask.
+
+    Parameters
+    ----------
+    annual_data : dict[str, xr.Dataset]
+        A dictionary mapping each instrument to the xr.Dataset or
+        xr.DataArray of the loaded datacube datasets for that
+        instrument.
+    water_frequency_threshold : float
+        The frequency threshold above which a pixel is classified as water.
+    water_mask : xr.DataArray
+        Water mask to apply for masking non-water pixels, where 1
+        indicates water.
+    agm_fai : xr.DataArray
+        An xarray DataArray containing the geomedian FAI.
+    compute : bool
+        Whether to compute the dask arrays immediately, by default True.
+        Set to False to keep datasets lazy for memory efficiency.
+
+    Returns
+    -------
+    xr.Dataset
+        An xarray Dataset containing the following data variables:
+        - `clear_water_mask` (float): A mask showing where clear water is
+            detected.
+    """
+    log.info("Calculating clear water mask ...")
+
+    inst = "wofs_ann"
+    if inst not in list(annual_data.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Cannot generate clear water mask. Returning empty DataArray.",
         )
-        ds = ds.rename(measurements)
+        log.error(error)
+        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
 
-        # Calculate the ratio of clear wet observations to total clear
-        # observations for each pixel over the 5 year period.
-        clearcount_sum = _sum_over_time(ds["wofs_ann_clearcount"])
-        wet_count_sum = _sum_over_time(ds["wofs_ann_wetcount"])
+    inst_ds = annual_data[inst]
 
-        frequency = xr.where(
-            clearcount_sum > 0,
-            (wet_count_sum / clearcount_sum),
-            np.nan,
-        )
-
-        # TODO: Do we need to preserve land pixels as 0, together with nodata (np.nan)?
-        water_mask_da = xr.where(frequency > 0.45, 1.0, np.nan).astype(
-            "float32"
-        )
-        water_mask_da.name = "water_mask"
-        water_mask_da.attrs = dict(
-            nodata=np.nan,
-            scales=1,
-            offsets=0,
-        )
-        # Add a time coordinate for compatibility with other annual datasets.
-        # Use the last year in the 5 year period
-        # based on how the tasks were generated in `wq-generate-tasks`.
-        water_mask_da = water_mask_da.expand_dims(
-            time=[ds.isel(time=-1).time.values]
-        )
-
-        if compute:
-            log.info("\tComputing water mask ...")
-            water_mask_da = water_mask_da.compute()
-        else:
-            log.info("\tPersisting water mask ...")
-            water_mask_da = water_mask_da.persist()
-        del ds, clearcount_sum, wet_count_sum, frequency
-        log.info("Processing complete for water mask.")
-        # gc.collect()
-        return water_mask_da
+    # Get the last year of data since wofs_ann data covers 5 years
+    ds = inst_ds.isel(time=-1).expand_dims(time=1)
+    # Boolean instead of:
+    # ds["wofs_ann_water"] = ds["wofs_ann_freq"].where(ds["wofs_ann_freq"] >
+    # water_frequency_threshold, 0)
+    wofs_ann_water = ds["wofs_ann_freq"] > water_frequency_threshold
+    # TODO: Do we need to preserve land pixels as 0, together with
+    # nodata (np.nan)?
+    clear_water_mask = xr.where(
+        np.isnan(agm_fai) & (water_mask == 1) & wofs_ann_water, 1.0, np.nan
+    ).astype("float32")
+    clear_water_mask.name = "clear_water_mask"
+    clear_water_mask.attrs = dict(
+        nodata=np.nan,
+        scales=1,
+        offsets=0,
+    )
+    if compute:
+        log.info("\tComputing clear water mask ...")
+        clear_water_mask = clear_water_mask.compute()
+    del inst_ds, ds, wofs_ann_water
+    log.info("Processing complete for clear water mask.")
+    return clear_water_mask
 
 
 def water_analysis(

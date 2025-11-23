@@ -122,6 +122,7 @@ def geomedian_FAI(
         - '{instrument}_fai' for each geomedian instrument available.
         - 'agm_fai' (the final weighted average FAI, masked).
     """
+    # Keep this order for consistent processing.
     geomedian_fai_instruments = ["msi_agm", "oli_agm", "tm_agm"]
     loaded_instruments = list(annual_data.keys())
 

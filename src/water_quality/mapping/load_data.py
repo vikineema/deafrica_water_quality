@@ -49,12 +49,15 @@ def get_dc_measurements(instrument_name: str) -> list[str]:
 
 def _mask_nodata(da: xr.DataArray) -> xr.DataArray:
     """Mask no data values in an xarray DataArray to np.nan."""
-    nodata = da.attrs.get("nodata", None)
-    if nodata is None:
+    nodata_val = da.attrs.get("nodata", None)
+    if nodata_val is None:
         return da
     if np.issubdtype(da.dtype, np.integer):
         da = da.astype("float32")
-    return da.where(da != nodata)
+    if isinstance(nodata_val, float) and np.isnan(nodata_val):
+        return da.where(~np.isnan(da))
+    else:
+        return da.where(da != nodata_val, np.nan)
 
 
 def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
@@ -92,6 +95,74 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
             else:
                 continue
         return measurements_name_dict
+
+
+def load_wofs_ann_data(
+    dss: dict[str, list[Dataset]],
+    tile_geobox: GeoBox,
+    compute: bool,
+    dc: Datacube,
+) -> xr.Dataset:
+    """Load and process data for the `wofs_ann` instrument.
+
+    Parameters
+    ----------
+    dss: dict[str, list[Dataset]]
+        A dictionary mapping instruments to a list of datacube datasets
+        available.
+    tile_geobox : GeoBox
+        Defines the location and resolution of a rectangular grid of
+        data, including it's crs.
+    compute : bool
+        Whether to compute the dask arrays immediately, by default True.
+        Set to False to keep datasets lazy for memory efficiency.
+    dc : Datacube
+        Datacube connection to use when loading data.
+
+    Returns
+    -------
+    xr.Dataset
+        An xarray Dataset containing the processed data for the
+        instrument wofs_ann.
+
+    """
+    inst = "wofs_ann"
+    log.info(f"Loading data for the instrument '{inst}' ...")
+    if inst not in list(dss.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Returning empty array.",
+        )
+        log.error(error)
+        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+
+    datasets = dss[inst]
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "nearest"
+
+    if dc is None:
+        dc = Datacube(app=f"Load_{inst}")
+
+    ds = dc.load(
+        datasets=datasets,
+        measurements=list(measurements.keys()),
+        like=tile_geobox,
+        resampling=resampling,
+        dask_chunks=dask_chunks,
+    )
+    ds = ds.rename(measurements)
+    ds = ds.map(_mask_nodata)
+    if compute:
+        log.info(f"Computing {inst} dataset ...")
+        ds = ds.compute()
+        log.info("Done.")
+
+    return ds
 
 
 def load_oli_agm_data(
