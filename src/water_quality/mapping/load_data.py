@@ -701,67 +701,6 @@ def load_tirs_annual_composite_data(
     return annual_ds_tirs
 
 
-def load_wofs_ann_data(
-    datasets: list[Dataset],
-    tile_geobox: GeoBox,
-    compute: bool = True,
-    dc: Datacube = None,
-) -> xr.Dataset:
-    """Load and process data for the `wofs_ann` instrument for a single year.
-
-    Parameters
-    ----------
-    datasets: list[Dataset]
-        Datasets for the instrument `wofs_ann`.
-    tile_geobox : GeoBox
-        Defines the location and resolution of a rectangular grid of
-        data, including it's crs.
-    compute : bool
-        Whether to compute the dask arrays immediately, by default True.
-        Set to False to keep datasets lazy for memory efficiency.
-    dc : Datacube
-        Datacube connection to use when loading data, by default None.
-
-    Returns
-    -------
-    xr.Dataset
-        An xarray Dataset containing the processed data for the
-        instrument `wofs_ann`.
-    """
-    log.info("Loading annual data for the instrument wofs_ann ...")
-
-    if dc is None:
-        dc = Datacube(app="LoadWofsAnn")
-
-    dask_chunks = {"x": 4800, "y": 4800}
-    # From `wq-generate-tasks` wofs_ann data is loaded for 5 years
-    # but here we only need the last year in the 5 year period.
-    ds = (
-        dc.load(
-            datasets=datasets,
-            like=tile_geobox,
-            resampling="nearest",
-            dask_chunks=dask_chunks,
-        )
-        .isel(time=-1)
-        .expand_dims(time=1)
-    )
-
-    ds = ds.rename(get_measurements_name_dict("wofs_ann"))
-
-    # For each band mask no data values to np.nan
-    for band in ds.data_vars:
-        nodata = ds[band].attrs["nodata"]
-        ds[band] = ds[band].where(ds[band] != nodata)
-
-    if compute:
-        log.info("Computing wofs_ann dataset ...")
-        ds = ds.compute()
-        log.info("Done.")
-
-    return ds
-
-
 def load_annual_data(
     dss: dict[str, list[Dataset]],
     tile_geobox: GeoBox,
@@ -801,6 +740,13 @@ def load_annual_data(
 
     instruments = list(dss.keys())
 
+    if "wofs_ann" in instruments:
+        loaded_datasets["wofs_ann"] = load_wofs_ann_data(
+            dss=dss,
+            tile_geobox=tile_geobox,
+            compute=compute,
+            dc=dc,
+        )
     if "oli_agm" in instruments:
         loaded_datasets["oli_agm"] = load_oli_agm_data(
             dss=dss,
