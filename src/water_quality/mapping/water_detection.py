@@ -143,7 +143,7 @@ def clear_water_mask(
     clear_water_mask = xr.where(
         np.isnan(agm_fai) & (water_mask == 1) & wofs_ann_water, 1.0, np.nan
     ).astype("float32")
-    clear_water_mask.name = "clear_water_mask"
+    clear_water_mask.name = "clear_water"
     clear_water_mask.attrs = dict(
         nodata=np.nan,
         scales=1,

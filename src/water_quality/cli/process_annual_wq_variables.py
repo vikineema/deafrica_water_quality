@@ -243,7 +243,7 @@ def cli(
             gc.collect()
 
             # Calculate the clear water mask.
-            wq_ds["clear_water_mask"] = clear_water_mask(
+            wq_ds["clear_water"] = clear_water_mask(
                 annual_data=annual_data,
                 water_frequency_threshold=WFTH,
                 water_mask=wq_ds["water_mask"],
