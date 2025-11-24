@@ -25,6 +25,7 @@ from water_quality.io import (
 )
 from water_quality.logs import setup_logging
 from water_quality.mapping.fai import geomedian_FAI
+from water_quality.mapping.hue import geomedian_hue
 from water_quality.mapping.instruments import (
     INSTRUMENTS_PRODUCTS,
     check_instrument_dates,
@@ -267,8 +268,16 @@ def cli(
                 annual_data=annual_data,
                 water_mask=wq_ds["water_mask"],
                 compute=False,
-                drop=False,
+                drop=True,
             )
+
+            # Calculate the Hue for the available instruments.
+            wq_ds["hue"] = geomedian_hue(
+                annual_data=annual_data,
+                clear_water_mask=wq_ds["clear_water"],
+                compute=True,
+            )
+            gc.collect()
 
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]

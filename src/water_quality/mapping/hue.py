@@ -7,10 +7,13 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 
-def hue_adjust_parameters(instrument: str = None) -> pd.DataFrame:
+def hue_adjust_parameters(instrument: str) -> pd.DataFrame:
     """A function to set the hue adjustment parameters for a
     instrument; a quintic polynomial model.
-
+    Parameters
+    ----------
+    instrument : str
+        Name of instrument to retrieve parameters for.
     Returns
     -------
     pd.DataFrame
@@ -26,10 +29,14 @@ def hue_adjust_parameters(instrument: str = None) -> pd.DataFrame:
             "tm": [30, -84.94, 594.17, -1559.86, 1852.50, -918.11, 151.49],
         }
     )
-    if instrument is not None:
-        return df[["label", instrument]]
+    try:
+        inst_df = df[["label", instrument]]
+    except KeyError:
+        raise KeyError(
+            f"Hue adjustment parameters not found for instrument: {instrument}"
+        )
     else:
-        return df
+        return inst_df
 
 
 def hue_adjust(ds: xr.Dataset, instrument: str) -> xr.DataArray:
@@ -51,9 +58,7 @@ def hue_adjust(ds: xr.Dataset, instrument: str) -> xr.DataArray:
             "The input dataset does not contain the 'hue' variable."
         )
 
-    # Keep this order for consistent processing.
-    geomedian_instruments = ["msi_agm", "oli_agm", "tm_agm"]
-    if instrument in geomedian_instruments:
+    if instrument.endswith("_agm"):
         inst = instrument.split("_")[0]
     else:
         inst = instrument
@@ -76,7 +81,7 @@ def hue_adjust(ds: xr.Dataset, instrument: str) -> xr.DataArray:
     return ds
 
 
-def chromatic_coefficient_parameters(instrument: str = None) -> pd.DataFrame:
+def chromatic_coefficient_parameters(instrument: str) -> pd.DataFrame:
     """
     A function to set the chromatic coefficient parameters for a instrument.
 
@@ -125,14 +130,20 @@ def chromatic_coefficient_parameters(instrument: str = None) -> pd.DataFrame:
         }
     )
     all_coeffs = {"msi": msi, "oli": oli, "tm": tm}
-    if instrument is not None:
-        return all_coeffs[instrument]
+
+    try:
+        inst_coeffs = all_coeffs[instrument]
+    except KeyError:
+        raise KeyError(
+            f"Chromatic coefficient parameters not found for instrument: "
+            f"{instrument}"
+        )
     else:
-        return all_coeffs
+        return inst_coeffs
 
 
 def hue_calculation(
-    ds: xr.Dataset, instrument: str, rayleigh_corrected_data: bool = True
+    ds: xr.Dataset, instrument: str, rayleigh_corrected_data: bool = False
 ) -> xr.DataArray:
     """Calculate the hue by conversion of the wavelengths
     to chromatic coordinates using sensor-specific coefficients.
@@ -159,10 +170,8 @@ def hue_calculation(
     # Oli data give lower values than msi and tm, which are in good agreement
 
     log.info(f"Calculating the hue for the instrument: {instrument}")
-    # Keep this order for consistent processing.
-    geomedian_instruments = ["msi_agm", "oli_agm", "tm_agm"]
 
-    if instrument in geomedian_instruments:
+    if instrument.endswith("_agm"):
         inst = instrument.split("_")[0]
         agm = True
     else:
@@ -222,66 +231,82 @@ def hue_calculation(
     return Cdata.hue
 
 
-def geomedian_hue(ds: xr.Dataset) -> xr.Dataset:
+def geomedian_hue(
+    annual_data: dict[str, xr.Dataset],
+    clear_water_mask: xr.DataArray,
+    compute: bool = False,
+) -> xr.Dataset:
     """
-    Generate the mean weighted geomedian hue from the
-    available geomedian instruments in the dataset.
+    Calculate the hue across multiple geomedian instruments and
+    produce a combined weighted mean hue for water pixels.
 
     Parameters
     ----------
-    ds : xr.Dataset
-        Input dataset to calculate the geomedian hue for.
+    annual_data : dict[str, xr.Dataset]
+        A dictionary mapping each instrument to the xr.Dataset or
+        xr.DataArray of the loaded geomedian datacube datasets for that
+        instrument.
+    clear_water_mask : xr.DataArray
+        Water mask to apply for masking non-water pixels, where 1
+        indicates water.
+    compute : bool
+        Whether to compute the dask arrays immediately, by default False.
+        Set to False to keep datasets lazy for memory efficiency.
 
     Returns
     -------
     xr.Dataset
-        Input dataset with the geomedian hue added.
+        The updated input xarray Dataset with new bands:
+        - '{instrument}_hue' for each processed instrument (masked).
+        - 'agm_hue' (the final weighted average hue, masked).
     """
     # Keep this order for consistent processing.
-    geomedian_instruments = ["msi_agm", "oli_agm", "tm_agm"]
+    geomedian_hue_instruments = ["msi_agm", "oli_agm", "tm_agm"]
+    loaded_instruments = list(annual_data.keys())
 
-    mean_hue_weighted_sum = None
-    agm_count_total = None
-
-    for inst_agm in geomedian_instruments:
-        # Use the smad band as an indicator that data for the geomedian
-        # instrument exists in the dataset.
-        smad_band = f"{inst_agm}_smad"
-        if smad_band in ds.data_vars:
-            # Calculate the hue for this sensor
-            hue_data = hue_calculation(ds, inst_agm)
-
-            count_band = f"{inst_agm}_count"
-            # Replace all NaN values with 0s in count band.
-            inst_count = ds[count_band].fillna(0)
-            # Negate the counts where there is no data produced
-            inst_count = inst_count.where(~np.isnan(hue_data), 0)
-            # Replace all NaN values with 0s in hue data
-            hue_data = hue_data.fillna(0)
-
-            weighted_hue = hue_data * inst_count
-
-            # Aggregate the weighted hue and the total count
-            if mean_hue_weighted_sum is None:
-                mean_hue_weighted_sum = weighted_hue
-                agm_count_total = inst_count
-            else:
-                mean_hue_weighted_sum += weighted_hue
-                agm_count_total += inst_count
-
-            # Mask to only include water pixels.
-            hue_data = hue_data.where(ds["water_mask"] == 1)
-            # Add the instrument-specific masked hue to the Dataset
-            ds[f"{inst_agm}_hue"] = hue_data
-
-    if mean_hue_weighted_sum is not None and agm_count_total is not None:
-        # Avoid division by zero:
-        agm_count_total = agm_count_total.where(agm_count_total != 0)
-        mean_hue = mean_hue_weighted_sum / agm_count_total
-        # Mask to only include water pixels.
-        mean_hue = mean_hue.where(ds["water_mask"] == 1)
-        # Trim extreme values that can arise
-        ds["agm_hue"] = xr.where(
-            mean_hue > 25, xr.where(mean_hue < 100, mean_hue, np.nan), np.nan
+    if set(geomedian_hue_instruments).isdisjoint(loaded_instruments) is True:
+        error = (
+            "The Geomedian Hue requires data for at least one instrument "
+            f"from: {', '.join(geomedian_hue_instruments)} .",
+            "Returning an empty Dataset.",
         )
-    return ds
+        log.error(error)
+        return xr.Dataset()
+
+    log.info("Calculating Geomedian Hue for available instruments ...")
+
+    hue_ds = xr.Dataset()
+    all_inst_hue_list = []
+    all_inst_count_list = []
+    for inst in geomedian_hue_instruments:
+        if inst in loaded_instruments:
+            log.info(f"\tCalculating Hue for instrument: {inst} ...")
+            inst_ds = annual_data[inst]
+            count_band = f"{inst}_count"
+            hue_ds[f"{inst}_hue"] = hue_calculation(
+                inst_ds,
+                instrument=inst,
+                rayleigh_corrected_data=False,
+            )
+            all_inst_hue_list.append(hue_ds[f"{inst}_hue"])
+            all_inst_count_list.append(inst_ds[count_band])
+
+    all_inst_hue = xr.concat(all_inst_hue_list, dim="instrument")
+    all_inst_count = xr.concat(all_inst_count_list, dim="instrument")
+    weighted_hue_sum = (all_inst_hue * all_inst_count).sum(dim="instrument")
+    all_inst_count_total = all_inst_count.sum(dim="instrument")
+    mean_hue = (
+        weighted_hue_sum.where(all_inst_count_total != 0)
+        / all_inst_count_total
+    )
+    # TODO: Are all hue bands to be trimmed to water mask?
+    # Trim extreme values that can arise
+    hue_ds["agm_hue"] = xr.where(
+        (mean_hue > 25) & (mean_hue < 100), mean_hue, np.nan
+    ).where(clear_water_mask == 1)
+
+    if compute:
+        log.info("\tComputing Hue dataset ...")
+        hue_ds = hue_ds.compute()
+    log.info("Geomedian Hue calculation complete.")
+    return hue_ds

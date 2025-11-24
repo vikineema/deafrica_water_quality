@@ -97,7 +97,7 @@ def apply_R_correction(
     annual_data: dict[str, xr.Dataset],
     water_mask: xr.DataArray,
     compute: bool = False,
-    drop: bool = False,
+    drop: bool = True,
 ) -> dict[str, xr.Dataset]:
     """
     Wrapper function to apply Rayleigh correction across
