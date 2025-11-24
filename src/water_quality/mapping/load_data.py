@@ -131,10 +131,10 @@ def load_wofs_ann_data(
     if inst not in list(dss.keys()):
         error = (
             f"No datasets found for instrument '{inst}'. ",
-            "Returning empty array.",
+            "Returning empty dataset.",
         )
         log.error(error)
-        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+        return xr.Dataset()
 
     datasets = dss[inst]
     # TODO: Set a global dask chunk size configuration
@@ -198,10 +198,10 @@ def load_oli_agm_data(
     if inst not in list(dss.keys()):
         error = (
             f"No datasets found for instrument '{inst}'. ",
-            "Returning empty array.",
+            "Returning empty dataset.",
         )
         log.error(error)
-        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+        return xr.Dataset()
 
     datasets = dss[inst]
     # TODO: Set a global dask chunk size configuration
@@ -325,10 +325,10 @@ def load_msi_agm_data(
     if inst not in list(dss.keys()):
         error = (
             f"No datasets found for instrument '{inst}'. ",
-            "Returning empty array.",
+            "Returning empty dataset.",
         )
         log.error(error)
-        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+        return xr.Dataset()
 
     datasets = dss[inst]
     # TODO: Set a global dask chunk size configuration
@@ -445,10 +445,10 @@ def load_tm_agm_data(
     if inst not in list(dss.keys()):
         error = (
             f"No datasets found for instrument '{inst}'. ",
-            "Returning empty array.",
+            "Returning empty dataset.",
         )
         log.error(error)
-        return xr.DataArray(data=[], dims=["time"], coords={"time": []})
+        return xr.Dataset()
 
     datasets = dss[inst]
     # TODO: Set a global dask chunk size configuration
@@ -706,9 +706,10 @@ def load_annual_data(
     tile_geobox: GeoBox,
     dc: Datacube = None,
     compute: bool = False,
-) -> dict[str, xr.Dataset | xr.DataArray]:
+) -> dict[str, xr.Dataset]:
     """
-    Load data for the instruments "oli_agm", "msi_agm", "tm_agm" and "tirs".
+    Load yearly data for the instruments "wofs_ann", "oli_agm", "msi_agm", "tm_agm" and "tirs". Note, for the "wofs_ann" instrument,
+    5 years of data is loaded.
 
     Parameters
     ----------
@@ -729,14 +730,13 @@ def load_annual_data(
 
     Returns
     -------
-    dict[str, xr.DataArray | xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or xr.DataArray
-        of the loaded datasets for that instrument.
+    dict[str, xr.Dataset]
+        A dictionary mapping each instrument to the xr.Dataset of the loaded datasets for that instrument.
     """
     if dc is None:
         dc = Datacube(app="LoadAnnualData")
 
-    loaded_datasets: dict[str, xr.DataArray | xr.Dataset] = {}
+    loaded_datasets: dict[str, xr.Dataset] = {}
 
     instruments = list(dss.keys())
 
@@ -771,5 +771,10 @@ def load_annual_data(
     if "tirs" in instruments:
         # TODO: Load tirs annual composite data
         pass
+
+    for inst, ds in loaded_datasets.items():
+        is_empty = not ds.data_vars
+        if is_empty:
+            del loaded_datasets[inst]
 
     return loaded_datasets
