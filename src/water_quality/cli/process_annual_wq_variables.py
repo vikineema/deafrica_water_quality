@@ -33,6 +33,7 @@ from water_quality.mapping.instruments import (
 )
 from water_quality.mapping.load_data import load_annual_data
 from water_quality.mapping.ndvi import geomedian_NDVI
+from water_quality.mapping.optical_water_type import run_OWT
 from water_quality.mapping.pixel_correction import apply_R_correction
 from water_quality.mapping.water_detection import (
     clear_water_mask,
@@ -279,6 +280,13 @@ def cli(
             )
             gc.collect()
 
+            # Run Optical Water Type classification
+            wq_ds["owt"] = run_OWT(
+                instrument_data=annual_data,
+                clear_water_mask=wq_ds["clear_water"],
+                compute=True,
+            )
+            gc.collect()
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
                 if isinstance(ds, xr.DataArray):
