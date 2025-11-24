@@ -68,18 +68,11 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
     # (spectral response models)
     for sensor in sensors:
         # (spectal response models)
-        if sensor.endswith("_agm"):
-            suffix = "_agm"
-            sensor_data_fp = files("water_quality.data").joinpath(
-                f"sensor bands-{sensor[: -len(suffix)]}.csv"
-            )
-        else:
-            suffix = ""
-            sensor_data_fp = files("water_quality.data").joinpath(
-                f"sensor bands-{sensor}.csv"
-            )
+        sensor_data_fp = files("water_quality.data").joinpath(
+            f"sensor bands-{sensor}.csv"
+        )
         sensor_data = pd.read_csv(sensor_data_fp)
-        sensor_data["band_name"] = sensor_data["band_name"] + suffix
+        sensor_data["band_name"] = sensor_data["band_name"]
 
         # Rename columns to avoid clashes with reserved words
         sensor_data.rename(
