@@ -32,6 +32,7 @@ from water_quality.mapping.instruments import (
 )
 from water_quality.mapping.load_data import load_annual_data
 from water_quality.mapping.ndvi import geomedian_NDVI
+from water_quality.mapping.pixel_correction import apply_R_correction
 from water_quality.mapping.water_detection import (
     clear_water_mask,
     five_year_water_mask,
@@ -260,6 +261,14 @@ def cli(
                 compute=True,
             )
             gc.collect()
+
+            # Apply Rayleigh correction to the available instruments.
+            annual_data = apply_R_correction(
+                annual_data=annual_data,
+                water_mask=wq_ds["water_mask"],
+                compute=False,
+                drop=False,
+            )
 
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
