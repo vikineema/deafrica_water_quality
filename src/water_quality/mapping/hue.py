@@ -168,9 +168,6 @@ def hue_calculation(
     # The OLI geomedian lacks band 1, so it cannot be used. This leaves
     # a gap in the data. Examiation of a time series shows clear patterns.
     # Oli data give lower values than msi and tm, which are in good agreement
-
-    log.info(f"Calculating the hue for the instrument: {instrument}")
-
     if instrument.endswith("_agm"):
         inst = instrument.split("_")[0]
         agm = True
@@ -295,15 +292,15 @@ def geomedian_hue(
     all_inst_count = xr.concat(all_inst_count_list, dim="instrument")
     weighted_hue_sum = (all_inst_hue * all_inst_count).sum(dim="instrument")
     all_inst_count_total = all_inst_count.sum(dim="instrument")
-    mean_hue = (
+    hue_ds["agm_hue"] = (
         weighted_hue_sum.where(all_inst_count_total != 0)
         / all_inst_count_total
     )
-    # TODO: Are all hue bands to be trimmed to water mask?
-    # Trim extreme values that can arise
-    hue_ds["agm_hue"] = xr.where(
-        (mean_hue > 25) & (mean_hue < 100), mean_hue, np.nan
-    ).where(clear_water_mask == 1)
+    # TODO: Are all hue bands to be trimmed to water mask and extreme
+    # values removed or is it only for the "agm_hue" band?
+    hue_ds = xr.where((hue_ds > 25) & (hue_ds < 100), hue_ds, np.nan).where(
+        clear_water_mask == 1
+    )
 
     if compute:
         log.info("\tComputing Hue dataset ...")
