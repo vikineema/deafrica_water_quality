@@ -257,7 +257,9 @@ def run_OWT(
         Dataset with OWT classification results.
     """
     owt_results = xr.Dataset()
-    for instrument in list(instrument_data.keys()):
+    loaded_instruments = list(instrument_data.keys())
+    for instrument in loaded_instruments:
+        # Prevent attempts to run OWT on wofs_ann and tirs
         if instrument in ["msi", "msi_agm", "tm", "tm_agm", "oli", "oli_agm"]:
             log.info(
                 f"Running OWT classification for instrument: {instrument} ..."
@@ -266,11 +268,11 @@ def run_OWT(
             if instrument.endswith("_agm"):
                 inst = instrument.split("_")[0]
                 agm = True
-                varname = instrument + "_agm_owt"
+                varname = inst + "_agm_owt"
             else:
                 inst = instrument
                 agm = False
-                varname = instrument + "_owt"
+                varname = inst + "_owt"
 
             OWT_vectors = pd.read_csv(
                 files("water_quality.data").joinpath(
@@ -286,9 +288,27 @@ def run_OWT(
                 dp_corrected=False,
             )
 
-    if compute:
-        log.info("\tComputing OWT  ...")
-        owt_results = owt_results.compute()
-    log.info("OWT classification complete.")
+    if list(owt_results.data_vars):
+        # Keep this order.
+        geomedian_instruments = ["tm_agm", "oli_agm", "msi_agm"]
+        agm_owt = None
+        for inst in geomedian_instruments:
+            if inst in loaded_instruments:
+                if agm_owt is None:
+                    agm_owt = owt_results[inst + "_owt"]
+                else:
+                    agm_owt = xr.where(
+                        ~np.isnan(owt_results[inst + "_owt"]),
+                        owt_results[inst + "_owt"],
+                        agm_owt,
+                    )
+
+        owt_results["agm_owt"] = agm_owt
+        # TODO: Add agm_owt calculation for non-agm instruments?
+
+        if compute:
+            log.info("\tComputing OWT  ...")
+            owt_results = owt_results.compute()
+        log.info("OWT classification complete.")
 
     return owt_results
