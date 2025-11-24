@@ -1,62 +1,18 @@
-import copy
 import logging
-from typing import Any
 
 import dask.array as da
 import numpy as np
 import xarray as xr
 from datacube import Datacube
+from datacube.model import Dataset
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject
 
-from water_quality.dates import (
-    validate_end_date,
-    validate_start_date,
-    year_to_dc_datetime,
-)
+from water_quality.dates import year_to_dc_datetime
 from water_quality.mapping.instruments import INSTRUMENTS_MEASUREMENTS
 from water_quality.tiling import reproject_tile_geobox
 
 log = logging.getLogger(__name__)
-
-COMPOSITE_INSTRUMENTS = {
-    "tm_agm": ["gm_ls5_ls7_annual"],
-    "oli_agm": ["gm_ls8_annual", "gm_ls8_ls9_annual"],
-    "msi_agm": ["gm_s2_annual"],
-    "wofs_ann": ["wofs_ls_summary_annual"],
-    "tirs": ["ls5_st", "ls7_st", "ls8_st", "ls9_st"],
-}
-SINGLE_DAY_INSTRUMENTS = {
-    "tm": ["ls5_sr", "ls7_sr"],
-    "oli": ["ls8_sr", "ls9_sr"],
-    "msi": ["s2_l2a"],
-}
-INSTRUMENTS_PRODUCTS = {**COMPOSITE_INSTRUMENTS, **SINGLE_DAY_INSTRUMENTS}
-
-
-def get_dc_products(instrument_name: str) -> list[str]:
-    """
-    Get the datacube products to load for a given instrument.
-
-    Parameters
-    ----------
-    instrument_name : str
-        Name of the instruments
-
-    Returns
-    -------
-    list[str]
-        Datacube products to load for an instrument
-
-    """
-    dc_products = INSTRUMENTS_PRODUCTS.get(instrument_name, None)
-    if dc_products is None:
-        raise NotImplementedError(
-            f"Datacube products for the instrument {instrument_name} "
-            "are not defined."
-        )
-    else:
-        return dc_products
 
 
 def get_dc_measurements(instrument_name: str) -> list[str]:
@@ -129,58 +85,15 @@ def get_measurements_name_dict(instrument_name: str) -> dict[str, tuple[str]]:
         return measurements_name_dict
 
 
-def build_dc_queries(
-    instruments_to_use: dict[str, dict[str, bool]],
-    start_date: str,
-    end_date: str,
-    resampling: str = "bilinear",
-) -> dict[str, dict[str, Any]]:
-    """
-    Build a reusable datacube query for each instrument to load
-    data for.
-
-    Parameters
-    ----------
-    instruments_to_use : dict[str, dict[str, bool]]
-        A dictionary of the selected instruments to use for the analysis.
-    start_date : str
-        The start of the time range to load data for.
-    end_date : str
-        The end of the time range to load data for.
-    resampling : str, optional
-        Resampling method to use, by default "bilinear".
-    Returns
-    -------
-    dict[str, dict[str, Any]]
-        Datacube queries for each instrument.
-    """
-    dc_queries = {}
-    for instrument_name, usage in instruments_to_use.items():
-        if usage["use"] is True:
-            dc_products = get_dc_products(instrument_name)
-            dc_measurements = get_dc_measurements(instrument_name)
-
-            dc_query = dict(
-                product=dc_products,
-                measurements=dc_measurements,
-                time=(start_date, end_date),
-                resampling=resampling,
-            )
-            if instrument_name in SINGLE_DAY_INSTRUMENTS:
-                dc_query.update({"group_by": "solar_day"})
-            dc_queries[instrument_name] = dc_query
-    return dc_queries
-
-
 def load_oli_agm_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `oli_agm` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `oli_agm`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `oli_agm`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -198,13 +111,17 @@ def load_oli_agm_data(
 
     """
     log.info("Loading data for the instrument `oli_agm` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadOliAgm")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("oli_agm"))
 
     # For each band mask no data values to np.nan
@@ -221,7 +138,7 @@ def load_oli_agm_data(
 
 
 def load_oli_data(
-    dc_query: dict[str, Any],
+    datasets: list[Dataset],
     tile_geobox: GeoBox,
     compute: bool = True,
     dc: Datacube = None,
@@ -230,8 +147,8 @@ def load_oli_data(
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `oli`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `oli`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -248,13 +165,17 @@ def load_oli_data(
         instrument oli.
     """
     log.info("Loading data for the instrument `oli` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadOli")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("oli"))
 
     # For each band mask no data values to np.nan
@@ -277,14 +198,14 @@ def load_oli_data(
 
 
 def load_msi_agm_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `msi_agm` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `msi_agm`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `msi_agm`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -301,13 +222,17 @@ def load_msi_agm_data(
         instrument `msi_agm`.
     """
     log.info("Loading data for the instrument `msi_agm` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadMsiAgm")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("msi_agm"))
 
     # For each band mask no data values to np.nan
@@ -324,14 +249,14 @@ def load_msi_agm_data(
 
 
 def load_msi_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `msi` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `msi`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `msi`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -348,13 +273,17 @@ def load_msi_data(
         instrument `msi`.
     """
     log.info("Loading data for the instrument `msi` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadMsi")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("msi"))
 
     # For each band mask no data values to np.nan
@@ -372,14 +301,14 @@ def load_msi_data(
 
 
 def load_tm_agm_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `tm_agm` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `tm_agm`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `tm_agm`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -396,13 +325,17 @@ def load_tm_agm_data(
         instrument `tm_agm`.
     """
     log.info("Loading data for the instrument `tm_agm` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadTmAgm")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("tm_agm"))
 
     # For each band mask no data values to np.nan
@@ -419,14 +352,14 @@ def load_tm_agm_data(
 
 
 def load_tm_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `tm` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `tm`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `tm`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -443,13 +376,17 @@ def load_tm_data(
         instrument `tm`.
     """
     log.info("Loading data for the instrument `tm` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadTm")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("tm"))
 
     # For each band mask no data values to np.nan
@@ -472,14 +409,14 @@ def load_tm_data(
 
 
 def load_tirs_data(
-    dc_query: dict[str, Any], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
 ) -> xr.Dataset:
     """Load and process data for the `tirs` instrument.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `tirs`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `tirs`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -496,13 +433,17 @@ def load_tirs_data(
         instrument `tirs`.
     """
     log.info("Loading data for the instrument `tirs` ...")
-    query = copy.deepcopy(dc_query)
 
     if dc is None:
         dc = Datacube(app="LoadTirs")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="bilinear",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("tirs"))
 
     # For each band mask no data values to np.nan
@@ -531,7 +472,7 @@ def load_tirs_data(
 
 
 def load_tirs_annual_composite_data(
-    dc_query: dict[str, Any],
+    datasets: list[Dataset],
     tile_geobox: GeoBox,
     compute: bool,
     dc: Datacube,
@@ -541,8 +482,8 @@ def load_tirs_annual_composite_data(
 
     Parameters
     ----------
-    dc_query: dict[str, Any]
-        Datacube query to use to load data for the instrument `tirs`.
+    datasets : list[Dataset]
+        List of datasets to load data for the instrument `tirs`.
 
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
@@ -558,11 +499,9 @@ def load_tirs_annual_composite_data(
     Returns
     -------
     xr.Dataset
-        An xarray Dataset containing the surface temperature annnual
+        An xarray Dataset containing the surface temperature annual
         composite produced from data for the instrument `tirs`.
     """
-    query = copy.deepcopy(dc_query)
-
     # Due to memory constraints tirs data must be loaded in its native
     # resolution of 30 m and later reprojected to the target tile geobox
     # if upsampling the data.
@@ -571,7 +510,7 @@ def load_tirs_annual_composite_data(
             tile_geobox=tile_geobox, resolution_m=30
         )
         ds_tirs = load_tirs_data(
-            dc_query=query,
+            datasets=datasets,
             tile_geobox=native_tirs_geobox,
             compute=False,
             dc=dc,
@@ -579,7 +518,7 @@ def load_tirs_annual_composite_data(
     else:
         native_tirs_geobox = None
         ds_tirs = load_tirs_data(
-            dc_query=query,
+            datasets=datasets,
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
@@ -623,7 +562,7 @@ def load_tirs_annual_composite_data(
         annual_ds_tirs = xr_reproject(
             annual_ds_tirs,
             how=tile_geobox,
-            resampling=query["resampling"],
+            resampling="bilinear",
         )
 
     if compute:
@@ -634,17 +573,17 @@ def load_tirs_annual_composite_data(
 
 
 def load_wofs_ann_data(
-    dc_query: dict[str, Any],
+    datasets: list[Dataset],
     tile_geobox: GeoBox,
     compute: bool = True,
     dc: Datacube = None,
 ) -> xr.Dataset:
-    """Load and process data for the `wofs_ann` instrument.
+    """Load and process data for the `wofs_ann` instrument for a single year.
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `wofs_ann`.
+    datasets: list[Dataset]
+        Datasets for the instrument `wofs_ann`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -660,14 +599,25 @@ def load_wofs_ann_data(
         An xarray Dataset containing the processed data for the
         instrument `wofs_ann`.
     """
-    log.info("Loading data for the instrument wofs_ann ...")
-    query = copy.deepcopy(dc_query)
+    log.info("Loading annual data for the instrument wofs_ann ...")
 
     if dc is None:
         dc = Datacube(app="LoadWofsAnn")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    # From `wq-generate-tasks` wofs_ann data is loaded for 5 years
+    # but here we only need the last year in the 5 year period.
+    ds = (
+        dc.load(
+            datasets=datasets,
+            like=tile_geobox,
+            resampling="nearest",
+            dask_chunks=dask_chunks,
+        )
+        .isel(time=-1)
+        .expand_dims(time=1)
+    )
+
     ds = ds.rename(get_measurements_name_dict("wofs_ann"))
 
     # For each band mask no data values to np.nan
@@ -683,8 +633,8 @@ def load_wofs_ann_data(
     return ds
 
 
-def load_water_mask(
-    dc_query: dict[str, Any],
+def load_5year_water_mask(
+    datasets: list[Dataset],
     tile_geobox: GeoBox,
     compute: bool = True,
     dc: Datacube = None,
@@ -694,8 +644,8 @@ def load_water_mask(
 
     Parameters
     ----------
-    dc_query : dict[str, Any]
-        Datacube query to use to load data for the instrument `wofs_ann`.
+    datasets: list[Dataset]
+        Datasets for the instrument `wofs_ann`.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -712,26 +662,17 @@ def load_water_mask(
         wofs_ann data.
     """
     log.info("Loading data for the instrument wofs_ann ...")
-    query = copy.deepcopy(dc_query)
-
-    # Assumption here is that start and end date will
-    # always be covering a single year.
-    year_start = validate_start_date(dc_query["time"][0])
-    year_end = validate_end_date(dc_query["time"][1])
-    delta = (year_end - year_start).days + 1
-    assert delta in [365, 366], (
-        f"Expected time in query to cover a single year (365 or 366 days), not {delta} days."
-    )
-
-    # Expand date range to cover 5 years
-    five_year_start = f"{year_end.year - 4}-01-01"
-    query.update({"time": (five_year_start, dc_query["time"][1])})
 
     if dc is None:
         dc = Datacube(app="LoadWofsAnn")
 
-    dask_chunks = {"x": 3200, "y": 3200}
-    ds = dc.load(**query, like=tile_geobox, dask_chunks=dask_chunks)
+    dask_chunks = {"x": 4800, "y": 4800}
+    ds = dc.load(
+        datasets=datasets,
+        like=tile_geobox,
+        resampling="nearest",
+        dask_chunks=dask_chunks,
+    )
     ds = ds.rename(get_measurements_name_dict("wofs_ann"))
 
     # For each band mask no data values to np.nan
@@ -760,11 +701,9 @@ def load_water_mask(
     water_mask.name = "water_mask"
 
     # Add a time coordinate for compatibility
-    time_values = np.array(
-        [year_to_dc_datetime(year_start.year)],
-        dtype="datetime64[ns]",
-    )
-    water_mask = water_mask.expand_dims(time=time_values)
+    # Use the last year in the 5 year period
+    # based on how the tasks were generated in `wq-generate-tasks`.
+    water_mask = water_mask.expand_dims(time=[ds.time.values[-1]])
 
     if compute:
         log.info("Computing wofs_ann dataset ...")
@@ -785,19 +724,19 @@ def load_water_mask(
 
 
 def build_wq_agm_dataset(
-    dc_queries: dict[str, dict[str, Any]],
+    datasets: dict[str, list[Dataset]],
     tile_geobox: GeoBox,
     dc: Datacube = None,
     compute: bool = False,
 ) -> xr.Dataset:
     """Build a combined annual dataset from loading data
-    for each composite products instrument using the datacube queries
+    for each instrument using the datacube datasets
     provided.
 
     Parameters
     ----------
-    dc_queries : dict[str, dict[str, Any]]
-        Datacube query to use to load data for each instrument.
+    datasets : dict[str, list[Dataset]]
+        A dictionary mapping instruments to the datacube datasets available.
 
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
@@ -819,51 +758,56 @@ def build_wq_agm_dataset(
     if dc is None:
         dc = Datacube(app="BuildAnnualDataset")
 
+    instruments = list(datasets.keys())
+
     loaded_datasets: dict[str, xr.DataArray | xr.Dataset] = {}
 
-    if "wofs_ann" not in dc_queries:
+    # Due to the water mask that is required in nearly all steps in
+    # producing the annual water quality variables, at the very least
+    # wofs_ann data should be available.
+    if "wofs_ann" not in instruments:
         raise ValueError(
-            "Datacube query for the instrument `wofs_ann` must be provided."
+            "Datasets for the instrument `wofs_ann` must be provided."
         )
     else:
         loaded_datasets["wofs_ann"] = load_wofs_ann_data(
-            dc_query=dc_queries["wofs_ann"],
-            tile_geobox=tile_geobox,
-            compute=False,
-            dc=dc,
-        )
-        loaded_datasets["water_mask"] = load_water_mask(
-            dc_query=dc_queries["wofs_ann"],
+            datasets=datasets["wofs_ann"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
         )
 
-    if "oli_agm" in dc_queries:
+        loaded_datasets["water_mask"] = load_5year_water_mask(
+            datasets=datasets["wofs_ann"],
+            tile_geobox=tile_geobox,
+            compute=False,
+            dc=dc,
+        )
+
+    if "oli_agm" in instruments:
         loaded_datasets["oli_agm"] = load_oli_agm_data(
-            dc_query=dc_queries["oli_agm"],
+            datasets=datasets["oli_agm"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
         )
-    if "msi_agm" in dc_queries:
+    if "msi_agm" in instruments:
         loaded_datasets["msi_agm"] = load_msi_agm_data(
-            dc_query=dc_queries["msi_agm"],
+            datasets=datasets["msi_agm"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
         )
-    if "tm_agm" in dc_queries:
+    if "tm_agm" in instruments:
         loaded_datasets["tm_agm"] = load_tm_agm_data(
-            dc_query=dc_queries["tm_agm"],
+            datasets=datasets["tm_agm"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,
         )
-    if "tirs" in dc_queries and "wofs_ann" in dc_queries:
+    if "tirs" in instruments:
         loaded_datasets["tirs_ann"] = load_tirs_annual_composite_data(
-            tirs_dc_query=dc_queries["tirs"],
-            wofs_ann_dc_query=dc_queries["wofs_ann"],
+            datasets=datasets["tirs"],
             tile_geobox=tile_geobox,
             compute=False,
             dc=dc,

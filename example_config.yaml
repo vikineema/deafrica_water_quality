@@ -23,5 +23,5 @@ water_frequency_threshold_low: 0.1
 permanent_water_threshold : 0.0875
 sigma_coefficient : 1.2
 product:
-  name: wqs_annual
+  name: wq_annual
   version: 1.0.0
