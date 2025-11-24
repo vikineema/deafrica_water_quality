@@ -265,7 +265,7 @@ def cli(
 
             # Apply Rayleigh correction to the available instruments.
             annual_data = apply_R_correction(
-                annual_data=annual_data,
+                instrument_data=annual_data,
                 water_mask=wq_ds["water_mask"],
                 compute=False,
                 drop=True,

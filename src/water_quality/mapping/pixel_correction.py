@@ -94,7 +94,7 @@ def R_correction(
 
 
 def apply_R_correction(
-    annual_data: dict[str, xr.Dataset],
+    instrument_data: dict[str, xr.Dataset],
     water_mask: xr.DataArray,
     compute: bool = False,
     drop: bool = True,
@@ -105,10 +105,9 @@ def apply_R_correction(
 
     Parameters
     ----------
-    annual_data : dict[str, xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or
-        xr.DataArray of the loaded datacube datasets for that
-        instrument.
+    instrument_data : dict[str, xr.Dataset]
+        A dictionary mapping instruments to the xr.Dataset of the
+        loaded datacube datasets available for that instrument.
     water_mask : xr.DataArray
         Water mask to apply for masking non-water pixels, where 1
         indicates water.
@@ -121,9 +120,8 @@ def apply_R_correction(
 
     Returns
     -------
-    annual_data : dict[str, xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or
-        xr.DataArray of the loaded datacube datasets for that
+    instrument_data : dict[str, xr.Dataset]
+        A dictionary mapping instruments to the xr.Dataset of the loaded datacube datasets available for that
         instrument, with new atmospherically corrected bands
         added. Each corrected band will have its original name appended
         with 'r' (e.g., 'msi04_agm' becomes 'msi04_agmr').
@@ -131,7 +129,7 @@ def apply_R_correction(
     # Get the instruments in the dataset that the pixel correction
     # will be applied.
 
-    for instrument, ds in annual_data.items():
+    for instrument, ds in instrument_data.items():
         if instrument not in [
             "msi",
             "msi_agm",
@@ -147,7 +145,7 @@ def apply_R_correction(
             continue
         else:
             log.info(f"Applying R correction for instrument: {instrument}")
-            annual_data[instrument] = R_correction(
+            instrument_data[instrument] = R_correction(
                 ds=ds, water_mask=water_mask, instrument=instrument, drop=drop
             )
         if compute:
@@ -155,7 +153,7 @@ def apply_R_correction(
                 "\tComputing Rayleigh corrected data for "
                 f"instrument {instrument} ..."
             )
-            annual_data[instrument] = annual_data[instrument].compute()
+            instrument_data[instrument] = instrument_data[instrument].compute()
 
         log.info(f"R correction complete for {instrument}.")
-    return annual_data
+    return instrument_data

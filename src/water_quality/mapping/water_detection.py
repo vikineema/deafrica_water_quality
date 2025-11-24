@@ -21,8 +21,8 @@ def five_year_water_mask(
     Parameters
     ----------
     annual_data : dict[str, xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or
-        xr.DataArray of the loaded geomedian datacube datasets for that
+        A dictionary mapping instruments to the xr.Dataset of the loaded
+        annual (geomedian) datacube datasets available for that
         instrument.
     compute : bool
         Whether to compute the dask arrays immediately, by default True.
@@ -98,8 +98,8 @@ def clear_water_mask(
     Parameters
     ----------
     annual_data : dict[str, xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or
-        xr.DataArray of the loaded datacube datasets for that
+        A dictionary mapping instruments to the xr.Dataset of the loaded
+        annual (geomedian) datacube datasets available for that
         instrument.
     water_frequency_threshold : float
         The frequency threshold above which a pixel is classified as water.

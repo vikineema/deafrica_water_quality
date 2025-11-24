@@ -240,8 +240,8 @@ def geomedian_hue(
     Parameters
     ----------
     annual_data : dict[str, xr.Dataset]
-        A dictionary mapping each instrument to the xr.Dataset or
-        xr.DataArray of the loaded geomedian datacube datasets for that
+        A dictionary mapping instruments to the xr.Dataset of the loaded
+        annual (geomedian) datacube datasets available for that
         instrument.
     clear_water_mask : xr.DataArray
         Water mask to apply for masking non-water pixels, where 1
