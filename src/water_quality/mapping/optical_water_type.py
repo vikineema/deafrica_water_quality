@@ -258,30 +258,33 @@ def run_OWT(
     """
     owt_results = xr.Dataset()
     for instrument in list(instrument_data.keys()):
-        log.info(
-            f"Running OWT classification for instrument: {instrument} ..."
-        )
-        ds = instrument_data[instrument]
-        if instrument.endswith("_agm"):
-            inst = instrument.split("_")[0]
-            agm = True
-            varname = instrument + "_agm_owt"
-        else:
-            inst = instrument
-            agm = False
-            varname = instrument + "_owt"
+        if instrument in ["msi", "msi_agm", "tm", "tm_agm", "oli", "oli_agm"]:
+            log.info(
+                f"Running OWT classification for instrument: {instrument} ..."
+            )
+            ds = instrument_data[instrument]
+            if instrument.endswith("_agm"):
+                inst = instrument.split("_")[0]
+                agm = True
+                varname = instrument + "_agm_owt"
+            else:
+                inst = instrument
+                agm = False
+                varname = instrument + "_owt"
 
-        OWT_vectors = pd.read_csv(
-            files("water_quality.data").joinpath(f"{inst}_OWT_vectors.csv"),
-            index_col=0,
-        )
-        owt_results[varname] = OWT(
-            ds.where(clear_water_mask == 1),
-            inst,
-            OWT_vectors,
-            agm=agm,
-            dp_corrected=False,
-        )
+            OWT_vectors = pd.read_csv(
+                files("water_quality.data").joinpath(
+                    f"{inst}_OWT_vectors.csv"
+                ),
+                index_col=0,
+            )
+            owt_results[varname] = OWT(
+                ds.where(clear_water_mask == 1),
+                inst,
+                OWT_vectors,
+                agm=agm,
+                dp_corrected=False,
+            )
 
     if compute:
         log.info("\tComputing OWT  ...")
