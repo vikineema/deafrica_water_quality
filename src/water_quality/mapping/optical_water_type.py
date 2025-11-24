@@ -120,13 +120,13 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
 
 
 def OWT(
-    ds,
-    instrument,
-    OWT_vectors,
-    agm=False,
-    dp_corrected=False,
-    check_type=False,
-):
+    ds: xr.Dataset,
+    instrument: str,
+    OWT_vectors: pd.DataFrame,
+    agm: bool = False,
+    dp_corrected: bool = False,
+    check_type: bool = False,
+) -> xr.DataArray:
     """
     Calculate per-pixel Optical Water Type by comparing to OWT spectral vectors.
 
@@ -230,46 +230,62 @@ def OWT(
     return owt_closest
 
 
-def run_OWT(ds: xr.Dataset) -> xr.Dataset:
+def run_OWT(
+    instrument_data: dict[str, xr.Dataset],
+    clear_water_mask: xr.DataArray,
+    compute: bool = False,
+) -> xr.Dataset:
     """
     A function to run the Optical Water Type (OWT) classification on a dataset.
 
     Parameters
     ----------
-    ds : xr.Dataset
-        Input dataset containing spectral band data.
+    annual_data : dict[str, xr.Dataset]
+        A dictionary mapping instruments to the xr.Dataset of the loaded
+        annual (geomedian) datacube datasets available for that
+        instrument.
+    clear_water_mask : xr.DataArray
+        Water mask to apply for masking non-water pixels, where 1
+        indicates water.
+    compute : bool
+        Whether to compute the dask arrays immediately, by default False.
+        Set to False to keep datasets lazy for memory efficiency.
 
     Returns
     -------
     xr.Dataset
         Dataset with OWT classification results.
     """
-    suffix = "_agm"
-    for instrument in ["msi", "oli", "tm"]:
-        inst_agm = instrument + suffix
+    owt_results = xr.Dataset()
+    for instrument in list(instrument_data.keys()):
+        log.info(
+            f"Running OWT classification for instrument: {instrument} ..."
+        )
+        ds = instrument_data[instrument]
+        if instrument.endswith("_agm"):
+            inst = instrument.split("_")[0]
+            agm = True
+            varname = instrument + "_agm_owt"
+        else:
+            inst = instrument
+            agm = False
+            varname = instrument + "_owt"
 
-        # OWT_vector only depends on the instrument
         OWT_vectors = pd.read_csv(
-            files("water_quality.data").joinpath(
-                f"{instrument}_OWT_vectors.csv"
-            ),
+            files("water_quality.data").joinpath(f"{inst}_OWT_vectors.csv"),
             index_col=0,
         )
-        # Use the count band as an indicator that data for the geomedian
-        # instrument exists in the dataset.
-        count_band = f"{inst_agm}_count"
-        if count_band in ds.data_vars:
-            OWT_data = OWT(
-                ds.where(ds.clearwater == 1),
-                instrument,
-                OWT_vectors,
-                agm=True,
-            )
-            varname = instrument + "_agm_owt"
-            if varname in ds.data_vars:
-                ds[varname] = xr.where(
-                    ~np.isnan(OWT_data), OWT_data, ds[varname]
-                )
-            else:
-                ds[varname] = OWT_data
-    return ds
+        owt_results[varname] = OWT(
+            ds.where(clear_water_mask == 1),
+            inst,
+            OWT_vectors,
+            agm=agm,
+            dp_corrected=False,
+        )
+
+    if compute:
+        log.info("\tComputing OWT  ...")
+        owt_results = owt_results.compute()
+    log.info("OWT classification complete.")
+
+    return owt_results
