@@ -141,7 +141,7 @@ def apply_R_correction(
             "tm_agm",
         ]:
             error = (
-                f"R correction not implemented for instrument: {instrument}",
+                f"R correction not implemented for instrument: {instrument}"
             )
             log.warning(error)
             continue
