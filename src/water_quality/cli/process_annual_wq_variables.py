@@ -19,11 +19,13 @@ from water_quality.io import (
     get_filesystem,
     get_parent_dir,
     get_wq_cog_url,
+    get_wq_csv_url,
     get_wq_dataset_path,
     get_wq_stac_url,
     join_url,
 )
 from water_quality.logs import setup_logging
+from water_quality.mapping.algorithms import WQ_vars
 from water_quality.mapping.fai import geomedian_FAI
 from water_quality.mapping.hue import geomedian_hue
 from water_quality.mapping.instruments import (
@@ -292,6 +294,16 @@ def cli(
                 compute=True,
             )
             gc.collect()
+
+            # Calculate TSM, TSI and Chla Water Quality variables
+            wq_ds["tsm_chla_tsi"], wq_vars_df = WQ_vars(
+                annual_data=annual_data,
+                water_mask=wq_ds["water_mask"],
+                compute=True,
+                stack_wq_vars=True,
+            )
+            gc.collect()
+
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
                 if isinstance(ds, xr.DataArray):
@@ -306,7 +318,7 @@ def cli(
                     if da.size == 0:
                         continue
                     # Set attributes
-                    if "nodata" not in list(da.attrs.keys()):
+                    if "scales" not in list(da.attrs.keys()):
                         da.attrs = dict(
                             nodata=np.nan,
                             scales=1,
@@ -342,6 +354,18 @@ def cli(
                     with fs.open(output_cog_url, "wb") as f:
                         f.write(cog_bytes)
                     log.info(f"Band {band} saved to {output_cog_url}")
+
+                if wq_var_group == "tsm_chla_tsi":
+                    # Save WQ parameters table
+                    output_csv_url = get_wq_csv_url(
+                        output_directory=output_directory,
+                        tile_id=tile_id,
+                        temporal_id=temporal_id,
+                        product_name=product_name,
+                        product_version=product_version,
+                    )
+                    with fs.open(output_csv_url, mode="w") as f:
+                        wq_vars_df.to_csv(f, index=False)
 
             # Generate STAC metadata
             with warnings.catch_warnings():

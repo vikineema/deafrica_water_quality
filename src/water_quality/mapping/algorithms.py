@@ -4,7 +4,6 @@ to EO data from a set of instruments.
 """
 
 import logging
-from itertools import chain
 from typing import Any
 
 import numpy as np
@@ -572,34 +571,6 @@ def run_wq_algorithms(
     return wq_vars_ds
 
 
-def WQ_vars(
-    annual_data: dict[str, xr.Dataset],
-    stack_wq_vars: bool = False,
-) -> tuple[xr.Dataset, pd.DataFrame]:
-    """Compute Chlorophyll-A (ChlA) and Total Suspended Solids (TSS) water quality variables."""
-    agm = True
-    if agm:
-        suffix = "_agm"
-    else:
-        suffix = ""
-
-    ALGORITHMS_CHLA, ALGORITHMS_TSM = set_wq_algorithms(suffix)
-    tsm_ds = run_wq_algorithms(
-        instrument_data=annual_data, algorithms_group=ALGORITHMS_TSM
-    )
-    chla_ds = run_wq_algorithms(
-        instrument_data=annual_data, algorithms_group=ALGORITHMS_CHLA
-    )
-
-    tsm_df = pd.DataFrame({"tsm_measures": list(tsm_ds.data_vars)})
-    chla_df = pd.DataFrame({"chla_measures": list(chla_ds.data_vars)})
-    all_wq_vars_df = pd.concat([tsm_df, chla_df], axis=1)
-
-    if stack_wq_vars:
-        # Apply normalisation parameters
-        pass
-
-
 def classify_chla_values(chla_values: np.ndarray) -> np.ndarray:
     """
     Classify Chlorophyll-a (µg/l) values into Trophic State Index
@@ -636,105 +607,144 @@ def classify_chla_values(chla_values: np.ndarray) -> np.ndarray:
     return tsi_values
 
 
-def compute_trophic_state_index(
-    ds: xr.Dataset, chla_variable: str
-) -> xr.Dataset:
+def compute_trophic_state_index(chla_da: xr.DataArray) -> xr.DataArray:
     """
     Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
-    and add the Trophic State Index as the variable "tsi" to the input
-    dataset.
+    and output the Trophic State Index.
+    Parameters
+    ----------
+    chla_da : xr.DataArray
+        DataArray containing the Chlorophyll-a (µg/l) values to derive
+        the Trophic State Index from.
+    Returns
+    -------
+    xr.DataArray
+        DataArray containing the Trophic State Index values.
+    """
+    tsi_values = classify_chla_values(chla_da)
+    tsi_da = xr.DataArray(
+        tsi_values, dims=chla_da.dims, coords=chla_da.coords, name="tsi"
+    )
+    return tsi_da
+
+
+def WQ_vars(
+    annual_data: dict[str, xr.Dataset],
+    water_mask: xr.DataArray,
+    compute: bool,
+    stack_wq_vars: bool = True,
+) -> tuple[xr.Dataset, pd.DataFrame]:
+    """Compute Chlorophyll-A (ChlA) and Total Suspended
+    Matter (TSM) water quality variables.
 
     Parameters
     ----------
-    ds : xr.Dataset
-        Dataset to add the Trophic State Index to.
-    chla_variable : str
-        Variable in input dataset containing the Chlorophyll-a (µg/l)
-        values to derive the Trophic State Index from.
+    annual_data : dict[str, xr.Dataset]
+        A dictionary mapping instruments to the xr.Dataset of the loaded
+        annual (geomedian) datacube datasets available for that
+        instrument.
+    water_mask : xr.DataArray
+        Water mask to apply for masking non-water pixels, where 1
+        indicates water.
+    stack_wq_vars : bool, optional
+        If True, normalize the water quality variables then then stack them
+        into the variables "tsm" and "chla" in the output dataset.
+        Finally, compute the Trophic State Index from the Chlorophyll-a
+        (µg/l) values and add it to the output dataset as the variable "tsi".
+        If False, return all computed water quality variables as separate
+        variables in the output dataset and a DataFrame listing the
+        variables that should be stacked to "tsm" and "chla", by default True.
+    compute : bool, optional
+        Whether to compute the dask arrays immediately after stacking,
+        by default False. Set to False to keep datasets lazy for memory
+        efficiency.
 
     Returns
     -------
-    xr.Dataset
-        Input dataset with the Trophic State Index added as the
-        variable "tsi".
+    tuple[xr.Dataset, pd.DataFrame]:
+            If `stack_wq_vars` is False, returns a tuple containing:
+            - xr.Dataset: Dataset containing all computed water quality
+              variables as separate variables.
+            - pd.DataFrame: DataFrame listing the water quality variables
+              that should be stacked to "tsm" and "chla".
+            If `stack_wq_vars` is True, returns:
+            - xr.Dataset: a Dataset containing the stacked water quality
+              variables "tsm" and "chla", and the computed Trophic State
+              Index "tsi".
+            - pd.DataFrame: DataFrame listing the water quality variables
+              that were stacked to "tsm" and "chla".
     """
-    ds["tsi"] = (tuple(ds.dims), classify_chla_values(ds[chla_variable]))
-    return ds
+    agm = True
+    if agm:
+        suffix = "_agm"
+    else:
+        suffix = ""
 
-
-def normalise_and_stack_wq_vars(
-    ds: xr.Dataset,
-    wq_vars_table: pd.DataFrame,
-    water_frequency_threshold: float,
-) -> xr.Dataset:
-    """
-    Normalize the water quality variables in the input dataset `ds`,
-    then stack them into the variables "tss" and "chla".
-    Finally, compute the Trophic State Index from the Chlorophyll-a
-    (µg/l) values and add it to the dataset as the variable "tsi".
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset containing the water quality variables to normalize.
-    wq_vars_table : pd.DataFrame
-        DataFrame containing the water quality variables table.
-    water_frequency_threshold : float
-        Threshold to use when classifying water and non-water pixels
-        in the normalization process.
-
-    Returns
-    -------
-    xr.Dataset
-        3D dataset containing the water quality variables
-        after normalization and stacking.
-    """
-    tss_wq_vars = wq_vars_table["tss_measures"].dropna().to_list()
-    chla_wq_vars = wq_vars_table["chla_measures"].dropna().to_list()
-    all_wq_vars = list(chain(tss_wq_vars, chla_wq_vars))
-
-    # Apply normalization parameters
-    for band in list(ds.data_vars):
-        if band in NORMALISATION_PARAMETERS.keys():
-            scale = NORMALISATION_PARAMETERS[band]["scale"]
-            offset = NORMALISATION_PARAMETERS[band]["offset"]
-            ds[band] = ds[band] * scale + offset
-
-    log.info("Stack the water quality variables")
-    # Keep the  dimensions of the 3D dataset
-    original_ds_dims = list(ds.dims)
-
-    # Stack the TSS water quality variables.
-    tss_da = ds[tss_wq_vars].to_stacked_array(
-        new_dim="tss_measures",
-        sample_dims=original_ds_dims,
-        variable_dim="tss_wq_vars",
-        name="tss",
+    ALGORITHMS_CHLA, ALGORITHMS_TSM = set_wq_algorithms(suffix)
+    log.info("Running TSM water quality algorithms ...")
+    tsm_ds = run_wq_algorithms(
+        instrument_data=annual_data, algorithms_group=ALGORITHMS_TSM
     )
-    tss_da.attrs = {}
-
-    # Stack the Chla water quality variables.
-    chla_da = ds[chla_wq_vars].to_stacked_array(
-        new_dim="chla_measures",
-        sample_dims=original_ds_dims,
-        variable_dim="chla_wq_vars",
-        name="chla",
+    log.info("Running Chla water quality algorithms ...")
+    chla_ds = run_wq_algorithms(
+        instrument_data=annual_data, algorithms_group=ALGORITHMS_CHLA
     )
-    chla_da.attrs = {}
 
-    # Drop the original water quality variables
-    ds = ds.drop_vars(all_wq_vars)
+    tsm_df = pd.DataFrame({"tsm_measures": list(tsm_ds.data_vars)})
+    chla_df = pd.DataFrame({"chla_measures": list(chla_ds.data_vars)})
+    all_wq_vars_df = pd.concat([tsm_df, chla_df], axis=1)
 
-    log.info("Get median of tss and chla measurements for water pixels")
-    ds["tss"] = xr.where(
-        ds["water_mask"] == 1, tss_da.median(dim="tss_measures"), np.nan
-    )
-    ds["chla"] = xr.where(
-        ds["water_mask"] == 1, chla_da.median(dim="chla_measures"), np.nan
-    )
-    # ds = ds.drop_dims(["tss_measures", "chla_measures"], errors="ignore")
+    if stack_wq_vars:
+        log.info(
+            "Applying normalisation parameters to water quality variables"
+        )
+        for ds in [tsm_ds, chla_ds]:
+            for band in list(ds.data_vars):
+                if band in NORMALISATION_PARAMETERS.keys():
+                    scale = NORMALISATION_PARAMETERS[band]["scale"]
+                    offset = NORMALISATION_PARAMETERS[band]["offset"]
+                    ds[band] = ds[band] * scale + offset
 
-    # Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
-    ds = compute_trophic_state_index(ds, chla_variable="chla")
+        log.info("Stacking water quality variables ...")
+        # Stack the TSM water quality variables.
+        tsm_da = tsm_ds.to_stacked_array(
+            new_dim="tsm_measures",
+            sample_dims=list(tsm_ds.dims),
+            variable_dim="tsm_wq_vars",
+            name="tsm",
+        )
+        tsm_da.attrs = {}
 
-    return ds
+        # Stack the Chla water quality variables.
+        chla_da = chla_ds.to_stacked_array(
+            new_dim="chla_measures",
+            sample_dims=list(chla_ds.dims),
+            variable_dim="chla_wq_vars",
+            name="chla",
+        )
+        chla_da.attrs = {}
+        log.info("Get median of tss and chla measurements for water pixels")
+        tsm_da = tsm_da.median(dim="tsm_measures").where(water_mask == 1)
+        chla_da = chla_da.median(dim="chla_measures").where(water_mask == 1)
+        tsi_da = compute_trophic_state_index(chla_da)
+
+        ds = xr.Dataset({"tsm": tsm_da, "chla": chla_da, "tsi": tsi_da})
+
+        if compute:
+            log.info("\tComputing TSM, Chla, and TSI dataset ...")
+            ds = ds.compute()
+        log.info(
+            "TSM, Chla, and TSI water quality variables computation done."
+        )
+        return ds, all_wq_vars_df
+    else:
+        # Add the normalisation parameters as attributes to each variable
+        ds = xr.merge([chla_ds, tsm_ds])
+        for band in list(ds.data_vars):
+            if band in NORMALISATION_PARAMETERS.keys():
+                scale = NORMALISATION_PARAMETERS[band]["scale"]
+                offset = NORMALISATION_PARAMETERS[band]["offset"]
+                ds[band].attrs["normalisation_scale"] = scale
+                ds[band].attrs["normalisation_offset"] = offset
+
+        return ds, all_wq_vars_df
