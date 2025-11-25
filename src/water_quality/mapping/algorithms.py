@@ -724,8 +724,11 @@ def WQ_vars(
         )
         chla_da.attrs = {}
         log.info("Get median of tss and chla measurements for water pixels")
+        # Since median is a non local operation, a compute is triggered here
+        # which takes approximately 30 minutes for a single tile
         tsm_da = tsm_da.median(dim="tsm_measures").where(water_mask == 1)
         chla_da = chla_da.median(dim="chla_measures").where(water_mask == 1)
+        log.info("Computing Trophic State Index from Chlorophyll-a ...")
         tsi_da = compute_trophic_state_index(chla_da)
 
         ds = xr.Dataset({"tsm": tsm_da, "chla": chla_da, "tsi": tsi_da})
