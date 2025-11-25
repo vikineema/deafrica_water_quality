@@ -15,16 +15,38 @@ log = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Helper to create algorithm entries
-# =============================================================================
-def create_wq_entry(func, wq_varname, **band_args):
-    """Helper to create a dictionary entry for a water quality algorithm."""
-    return {"func": func, "wq_varname": wq_varname, "args": band_args}
-
-
-# =============================================================================
 # Water Quality Algorithms
 # =============================================================================
+def ChlA_Toming(
+    dataset: xr.Dataset, band5: str, band4: str, band6: str
+) -> xr.DataArray:
+    # ---- Function to calculate ndci from input nir and red bands ----
+    return dataset[band5] - 0.5 * (dataset[band4] / dataset[band6])
+
+
+def ChlA_3BDA(
+    dataset: xr.Dataset, blue_band: str, green_band: str, red_band: str
+) -> xr.DataArray:
+    # as described in Byrne et al 2024:  LAQUA: a LAndsat water QUality
+    # retrieval tool for east African lakes
+
+    # The reflectances should be less than one for this function
+    # to make sense
+    scale = 1 / 10000.0
+    return (dataset[blue_band] * scale) - (
+        dataset[red_band] * scale * dataset[green_band] * scale
+    )
+
+
+def ChlA_Tebbs(
+    dataset: xr.Dataset, NIR_band: str, Red_band: str
+) -> xr.DataArray:
+    # ---- the paramters are optional but for completeness ... ----
+    a0 = -135
+    a1 = 451
+    return a0 + a1 * (dataset[NIR_band] / dataset[Red_band])
+
+
 def NDCI_NIR_R(
     dataset: xr.Dataset, NIR_band: str, red_band: str
 ) -> xr.DataArray:
@@ -47,7 +69,7 @@ def ChlA_MODIS2B(
 ) -> xr.DataArray:
     """MODIS two-band chlorophyll-a estimation."""
     X = dataset[band_748] / dataset[band_667]
-    return 190.34 * X - 32.45
+    return (190.34 * X) - 32.45
 
 
 def NDSSI_RG(
@@ -75,10 +97,18 @@ def TI_yu(
     Green: str,
     scalefactor: float = 0.01,
 ) -> xr.DataArray:
-    """Turbidity Index of Yu et al. 2019."""
-    delta = (dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green])
-    delta = xr.where(delta < 0, 0, delta)
-    return scalefactor * np.sqrt(delta)
+    """Turbidity Index of Yu et al. 2019.
+    An empirical algorithm to seamlessly retrieve the concentration of
+    suspended particulate matter from water color across ocean to turbid
+    river mouths. Remote Sens. Environ. 235, 111491 (2019).
+    Used in screening turbid waters for mapping floating algal blooms
+    Initially developed with TM
+    -TI = ((Red − green) − (NIR − Rgreen)) ^ 0.5
+    """
+    return scalefactor * (
+        ((dataset[Red] - dataset[Green]) - (dataset[NIR] - dataset[Green]))
+        ** 0.5
+    )
 
 
 def TSM_LYM_ETM(
@@ -87,6 +117,15 @@ def TSM_LYM_ETM(
     red_band: str,
     scale_factor: float = 0.0001,
 ) -> xr.DataArray:
+    """
+    Lymburner Total Suspended Matter (TSM)
+    Paper: [Lymburner et al. 2016](https://www.sciencedirect.com/science/article/abs/pii/S0034425716301560)
+    Units of mg/L concentration. Variants for ETM and OLT, slight
+    difference in parameters.
+    These models, developed by leo lymburner and arnold dekker, are simple,
+    stable, and produce credible results over a range of observations.
+
+    """
     return 3983 * (
         ((dataset[green_band] + dataset[red_band]) * scale_factor / 2)
         ** 1.6246
@@ -117,19 +156,83 @@ def TSS_QUANG8(dataset: xr.Dataset, red_band: str) -> xr.DataArray:
     return 380.32 * dataset[red_band] * 0.0001 - 1.7826
 
 
-def TSS_Zhang(
+def TSS_Zhang21(
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
+    with_model: bool = True,
+) -> xr.DataArray:
+    """Zhang et al. 2023 TSS estimation (stable version)."""
+    Green = (
+        dataset[green_band].where(~(dataset[green_band] > 0), 1) * scale_factor
+    )
+    Red = dataset[red_band] * scale_factor
+
+    if with_model:
+        Green = Green / (2 * np.pi)
+        Red = Red / (2 * np.pi)
+        return 0.71 * np.e ** (21.31 * (Green + Red) * (Red / Green))
+    else:
+        return (Green + Red) * (Red / Green)
+
+
+def TSS_GreenRed(
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    scale_factor: float = 0.0001,
+):
+    return TSS_Zhang21(
+        dataset,
+        green_band=green_band,
+        red_band=red_band,
+        scale_factor=scale_factor,
+        with_model=False,
+    )
+
+
+def TSS_Zhang23(
     dataset: xr.Dataset,
     blue_band: str,
     green_band: str,
     red_band: str,
     scale_factor: float = 0.0001,
-) -> xr.DataArray:
-    """Zhang et al. 2023 TSS estimation (stable version)."""
-    abovezero = 1e-5
-    GplusR = dataset[green_band] + dataset[red_band]
-    RdivB = dataset[red_band] / (dataset[blue_band] + abovezero)
-    X = GplusR * RdivB * scale_factor
-    return 14.44 * X
+    with_model=True,
+):
+    """Model of Zhang 2023"""
+    Blue = (
+        dataset[blue_band].where(~(dataset[blue_band] > 0), 1) * scale_factor
+    )
+    Red = dataset[red_band] * scale_factor
+    Green = dataset[green_band] * scale_factor
+
+    if with_model:
+        Green = Green / (2 * np.pi)
+        Red = Red / (2 * np.pi)
+        Blue = Blue / (2 * np.pi)
+
+        return 1.20 * np.e ** (14.44 * (Green + Red) * (Red / Blue))
+    else:
+        return (Green + Red) * (Red / Blue)
+
+
+def TSS_GreenRedBlue(
+    dataset: xr.Dataset,
+    green_band: str,
+    red_band: str,
+    blue_band: str,
+    scale_factor: float = 0.0001,
+):
+    """Zhang23 model without the exponential model fit"""
+    return TSS_Zhang23(
+        dataset=dataset,
+        green_band=green_band,
+        red_band=red_band,
+        blue_band=blue_band,
+        scale_factor=scale_factor,
+        with_model=False,
+    )
 
 
 # =============================================================================
@@ -165,250 +268,284 @@ NORMALISATION_PARAMETERS = {
 # =============================================================================
 # Algorithm Dictionaries
 # =============================================================================
-# === Water Quality Algorithm Dictionaries (cleaned with create_wq_entry) ===
+def set_wq_algorithms(suffix=""):
+    s = suffix
+    ndci_nir_r = {
+        "msi" + s: {
+            "54": {
+                "func": NDCI_NIR_R,
+                "wq_varname": "ndci_msi54",
+                "args": {"NIR_band": "msi05" + s, "red_band": "msi04" + s},
+            },
+            "64": {
+                "func": NDCI_NIR_R,
+                "wq_varname": "ndci_msi64",
+                "args": {"NIR_band": "msi06" + s, "red_band": "msi04" + s},
+            },
+            "74": {
+                "func": NDCI_NIR_R,
+                "wq_varname": "ndci_msi74",
+                "args": {"NIR_band": "msi07" + s, "red_band": "msi04" + s},
+            },
+        },
+        "tm" + s: {
+            "func": NDCI_NIR_R,
+            "wq_varname": "ndci_tm43",
+            "args": {"NIR_band": "tm04" + s, "red_band": "tm03" + s},
+        },
+        "oli" + s: {
+            "func": NDCI_NIR_R,
+            "wq_varname": "ndci_oli54",
+            "args": {"NIR_band": "oli05" + s, "red_band": "oli04" + s},
+        },
+    }
 
-ndci_nir_r = {
-    "msi_agm": {
-        "54": create_wq_entry(
-            NDCI_NIR_R,
-            "ndci_msi54_agm",
-            NIR_band="msi05_agmr",
-            red_band="msi04_agmr",
-        ),
-        "64": create_wq_entry(
-            NDCI_NIR_R,
-            "ndci_msi64_agm",
-            NIR_band="msi06_agmr",
-            red_band="msi04_agmr",
-        ),
-        "74": create_wq_entry(
-            NDCI_NIR_R,
-            "ndci_msi74_agm",
-            NIR_band="msi07_agmr",
-            red_band="msi04_agmr",
-        ),
-    },
-    "tm_agm": create_wq_entry(
-        NDCI_NIR_R, "ndci_tm43_agm", NIR_band="tm04_agm", red_band="tm03_agmr"
-    ),
-    "oli_agm": create_wq_entry(
-        NDCI_NIR_R,
-        "ndci_oli54_agm",
-        NIR_band="oli05_agm",
-        red_band="oli04_agmr",
-    ),
-}
+    chla_toming = {  # looks more like a tss indicator!
+        "msi" + s: {
+            "func": ChlA_Toming,
+            "wq_varname": "chla_toming_msi",
+            "args": {
+                "band5": "msi05" + s,
+                "band4": "msi04" + s,
+                "band6": "msi06" + s,
+            },
+        }
+    }
+    chla_3bda = {
+        "msi" + s: {
+            "func": ChlA_3BDA,
+            "wq_varname": "chla_3bda_msi",
+            "args": {
+                "blue_band": "msi02" + s,
+                "red_band": "msi04" + s,
+                "green_band": "msi03" + s,
+            },
+        },
+        "oli" + s: {
+            "func": ChlA_3BDA,
+            "wq_varname": "chla_3bda_oli",
+            "args": {
+                "blue_band": "oli02" + s,
+                "red_band": "oli04" + s,
+                "green_band": "oli03" + s,
+            },
+        },
+        "tm" + s: {
+            "func": ChlA_3BDA,
+            "wq_varname": "chla_3bda_tm",
+            "args": {
+                "blue_band": "tm01" + s,
+                "red_band": "tm03" + s,
+                "green_band": "tm02" + s,
+            },
+        },
+    }
+    chla_tebbs = {  # this is just a ratio of two bands
+        "msi" + s: {
+            "func": ChlA_Tebbs,
+            "wq_varname": "chla_tebbs_msi",
+            "args": {"NIR_band": "msi8a" + s, "Red_band": "msi04" + s},
+        },
+        "oli" + s: {
+            "func": ChlA_Tebbs,
+            "wq_varname": "chla_tebbs_oli",
+            "args": {"NIR_band": "oli05" + s, "Red_band": "oli04" + s},
+        },
+        "tm" + s: {
+            "func": ChlA_Tebbs,
+            "wq_varname": "chla_tebbs_tm",
+            "args": {"NIR_band": "tm04" + s, "Red_band": "tm03" + s},
+        },
+    }
+    chla_meris2b = {
+        "msi" + s: {
+            "func": ChlA_MERIS2B,
+            "wq_varname": "chla_meris2b_msi",
+            "args": {"band_708": "msi05" + s, "band_665": "msi04" + s},
+        }
+    }
 
-chla_meris2b = {
-    "msi_agm": create_wq_entry(
-        ChlA_MERIS2B,
-        "chla_meris2b_msi_agm",
-        band_708="msi05_agmr",
-        band_665="msi04_agmr",
-    ),
-    "msi": create_wq_entry(
-        ChlA_MERIS2B, "chla_meris2b_msi", band_708="msi05", band_665="msi04"
-    ),
-}
+    chla_modis2b = {
+        "msi" + s: {
+            "func": ChlA_MODIS2B,
+            "wq_varname": "chla_modis2b_msi",
+            "args": {"band_748": "msi06" + s, "band_667": "msi04" + s},
+        },
+        "tm" + s: {
+            "func": ChlA_MODIS2B,
+            "wq_varname": "chla_modis2b_tm",
+            "args": {"band_748": "tm04" + s, "band_667": "tm03" + s},
+        },
+    }
 
-chla_modis2b = {
-    "msi_agm": create_wq_entry(
-        ChlA_MODIS2B,
-        "chla_modis2b_msi_agm",
-        band_748="msi06_agmr",
-        band_667="msi04_agmr",
-    ),
-    "msi": create_wq_entry(
-        ChlA_MODIS2B, "chla_modis2b_msi", band_748="msi06", band_667="msi04"
-    ),
-    "tm_agm": create_wq_entry(
-        ChlA_MODIS2B,
-        "chla_modis2b_tm_agm",
-        band_748="tm04_agmr",
-        band_667="tm03_agmr",
-    ),
-}
+    ndssi_rg = {
+        "msi" + s: {
+            "func": NDSSI_RG,
+            "wq_varname": "ndssi_rg_msi",
+            "args": {"red_band": "msi04" + s, "green_band": "msi03" + s},
+        },
+        "oli" + s: {
+            "func": NDSSI_RG,
+            "wq_varname": "ndssi_rg_oli",
+            "args": {"red_band": "oli04" + s, "green_band": "oli03" + s},
+        },
+        "tm" + s: {
+            "func": NDSSI_RG,
+            "wq_varname": "ndssi_rg_tm",
+            "args": {"red_band": "tm03" + s, "green_band": "tm02" + s},
+        },
+    }
 
-ndssi_rg = {
-    "msi_agm": create_wq_entry(
-        NDSSI_RG,
-        "ndssi_rg_msi_agm",
-        red_band="msi04_agmr",
-        green_band="msi03_agmr",
-    ),
-    "msi": create_wq_entry(
-        NDSSI_RG, "ndssi_rg_msi", red_band="msi04r", green_band="msi03_agmr"
-    ),
-    "oli_agm": create_wq_entry(
-        NDSSI_RG,
-        "ndssi_rg_oli_agm",
-        red_band="oli04_agmr",
-        green_band="oli03_agmr",
-    ),
-    "oli": create_wq_entry(
-        NDSSI_RG, "ndssi_rg_oli", red_band="oli04r", green_band="oli03r"
-    ),
-    "tm_agm": create_wq_entry(
-        NDSSI_RG,
-        "ndssi_rg_tm_agm",
-        red_band="tm03_agmr",
-        green_band="tm02_agmr",
-    ),
-    "tm": create_wq_entry(
-        NDSSI_RG, "ndssi_rg_tm", red_band="tm03r", green_band="tmi02r"
-    ),
-}
+    ndssi_bnir = {
+        "oli" + s: {
+            "func": NDSSI_BNIR,
+            "wq_varname": "ndssi_bnir_oli",
+            "args": {"NIR_band": "oli06" + s, "blue_band": "oli02" + s},
+        },
+    }
 
-ndssi_bnir = {
-    "msi": create_wq_entry(
-        NDSSI_BNIR, "ndssi_bnir_msi", NIR_band="msi08", blue_band="msi02_agmr"
-    ),
-    "oli_agm": create_wq_entry(
-        NDSSI_BNIR,
-        "ndssi_bnir_oli_agm",
-        NIR_band="oli06_agm",
-        blue_band="oli02_agmr",
-    ),
-    "oli": create_wq_entry(
-        NDSSI_BNIR, "ndssi_bnir_oli", NIR_band="oli06", blue_band="oli02r"
-    ),
-    "tm": create_wq_entry(
-        NDSSI_BNIR, "ndssi_bnir_tm", NIR_band="tm04", blue_band="tm01r"
-    ),
-}
+    ti_yu = {
+        "oli" + s: {
+            "func": TI_yu,
+            "wq_varname": "ti_yu_oli",
+            "args": {
+                "NIR": "oli06" + s,
+                "Red": "oli04" + s,
+                "Green": "oli03" + s,
+            },
+        },
+        "tm" + s: {
+            "func": TI_yu,
+            "wq_varname": "ti_yu_tm",
+            "args": {
+                "NIR": "tm04" + s,
+                "Red": "tm03" + s,
+                "Green": "tm02" + s,
+            },
+        },
+    }
 
-ti_yu = {
-    "msi": create_wq_entry(
-        TI_yu, "ti_yu_msi", NIR="msi08", Red="msi04r", Green="msi03_agmr"
-    ),
-    "oli_agm": create_wq_entry(
-        TI_yu,
-        "ti_yu_oli_agm",
-        NIR="oli06_agm",
-        Red="oli04_agmr",
-        Green="oli03_agmr",
-    ),
-    "oli": create_wq_entry(
-        TI_yu, "ti_yu_oli", NIR="oli06", Red="oli04r", Green="oli03r"
-    ),
-    "tm_agm": create_wq_entry(
-        TI_yu,
-        "ti_yu_tm_agm",
-        NIR="tm04_agm",
-        Red="tm03_agmr",
-        Green="tm02_agmr",
-    ),
-    "tm": create_wq_entry(
-        TI_yu, "ti_yu_tm", NIR="tm04", Red="tm03r", Green="tmi02r"
-    ),
-}
+    tsm_lym = {
+        "oli" + s: {
+            "func": TSM_LYM_OLI,
+            "wq_varname": "tsm_lym_oli",
+            "args": {"red_band": "oli04" + s, "green_band": "oli03" + s},
+        },
+        "msi" + s: {
+            "func": TSM_LYM_OLI,
+            "wq_varname": "tsm_lym_msi",
+            "args": {"red_band": "msi04" + s, "green_band": "msi03" + s},
+        },
+        "tm" + s: {
+            "func": TSM_LYM_ETM,
+            "wq_varname": "tsm_lym_tm",
+            "args": {"red_band": "tm03" + s, "green_band": "tm02" + s},
+        },
+    }
 
-tsm_lym = {
-    "oli_agm": create_wq_entry(
-        TSM_LYM_OLI,
-        "tsm_lym_oli_agm",
-        red_band="oli04_agmr",
-        green_band="oli03_agmr",
-    ),
-    "oli": create_wq_entry(
-        TSM_LYM_OLI, "tsm_lym_oli", red_band="oli04r", green_band="oli03r"
-    ),
-    "msi_agm": create_wq_entry(
-        TSM_LYM_OLI,
-        "tsm_lym_msi_agm",
-        red_band="msi04_agmr",
-        green_band="msi03_agmr",
-    ),
-    "msi": create_wq_entry(
-        TSM_LYM_OLI, "tsm_lym_msi", red_band="msi04r", green_band="msi03r"
-    ),
-    "tm_agm": create_wq_entry(
-        TSM_LYM_ETM,
-        "tsm_lym_tm_agm",
-        red_band="tm03_agmr",
-        green_band="tm02_agmr",
-    ),
-    "tm": create_wq_entry(
-        TSM_LYM_ETM, "tsm_lym_tm", red_band="tm03r", green_band="tm02r"
-    ),
-}
+    spm_qiu = {
+        "tm" + s: {
+            "func": SPM_QIU,
+            "wq_varname": "spm_qiu_tm",
+            "args": {"red_band": "tm03" + s, "green_band": "tm02" + s},
+        },
+        "msi" + s: {
+            "func": SPM_QIU,
+            "wq_varname": "spm_qiu_msi",
+            "args": {"red_band": "msi04" + s, "green_band": "msi03" + s},
+        },
+    }
 
-spm_qiu = {
-    "oli_agm": create_wq_entry(
-        SPM_QIU,
-        "spm_qiu_oli_agm",
-        red_band="oli04_agmr",
-        green_band="oli03_agmr",
-    ),
-    "oli": create_wq_entry(
-        SPM_QIU, "spm_qiu_oli", red_band="oli04r", green_band="oli03r"
-    ),
-    "tm_agm": create_wq_entry(
-        SPM_QIU, "spm_qiu_tm_agm", red_band="tm03_agmr", green_band="tm02_agmr"
-    ),
-    "tm": create_wq_entry(
-        SPM_QIU, "spm_qiu_tm", red_band="tm03r", green_band="tm02r"
-    ),
-    "msi_agm": create_wq_entry(
-        SPM_QIU,
-        "spm_qiu_msi_agm",
-        red_band="msi04_agmr",
-        green_band="msi03_agmr",
-    ),
-    "msi": create_wq_entry(
-        SPM_QIU, "spm_qiu_msi", red_band="msi04r", green_band="msi03r"
-    ),
-}
+    tss_zhang23 = {
+        "msi" + s: {
+            "func": TSS_Zhang23,
+            "wq_varname": "tss_zhang23_msi",
+            "args": {"G": "msi03" + s, "R": "msi04" + s, "B": "msi02" + s},
+        },
+        "oli" + s: {
+            "func": TSS_Zhang23,
+            "wq_varname": "tss_zhang23_oli",
+            "args": {"G": "oli03" + s, "R": "oli04" + s, "B": "oli02" + s},
+        },
+        "tm" + s: {
+            "func": TSS_Zhang23,
+            "wq_varname": "tss_zhang23_tm",
+            "args": {"G": "tm02" + s, "R": "tm03" + s, "B": "tm01" + s},
+        },
+    }
+    tss_GRB = {
+        "msi" + s: {
+            "func": TSS_GreenRedBlue,
+            "wq_varname": "tss_grb_msi",
+            "args": {"G": "msi03" + s, "R": "msi04" + s, "B": "msi02" + s},
+        },
+        "oli" + s: {
+            "func": TSS_GreenRedBlue,
+            "wq_varname": "tss_grb_oli",
+            "args": {"G": "oli03" + s, "R": "oli04" + s, "B": "oli02" + s},
+        },
+        "tm" + s: {
+            "func": TSS_GreenRedBlue,
+            "wq_varname": "tss_grb_tm",
+            "args": {"G": "tm02" + s, "R": "tm03" + s, "B": "tm01" + s},
+        },
+    }
+    tss_zhang21 = {
+        "msi" + s: {
+            "func": TSS_Zhang21,
+            "wq_varname": "tss_zhang21_msi",
+            "args": {"G": "msi03" + s, "R": "msi04" + s},
+        },
+        "oli" + s: {
+            "func": TSS_Zhang21,
+            "wq_varname": "tss_zhang21_oli",
+            "args": {"G": "oli03" + s, "R": "oli04" + s},
+        },
+        "tm" + s: {
+            "func": TSS_Zhang21,
+            "wq_varname": "tss_zhang21_tm",
+            "args": {"G": "tm02" + s, "R": "tm03" + s},
+        },
+    }
+    tss_GR = {
+        "msi" + s: {
+            "func": TSS_GreenRed,
+            "wq_varname": "tss_gr_msi",
+            "args": {"G": "msi03" + s, "R": "msi04" + s},
+        },
+        "oli" + s: {
+            "func": TSS_GreenRed,
+            "wq_varname": "tss_gr_oli",
+            "args": {"G": "oli03" + s, "R": "oli04" + s},
+        },
+        "tm" + s: {
+            "func": TSS_GreenRed,
+            "wq_varname": "tss_gr_tm",
+            "args": {"G": "tm02" + s, "R": "tm03" + s},
+        },
+    }
 
-tss_zhang = {
-    "msi_agm": create_wq_entry(
-        TSS_Zhang,
-        "tss_zhang_msi_agm",
-        blue_band="msi02_agmr",
-        red_band="msi04_agmr",
-        green_band="msi03_agmr",
-    ),
-    "msi": create_wq_entry(
-        TSS_Zhang,
-        "tss_zhang_msi",
-        blue_band="msi02r",
-        red_band="msi04r",
-        green_band="msi03_agmr",
-    ),
-    "oli_agm": create_wq_entry(
-        TSS_Zhang,
-        "tss_zhang_oli_agm",
-        blue_band="oli02_agmr",
-        red_band="oli04_agmr",
-        green_band="oli03_agmr",
-    ),
-    "oli": create_wq_entry(
-        TSS_Zhang,
-        "tss_zhang_oli",
-        blue_band="oli02r",
-        red_band="oli04r",
-        green_band="oli03r",
-    ),
-}
-
-
-# =============================================================================
-# Algorithm Groups
-# =============================================================================
-ALGORITHMS_CHLA = {
-    "ndci_nir_r": ndci_nir_r,
-    "chla_meris2b": chla_meris2b,
-    "chla_modis2b": chla_modis2b,
-}
-
-ALGORITHMS_TSS = {
-    "ndssi_rg": ndssi_rg,
-    "ndssi_bnir": ndssi_bnir,
-    "ti_yu": ti_yu,
-    "tsm_lym": tsm_lym,
-    "tss_zhang": tss_zhang,
-    "spm_qiu": spm_qiu,
-}
+    # ---- algorithms are grouped into two over-arching dictionaries ----
+    algorithms_chla = {
+        "ndci_nir_r": ndci_nir_r,
+        "chla_toming": chla_toming,
+        "chla_3bda": chla_3bda,
+        "chla_tebbs": chla_tebbs,
+        "chla_meris2b": chla_meris2b,
+        "chla_modis2b": chla_modis2b,
+    }
+    algorithms_tsm = {
+        "ndssi_rg": ndssi_rg,
+        "ndssi_bnir": ndssi_bnir,
+        "ti_yu": ti_yu,
+        "tsm_lym": tsm_lym,
+        # "tss_zhang23"  : tss_zhang23 ,
+        # "tss_zhang21"  : tss_zhang21 ,
+        "tss_grb": tss_GRB,
+        "tss_gr": tss_GR,
+        "spm_qiu": spm_qiu,
+    }
+    return (algorithms_chla, algorithms_tsm)
 
 
 # =============================================================================
