@@ -538,14 +538,17 @@ def load_tm_data(
 
 
 def load_tirs_data(
-    datasets: list[Dataset], tile_geobox: GeoBox, compute: bool, dc: Datacube
+    dss: dict[str, list[Dataset]],
+    tile_geobox: GeoBox,
+    compute: bool,
+    dc: Datacube,
 ) -> xr.Dataset:
     """Load and process data for the `tirs` instrument.
 
     Parameters
     ----------
-    datasets : list[Dataset]
-        List of datasets to load data for the instrument `tirs`.
+    dss: dict[str, list[Dataset]]
+        A dictionary mapping instruments to a list of datacube datasets available.
     tile_geobox : GeoBox
         Defines the location and resolution of a rectangular grid of
         data, including it's crs.
@@ -561,28 +564,38 @@ def load_tirs_data(
         An xarray Dataset containing the processed data for the
         instrument `tirs`.
     """
-    log.info("Loading data for the instrument `tirs` ...")
+
+    inst = "tirs"
+    log.info(f"Loading data for the instrument '{inst}' ...")
+    if inst not in list(dss.keys()):
+        error = (
+            f"No datasets found for instrument '{inst}'. ",
+            "Returning empty dataset.",
+        )
+        log.error(error)
+        return xr.Dataset()
+
+    datasets = dss[inst]
+    # TODO: Set a global dask chunk size configuration
+    # Expected tile size is 9600 x 9 600 at 10 m resolution
+    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    measurements = get_measurements_name_dict(inst)
+    # For int data nearest is preferred
+    # bilinear for float data.
+    resampling = "bilinear"
 
     if dc is None:
-        dc = Datacube(app="LoadTirs")
+        dc = Datacube(app=f"Load_{inst}")
 
-    dask_chunks = {"x": 4800, "y": 4800}
     ds = dc.load(
         datasets=datasets,
+        measurements=list(measurements.keys()),
         like=tile_geobox,
-        resampling="bilinear",
+        resampling=resampling,
         dask_chunks=dask_chunks,
     )
-    ds = ds.rename(get_measurements_name_dict("tirs"))
-
-    # For each band mask no data values to np.nan
-    # tirs_st_qa -9999, tirs_emis -9999, tirs_st 0
-    for band in ds.data_vars:
-        if band != "tirs_st":
-            nodata = ds[band].attrs["nodata"]
-            ds[band] = ds[band].where(ds[band] != nodata)
-        else:
-            ds["tirs_st"] = ds["tirs_st"].where(ds["tirs_st"] > 0)
+    ds = ds.rename(measurements)
+    ds = ds.map(_mask_nodata)
 
     # Rescale data
     ds["tirs_st_qa"] = 0.01 * ds["tirs_st_qa"]
@@ -593,7 +606,7 @@ def load_tirs_data(
     ds["tirs_st"] = ds["tirs_st"] - 273.15
 
     if compute:
-        log.info("Computing tm dataset ...")
+        log.info(f"Computing {inst} dataset ...")
         ds = ds.compute()
         log.info("Done.")
 
@@ -769,8 +782,12 @@ def load_annual_data(
             dc=dc,
         )
     if "tirs" in instruments:
-        # TODO: Load tirs annual composite data
-        pass
+        loaded_datasets["tirs"] = load_tirs_data(
+            dss=dss,
+            tile_geobox=tile_geobox,
+            compute=compute,
+            dc=dc,
+        )
 
     for inst, ds in loaded_datasets.items():
         is_empty = not ds.data_vars
