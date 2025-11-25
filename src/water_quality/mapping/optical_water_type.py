@@ -124,11 +124,11 @@ def OWT(
     instrument: str,
     OWT_vectors: pd.DataFrame,
     agm: bool = False,
-    dp_corrected: bool = False,
     check_type: bool = False,
 ) -> xr.DataArray:
     """
-    Calculate per-pixel Optical Water Type by comparing to OWT spectral vectors.
+    Calculate per-pixel Optical Water Type by comparing to OWT
+    spectral vectors.
 
     Parameters
     ----------
@@ -139,16 +139,16 @@ def OWT(
         Name of instrument.
 
     OWT_vectors: pd.DataFrame
-        OWT spectral vectors, expected to have an index column formated as OWT-index.
+        OWT spectral vectors, expected to have an index column formated
+        as OWT-index.
 
     agm: bool, optional
-        Whether the calculation is for geomedian instruments. Default is False.
-
-    dp_corrected: bool, optional
-        Whether to use Rayleigh corrected bands as input. Default is False.
+        Whether the calculation is for geomedian instruments.
+        Default is False.
 
     check_type: bool, optional
-        Whether to check the prevailing water type in intermediate steps. Default is False.
+        Whether to check the prevailing water type in intermediate steps.
+        Default is False.
 
     Returns
     -------
@@ -164,8 +164,6 @@ def OWT(
     suffix = ""
     if agm:
         suffix = suffix + "_agm"
-    if dp_corrected:
-        suffix = suffix + "r"
 
     # This loop renames the columns so that we can match them with the
     # data variables
@@ -285,7 +283,6 @@ def run_OWT(
                 inst,
                 OWT_vectors,
                 agm=agm,
-                dp_corrected=False,
             )
 
     if list(owt_results.data_vars):

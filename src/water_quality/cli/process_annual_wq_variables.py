@@ -272,6 +272,11 @@ def cli(
                 drop=True,
             )
 
+            # Functions beyond this point do not make provisions for
+            # uncorrected data i.e. the original band being present plus
+            # the corrrected band (e.g. msi04_agm and msi04_agmr). Always
+            # drop the uncorrected bands after applying the R correction.
+
             # Calculate the Hue for the available instruments.
             wq_ds["hue"] = geomedian_hue(
                 annual_data=annual_data,

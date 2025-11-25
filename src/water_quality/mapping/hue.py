@@ -143,7 +143,8 @@ def chromatic_coefficient_parameters(instrument: str) -> pd.DataFrame:
 
 
 def hue_calculation(
-    ds: xr.Dataset, instrument: str, rayleigh_corrected_data: bool = False
+    ds: xr.Dataset,
+    instrument: str,
 ) -> xr.DataArray:
     """Calculate the hue by conversion of the wavelengths
     to chromatic coordinates using sensor-specific coefficients.
@@ -155,8 +156,7 @@ def hue_calculation(
         Input dataset to calculate the hue for.
     instrument : str
         Sensor to calculate the hue for.
-    rayleigh_corrected_data : bool
-        Whether the input data has been Rayleigh corrected.
+
     Returns
     -------
     xr.DataArray
@@ -184,8 +184,6 @@ def hue_calculation(
     for band_name in required_bands:
         if agm:
             band_name = f"{band_name}_agm"
-        if rayleigh_corrected_data:
-            band_name = f"{band_name}r"
         if band_name in ds.data_vars:
             ds_bands.append(band_name)
 
@@ -283,7 +281,6 @@ def geomedian_hue(
             hue_ds[f"{inst}_hue"] = hue_calculation(
                 inst_ds,
                 instrument=inst,
-                rayleigh_corrected_data=False,
             )
             all_inst_hue_list.append(hue_ds[f"{inst}_hue"])
             all_inst_count_list.append(inst_ds[count_band])
