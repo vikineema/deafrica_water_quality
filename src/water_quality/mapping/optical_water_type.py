@@ -306,6 +306,11 @@ def run_OWT(
         owt_results["agm_owt"] = agm_owt
         # TODO: Add agm_owt calculation for non-agm instruments?
 
+        # Mask again using clear water mask because OWT calculation
+        # may assign values to non-water pixels.
+        # TODO: Check why this is necessary.
+        owt_results = owt_results.where(clear_water_mask == 1)
+
         if compute:
             log.info("\tComputing OWT  ...")
             owt_results = owt_results.compute()
