@@ -158,17 +158,14 @@ def TSS_QUANG8(dataset: xr.Dataset, red_band: str) -> xr.DataArray:
 
 def TSS_Zhang21(
     dataset: xr.Dataset,
-    green_band: str,
-    red_band: str,
+    G: str,
+    R: str,
     scale_factor: float = 0.0001,
     with_model: bool = True,
 ) -> xr.DataArray:
     """Zhang et al. 2023 TSS estimation (stable version)."""
-    Green = (
-        dataset[green_band].where(~(dataset[green_band] > 0), 1) * scale_factor
-    )
-    Red = dataset[red_band] * scale_factor
-
+    Green = dataset[G].where(~(dataset[G] > 0), 1) * scale_factor
+    Red = dataset[R] * scale_factor
     if with_model:
         Green = Green / (2 * np.pi)
         Red = Red / (2 * np.pi)
@@ -179,14 +176,14 @@ def TSS_Zhang21(
 
 def TSS_GreenRed(
     dataset: xr.Dataset,
-    green_band: str,
-    red_band: str,
+    G: str,
+    R: str,
     scale_factor: float = 0.0001,
 ):
     return TSS_Zhang21(
         dataset,
-        green_band=green_band,
-        red_band=red_band,
+        G=G,
+        R=R,
         scale_factor=scale_factor,
         with_model=False,
     )
@@ -194,19 +191,16 @@ def TSS_GreenRed(
 
 def TSS_Zhang23(
     dataset: xr.Dataset,
-    blue_band: str,
-    green_band: str,
-    red_band: str,
+    B: str,
+    G: str,
+    R: str,
     scale_factor: float = 0.0001,
     with_model=True,
 ):
     """Model of Zhang 2023"""
-    Blue = (
-        dataset[blue_band].where(~(dataset[blue_band] > 0), 1) * scale_factor
-    )
-    Red = dataset[red_band] * scale_factor
-    Green = dataset[green_band] * scale_factor
-
+    Blue = dataset[B].where(~(dataset[B] > 0), 1) * scale_factor
+    Red = dataset[R] * scale_factor
+    Green = dataset[G] * scale_factor
     if with_model:
         Green = Green / (2 * np.pi)
         Red = Red / (2 * np.pi)
@@ -219,17 +213,17 @@ def TSS_Zhang23(
 
 def TSS_GreenRedBlue(
     dataset: xr.Dataset,
-    green_band: str,
-    red_band: str,
-    blue_band: str,
+    G: str,
+    R: str,
+    B: str,
     scale_factor: float = 0.0001,
 ):
     """Zhang23 model without the exponential model fit"""
     return TSS_Zhang23(
         dataset=dataset,
-        green_band=green_band,
-        red_band=red_band,
-        blue_band=blue_band,
+        G=G,
+        R=R,
+        B=B,
         scale_factor=scale_factor,
         with_model=False,
     )
@@ -552,74 +546,58 @@ def set_wq_algorithms(suffix=""):
 # Functions to Run Algorithms on Datasets
 # =============================================================================
 def run_wq_algorithms(
-    ds: xr.Dataset,
-    instruments_list: dict[str, dict[str, dict[str, str | tuple]]],
-    algorithms_group: dict[str, dict[str, dict[str, Any]]],
-) -> tuple[xr.Dataset, list[str]]:
+    instrument_data: dict[str, xr.Dataset],
+    algorithms_group: dict[str, dict[str, dict[str, dict[str, Any]]]],
+) -> xr.Dataset:
     """Run a group of water quality algorithms on a dataset."""
-    wq_varlist = []
-    for algorithm_name, algorithm_apps in algorithms_group.items():
-        log.info(f"Running algorithm group: {algorithm_name}")
-        for instrument_name, inst_app in algorithm_apps.items():
-            if instrument_name not in instruments_list:
-                continue
-            instrument_alg_apps = (
-                list(inst_app.values())
-                if isinstance(inst_app, dict) and "func" not in inst_app
-                else [inst_app]
-            )
-            for alg_entry in instrument_alg_apps:
-                func = alg_entry["func"]
-                args = alg_entry["args"]
-                wq_varname = alg_entry["wq_varname"]
-                ds[wq_varname] = func(ds, **args)
+    wq_vars_ds = xr.Dataset()
+    for algorithm_name, algorithm_app in algorithms_group.items():
+        for instrument_name, inst_app in algorithm_app.items():
+            if instrument_name in list(instrument_data.keys()):
+                # Check if there are multiple implementations of the
+                # algorithm for an instrument
+                inst_ds = instrument_data[instrument_name]
+                # Single implementation
+                if "func" in list(inst_app.keys()):
+                    inst_alg_apps = [inst_app]
+                else:
+                    # Multiple implementations
+                    inst_alg_apps = list(inst_app.values())
 
-                scale_offset = NORMALISATION_PARAMETERS.get(
-                    wq_varname, {"scale": 1, "offset": 0}
-                )
-                ds[wq_varname].attrs = {
-                    "nodata": np.nan,
-                    "scales": scale_offset["scale"],
-                    "offsets": scale_offset["offset"],
-                }
-                wq_varlist.append(wq_varname)
-    return ds, wq_varlist
+                for alg_entry in inst_alg_apps:
+                    func = alg_entry["func"]
+                    args = alg_entry["args"]
+                    wq_varname = alg_entry["wq_varname"]
+                    wq_vars_ds[wq_varname] = func(inst_ds, **args)
+    return wq_vars_ds
 
 
 def WQ_vars(
-    ds: xr.Dataset,
-    instruments_list: dict[str, dict[str, dict[str, str | tuple]]],
+    annual_data: dict[str, xr.Dataset],
     stack_wq_vars: bool = False,
 ) -> tuple[xr.Dataset, pd.DataFrame]:
     """Compute Chlorophyll-A (ChlA) and Total Suspended Solids (TSS) water quality variables."""
-    ds, tss_vars = run_wq_algorithms(ds, instruments_list, ALGORITHMS_TSS)
-    ds, chla_vars = run_wq_algorithms(ds, instruments_list, ALGORITHMS_CHLA)
+    agm = True
+    if agm:
+        suffix = "_agm"
+    else:
+        suffix = ""
 
-    tss_df = pd.DataFrame({"tss_measures": tss_vars})
-    chla_df = pd.DataFrame({"chla_measures": chla_vars})
-    all_wq_vars_df = pd.concat([tss_df, chla_df], axis=1)
+    ALGORITHMS_CHLA, ALGORITHMS_TSM = set_wq_algorithms(suffix)
+    tsm_ds = run_wq_algorithms(
+        instrument_data=annual_data, algorithms_group=ALGORITHMS_TSM
+    )
+    chla_ds = run_wq_algorithms(
+        instrument_data=annual_data, algorithms_group=ALGORITHMS_CHLA
+    )
+
+    tsm_df = pd.DataFrame({"tsm_measures": list(tsm_ds.data_vars)})
+    chla_df = pd.DataFrame({"chla_measures": list(chla_ds.data_vars)})
+    all_wq_vars_df = pd.concat([tsm_df, chla_df], axis=1)
 
     if stack_wq_vars:
-        original_dims = list(ds.dims)
-        ds["tss"] = ds[tss_vars].to_stacked_array(
-            new_dim="tss_measures",
-            sample_dims=original_dims,
-            variable_dim="tss_wq_vars",
-            name="tss",
-        )
-        ds["tss"].attrs = {var: ds[var].attrs for var in tss_vars}
-
-        ds["chla"] = ds[chla_vars].to_stacked_array(
-            new_dim="chla_measures",
-            sample_dims=original_dims,
-            variable_dim="chla_wq_vars",
-            name="chla",
-        )
-        ds["chla"].attrs = {var: ds[var].attrs for var in chla_vars}
-
-        ds = ds.drop_vars(tss_vars + chla_vars)
-
-    return ds, all_wq_vars_df
+        # Apply normalisation parameters
+        pass
 
 
 def classify_chla_values(chla_values: np.ndarray) -> np.ndarray:
