@@ -674,11 +674,7 @@ def WQ_vars(
             - pd.DataFrame: DataFrame listing the water quality variables
               that were stacked to "tsm" and "chla".
     """
-    agm = True
-    if agm:
-        suffix = "_agm"
-    else:
-        suffix = ""
+    suffix = "_agm"
 
     ALGORITHMS_CHLA, ALGORITHMS_TSM = set_wq_algorithms(suffix)
     log.info("Running TSM water quality algorithms ...")
