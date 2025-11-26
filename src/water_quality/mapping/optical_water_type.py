@@ -67,7 +67,7 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
     # Read in the wavelengths for the bands in oli, tm and msi
     # (spectral response models)
     for sensor in sensors:
-        # (spectal response models)
+        # (spectral response models)
         sensor_data_fp = files("water_quality.data").joinpath(
             f"sensor bands-{sensor}.csv"
         )
