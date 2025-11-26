@@ -31,7 +31,6 @@ from water_quality.mapping.hue import geomedian_hue
 from water_quality.mapping.instruments import (
     INSTRUMENTS_PRODUCTS,
     check_instrument_dates,
-    get_instruments_list,
 )
 from water_quality.mapping.load_data import load_annual_data
 from water_quality.mapping.ndvi import geomedian_NDVI
@@ -42,7 +41,12 @@ from water_quality.mapping.water_detection import (
     five_year_water_mask,
 )
 from water_quality.metadata.prepare_metadata import prepare_dataset
-from water_quality.tasks import create_task_id, parse_task_id, split_tasks
+from water_quality.tasks import (
+    create_task_id,
+    filter_tasks_by_task_id,
+    filter_tasks_by_tile_id,
+    split_tasks,
+)
 
 
 def setup_dask_if_needed():
@@ -63,6 +67,12 @@ def setup_dask_if_needed():
     help="List of comma separated tasks in the format "
     "period/x{x:02d}/y{y:02d} to generate water quality variables for. "
     "For example `2015--P1Y/x200/y034,2015--P1Y/x178/y095,2015--P1Y/x199/y100`",
+)
+@click.option(
+    "--tiles",
+    help="List of comma separated tiles in the format "
+    "x{x:02d}/y{y:02d} to generate water quality variables for. "
+    "For example `x200/y034,x178/y095,x199/y100`",
 )
 @click.argument(
     "cache-file-path",
@@ -91,6 +101,7 @@ def setup_dask_if_needed():
 )
 def cli(
     tasks: str,
+    tiles: str,
     cache_file_path: str,
     output_directory: str,
     max_parallel_steps: int,
@@ -144,28 +155,37 @@ def cli(
     # Load all tasks and split for this worker
     all_task_ids = sorted([i[0] for i in cache.tiles(grid_name)])
 
-    if tasks:
-        task_filter = [i.strip() for i in tasks.split(",")]
-        # "period/x{x:02d}/y{y:02d}" to (period, x, y)
-        task_filter = [parse_task_id(i) for i in task_filter]
-        found_tasks = list(set(task_filter).intersection(set(all_task_ids)))
-
-        if len(found_tasks) == 0:
-            log.error(
-                "No matching tasks found in the file database "
-                f"for the provided filter: {tasks}."
-            )
-            sys.exit(1)
-        else:
-            log.info(
-                f"Found {len(found_tasks)} matching tasks "
-                f"in the file database for the provided filter: {tasks}."
-            )
-        tasks_to_run = split_tasks(found_tasks, max_parallel_steps, worker_idx)
+    if tasks and tiles:
+        raise ValueError("Use either tasks or tiles, not both.")
     else:
-        tasks_to_run = split_tasks(
-            all_task_ids, max_parallel_steps, worker_idx
-        )
+        if tasks or tiles:
+            if tasks:
+                filtered_tasks = filter_tasks_by_task_id(
+                    all_task_ids=all_task_ids, task_ids=tasks
+                )
+                filter_str = tasks
+            else:
+                filtered_tasks = filter_tasks_by_tile_id(
+                    all_task_ids=all_task_ids, tile_ids=tiles
+                )
+                filter_str = tiles
+
+            if len(filtered_tasks) == 0:
+                error_msg = f"No matching tasks found in the file database for the provided filter: {filter_str}."
+                log.error(error_msg)
+                sys.exit(1)
+            else:
+                log.info(
+                    f"Found {len(filtered_tasks)} matching tasks "
+                    f"in the file database for the provided filter: {filter_str}."
+                )
+                tasks_to_run = split_tasks(
+                    filtered_tasks, max_parallel_steps, worker_idx
+                )
+        else:
+            tasks_to_run = split_tasks(
+                all_task_ids, max_parallel_steps, worker_idx
+            )
 
     if not tasks_to_run:
         log.warning(f"Worker {worker_idx} has no tasks to process. Exiting.")
@@ -189,7 +209,7 @@ def cli(
             temporal_range = DateTimeRange(temporal_id)
             start_date = temporal_range.start.strftime("%Y-%m-%d")
             end_date = temporal_range.end.strftime("%Y-%m-%d")
-            instruments_to_use = check_instrument_dates(
+            instruments_to_use = check_instrument_dates(  # noqa F841
                 cfg_instruments_to_use,
                 start_date,
                 end_date,
@@ -272,6 +292,7 @@ def cli(
                 compute=False,
                 drop=True,
             )
+            gc.collect()
 
             # Functions beyond this point do not make provisions for
             # uncorrected data i.e. the original band being present plus
