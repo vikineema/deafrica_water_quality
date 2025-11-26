@@ -195,7 +195,6 @@ def cli(
                 end_date,
                 raise_errors=False,
             )
-            instruments_list = get_instruments_list(instruments_to_use)  # noqa F841
 
             expected_stac_path = get_wq_stac_url(
                 get_wq_dataset_path(
