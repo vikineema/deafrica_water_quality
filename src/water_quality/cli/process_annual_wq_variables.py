@@ -22,6 +22,7 @@ from water_quality.io import (
     get_wq_csv_url,
     get_wq_dataset_path,
     get_wq_stac_url,
+    is_s3_path,
     join_url,
 )
 from water_quality.logs import setup_logging
@@ -128,7 +129,16 @@ def cli(
     """
     log = setup_logging()
 
-    cache = dscache.open_ro(cache_file_path)
+    if is_s3_path(cache_file_path):
+        local_cache_file_path = "/tmp/cachedb.db"
+        fs = get_filesystem(cache_file_path, anon=False)
+        fs.get(cache_file_path, local_cache_file_path)
+        log.info(
+            f"Downloaded cache file from {cache_file_path} to {local_cache_file_path}"
+        )
+        cache = dscache.open_ro(local_cache_file_path)
+    else:
+        cache = dscache.open_ro(cache_file_path)
 
     # Load the configuration
     # This should have been validated during task generation.
