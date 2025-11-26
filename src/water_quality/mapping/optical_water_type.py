@@ -109,12 +109,10 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
                 band_name,
                 OWT_spectra.loc[:, start:end].T.mean().to_list(),
             )
-            inst_OWT.to_csv(
-                files("water_quality.data").joinpath(
-                    f"{sensor}_OWT_vectors.csv"
-                )
-            )
-            log.info(f"Written OWT response model for {sensor} to csv file.")
+        inst_OWT.to_csv(
+            files("water_quality.data").joinpath(f"{sensor}_OWT_vectors.csv")
+        )
+        log.info(f"Written OWT response model for {sensor} to csv file.")
         data[sensor] = inst_OWT
     return data
 
