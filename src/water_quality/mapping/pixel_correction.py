@@ -33,7 +33,7 @@ def R_correction(
     water_mask: xr.DataArray,
     instrument: str,
     drop: bool = False,
-) -> Dataset:
+) -> xr.Dataset:
     """
     Applies atmospheric dark pixel Rayleigh correction (R) correction
     to specified remote sensing bands within an xarray Dataset.
