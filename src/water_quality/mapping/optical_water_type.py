@@ -67,7 +67,7 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
     # Read in the wavelengths for the bands in oli, tm and msi
     # (spectral response models)
     for sensor in sensors:
-        # (spectal response models)
+        # (spectral response models)
         sensor_data_fp = files("water_quality.data").joinpath(
             f"sensor bands-{sensor}.csv"
         )
@@ -95,7 +95,7 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
             ].iloc[0]
 
             # Determine the integration interval based on the central
-            # wavlength and the width
+            # wavelength and the width
             delta = band_data["width"] * 0.8 * 0.5
             central = band_data["central"]
 
@@ -194,7 +194,7 @@ def OWT(
     )
 
     for idx, vec in OWT_vectors.iterrows():
-        OWT_index = int(idx.split("-")[1])  # the OWT numnber
+        OWT_index = int(idx.split("-")[1])  # the OWT number
         # print(OWT_index)
 
         # turn into a data arrays

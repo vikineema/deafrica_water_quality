@@ -71,7 +71,7 @@ def R_correction(
     for target_var in target_vars:
         if target_var not in list(ds.data_vars):
             error = ValueError(
-                f"Variable {target_var} expected  but not found in the "
+                f"Variable {target_var} expected but not found in the "
                 f"dataset - (non-fatal error) for instrument {instrument}",
             )
             log.warning(error)
