@@ -95,7 +95,7 @@ def create_OWT_response_model() -> dict[str, pd.DataFrame]:
             ].iloc[0]
 
             # Determine the integration interval based on the central
-            # wavlength and the width
+            # wavelength and the width
             delta = band_data["width"] * 0.8 * 0.5
             central = band_data["central"]
 
