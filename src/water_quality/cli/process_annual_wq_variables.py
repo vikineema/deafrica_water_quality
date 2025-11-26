@@ -292,6 +292,7 @@ def cli(
                 compute=False,
                 drop=True,
             )
+            gc.collect()
 
             # Functions beyond this point do not make provisions for
             # uncorrected data i.e. the original band being present plus
