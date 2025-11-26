@@ -196,7 +196,7 @@ def OWT(
     for idx, vec in OWT_vectors.iterrows():
         OWT_index = int(idx.split("-")[1])  # the OWT number
         # print(OWT_index)
-
+        OWT_index = int(idx.split("-")[1])  # the OWT number
         # turn into a data arrays
         da = ds[band_list].to_array(dim="band")
         vec_da = xr.DataArray(vec, dims=["band"]).sel(band=band_list)
