@@ -196,7 +196,7 @@ def OWT(
     )
 
     for idx, vec in OWT_vectors.iterrows():
-        OWT_index = int(idx.split("-")[1])  # the OWT numnber
+        OWT_index = int(idx.split("-")[1])  # the OWT number
         # print(OWT_index)
 
         # turn into a data arrays
