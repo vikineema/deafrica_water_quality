@@ -240,7 +240,7 @@ def prepare_dataset(
     dataset_id = get_wq_dataset_id(dataset_path)
     output_path = get_wq_stac_url(dataset_path)
 
-    product_definition = get_dummy_product_yaml(dataset_path)
+    product_definition = get_dummy_product_yaml(measurement_paths)
 
     ## Initialise and validate inputs
     # Creates variables (see EasiPrepare for others):

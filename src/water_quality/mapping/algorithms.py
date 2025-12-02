@@ -571,61 +571,42 @@ def run_wq_algorithms(
     return wq_vars_ds
 
 
-def classify_chla_values(chla_values: np.ndarray) -> np.ndarray:
-    """
-    Classify Chlorophyll-a (µg/l) values into Trophic State Index
-    values based on the table of Trophic State Index and related
-    chlorophyll concentration classes (according to Carlson (1977)).
-
-    Parameters
-    ----------
-    chla_values : np.ndarray
-        Chlorophyll-a (µg/l) values to classify
-
-    Returns
-    -------
-    np.ndarray
-        Corresponding Trophic State Index values.
-    """
-    # Chlorophyll-a (µg/l) (upper limit)
-    conditions = [
-        (chla_values <= 0.04),
-        (chla_values > 0.04) & (chla_values <= 0.12),
-        (chla_values > 0.12) & (chla_values <= 0.34),
-        (chla_values > 0.34) & (chla_values <= 0.94),
-        (chla_values > 0.94) & (chla_values <= 2.6),
-        (chla_values > 2.6) & (chla_values <= 6.4),
-        (chla_values > 6.4) & (chla_values <= 20),
-        (chla_values > 20) & (chla_values <= 56),
-        (chla_values > 56) & (chla_values <= 154),
-        (chla_values > 154) & (chla_values <= 427),
-        (chla_values > 427) & (chla_values <= 1183),
-    ]
-    # Trophic State Index, CGLOPS TSI values
-    choices = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    tsi_values = np.select(conditions, choices, default=np.nan)
-    return tsi_values
-
-
 def compute_trophic_state_index(chla_da: xr.DataArray) -> xr.DataArray:
     """
-    Compute the Trophic State Index from the Chlorophyll-a (µg/l) values
-    and output the Trophic State Index.
+    Compute the Trophic State Index from the Chlorophyll-a (µg/l) values.
+    The Chlorophyll-a (µg/l) values are classified into Trophic State
+    Index values based on the table of Trophic State Index and related
+    chlorophyll concentration classes according to Carlson (1977)).
+
     Parameters
     ----------
     chla_da : xr.DataArray
         DataArray containing the Chlorophyll-a (µg/l) values to derive
         the Trophic State Index from.
+
     Returns
     -------
     xr.DataArray
         DataArray containing the Trophic State Index values.
     """
-    tsi_values = classify_chla_values(chla_da)
-    tsi_da = xr.DataArray(
-        tsi_values, dims=chla_da.dims, coords=chla_da.coords, name="tsi"
+    chla_bins = np.array(
+        [0.04, 0.12, 0.34, 0.94, 2.6, 6.4, 20, 56, 154, 427, 1183]
     )
-    return tsi_da
+    tsi_labels = np.array([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+
+    slope, intercept = np.polyfit(np.log10(chla_bins), tsi_labels, 1)
+    min_chla_val = 0.01
+
+    # The 0.53 ensures that the lowest values match
+    tsi = (
+        np.log10(chla_da.where(chla_da >= min_chla_val, min_chla_val)) * slope
+        + intercept
+        + 0.53
+    )
+    tsi = tsi.where(tsi >= 0, 0).where(tsi <= 100, 100)
+    tsi = tsi.where(~np.isnan(chla_da), np.nan)
+
+    return tsi
 
 
 def WQ_vars(
@@ -634,7 +615,8 @@ def WQ_vars(
     compute: bool,
     stack_wq_vars: bool = True,
 ) -> tuple[xr.Dataset, pd.DataFrame]:
-    """Compute Chlorophyll-A (ChlA) and Total Suspended
+    """
+    Compute Chlorophyll-A (ChlA) and Total Suspended
     Matter (TSM) water quality variables.
 
     Parameters
