@@ -334,6 +334,7 @@ def cli(
             )
             gc.collect()
 
+            measurement_paths: list[str] = []
             for wq_var_group in list(wq_ds.keys()):
                 ds = wq_ds[wq_var_group]
                 if isinstance(ds, xr.DataArray):
@@ -384,6 +385,7 @@ def cli(
                     with fs.open(output_cog_url, "wb") as f:
                         f.write(cog_bytes)
                     log.info(f"Band {band} saved to {output_cog_url}")
+                    measurement_paths.append(output_cog_url)
 
                 if wq_var_group == "tsm_chla_tsi":
                     # Save WQ parameters table
@@ -396,13 +398,13 @@ def cli(
                     )
                     with fs.open(output_csv_url, mode="w") as f:
                         wq_vars_df.to_csv(f, index=False)
-
+                    log.info(f"WQ parameters table saved to {output_csv_url}")
             # Generate STAC metadata
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=UserWarning)
                 log.info("Creating metadata STAC file ...")
                 stac_file_url = prepare_dataset(  # noqa F841
-                    dataset_path=get_parent_dir(output_cog_url),
+                    measurement_paths=measurement_paths,
                 )
 
             log.info(f"Successfully processed task: {task_id_str}")
