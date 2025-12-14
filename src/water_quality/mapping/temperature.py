@@ -79,10 +79,7 @@ def water_temperature(
     )
     annual_ds_tirs = annual_ds_tirs.assign_coords(time=time_values)
 
-    if (
-        native_tirs_geobox.odc.geobox.resolution
-        != water_mask.odc.geobox.resolution
-    ):
+    if native_tirs_geobox.resolution != water_mask.odc.geobox.resolution:
         # Reproject to target tile geobox
         annual_ds_tirs = xr_reproject(
             annual_ds_tirs,
