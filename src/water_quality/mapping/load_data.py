@@ -137,9 +137,12 @@ def load_wofs_ann_data(
         return xr.Dataset()
 
     datasets = dss[inst]
-    # TODO: Set a global dask chunk size configuration
     # Expected tile size is 9600 x 9 600 at 10 m resolution
-    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    # and 3200 x 3 200 at 30 m resolution
+    # Assuming loading at 10m resolution as default, use
+    # chunk size 4800 x 4800
+    chunk_size = 4800
+    dask_chunks = {"x": chunk_size, "y": chunk_size, "time": -1}
     measurements = get_measurements_name_dict(inst)
     # For int data nearest is preferred
     # bilinear for float data.
@@ -204,9 +207,12 @@ def load_oli_agm_data(
         return xr.Dataset()
 
     datasets = dss[inst]
-    # TODO: Set a global dask chunk size configuration
     # Expected tile size is 9600 x 9 600 at 10 m resolution
-    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    # and 3200 x 3 200 at 30 m resolution
+    # Assuming loading at 10m resolution as default, use
+    # chunk size 4800 x 4800
+    chunk_size = 4800
+    dask_chunks = {"x": chunk_size, "y": chunk_size, "time": -1}
     measurements = get_measurements_name_dict(inst)
     # For int data nearest is preferred
     # bilinear for float data.
@@ -331,9 +337,12 @@ def load_msi_agm_data(
         return xr.Dataset()
 
     datasets = dss[inst]
-    # TODO: Set a global dask chunk size configuration
     # Expected tile size is 9600 x 9 600 at 10 m resolution
-    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    # and 3200 x 3 200 at 30 m resolution
+    # Assuming loading at 10m resolution as default, use
+    # chunk size 4800 x 4800
+    chunk_size = 4800
+    dask_chunks = {"x": chunk_size, "y": chunk_size, "time": -1}
     measurements = get_measurements_name_dict(inst)
     # For int data nearest is preferred
     # bilinear for float data.
@@ -451,9 +460,12 @@ def load_tm_agm_data(
         return xr.Dataset()
 
     datasets = dss[inst]
-    # TODO: Set a global dask chunk size configuration
     # Expected tile size is 9600 x 9 600 at 10 m resolution
-    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    # and 3200 x 3 200 at 30 m resolution
+    # Assuming loading at 10m resolution as default, use
+    # chunk size 4800 x 4800
+    chunk_size = 4800
+    dask_chunks = {"x": chunk_size, "y": chunk_size, "time": -1}
     measurements = get_measurements_name_dict(inst)
     # For int data nearest is preferred
     # bilinear for float data.
@@ -576,9 +588,12 @@ def load_tirs_data(
         return xr.Dataset()
 
     datasets = dss[inst]
-    # TODO: Set a global dask chunk size configuration
     # Expected tile size is 9600 x 9 600 at 10 m resolution
-    dask_chunks = {"x": 4800, "y": 4800, "time": -1}
+    # and 3200 x 3 200 at 30 m resolution
+    # since loading at native resolution (30m) is required for surface
+    # temp data, use the chunk size 800 x 800
+    chunk_size = 800  # int(3200 / 4)
+    dask_chunks = {"x": chunk_size, "y": chunk_size, "time": -1}
     measurements = get_measurements_name_dict(inst)
     # For int data nearest is preferred
     # bilinear for float data.
@@ -675,11 +690,6 @@ def load_tirs_annual_composite_data(
         & (ds_tirs["tirs_emis"] > 0.95)
     )
     ds_tirs["tirs_st"] = ds_tirs["tirs_st"].where(valid_mask)
-
-    if ds_tirs.chunks is not None:
-        # Rechunk so the time dimension has only one chunk
-        # for the quantile commputation
-        ds_tirs = ds_tirs.chunk({"time": ds_tirs.sizes["time"]})
 
     annual_ds_tirs = xr.Dataset()
 
